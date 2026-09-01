@@ -21,10 +21,12 @@ import (
 	"millstrand-strand-cli/internal/errfmt"
 )
 
-// Version is the strand bin version reported by --version and carried in the
-// invoke envelope's client identity; it is the stamped build id (git short
-// sha under make build/install, "dev" otherwise).
-var Version = config.BuildID
+// Version and BuildID are the product release and exact source revision
+// reported by --version and carried in the invoke envelope's client identity.
+var (
+	Version = config.Version
+	BuildID = config.BuildID
+)
 
 // Seams overridden in tests.
 var (
@@ -64,7 +66,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return fail(stderr, errfmt.CodeInvalidInvocation, err)
 	}
 	if p.version {
-		return printJSON(stdout, stderr, map[string]any{"bin_version": Version, "protocol_version": client.ProtocolVersion})
+		return printJSON(stdout, stderr, map[string]any{
+			"version":          Version,
+			"build_id":         BuildID,
+			"protocol_version": client.ProtocolVersion,
+		})
 	}
 	// A pre-op --help/-h can only be seen before the op token (flag parsing stops
 	// at the first non-flag token). With an op named, --help must trail the op
@@ -294,7 +300,7 @@ func assembleEnvelope(p parsed, payloads map[string]string, effectiveCwd, worktr
 		"cwd":      effectiveCwd,
 		"is_tty":   terminal.isTTY,
 		"tty_col":  terminal.ttyCol,
-		"client":   map[string]any{"pid": os.Getpid(), "version": Version},
+		"client":   map[string]any{"pid": os.Getpid(), "version": Version, "build_id": BuildID},
 	}
 	if worktreeRoot != "" {
 		env["worktree_root"] = worktreeRoot

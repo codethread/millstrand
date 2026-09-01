@@ -83,7 +83,7 @@ func TestBareOpAssemblesEnvelopeWithClientAndPayloads(t *testing.T) {
 		t.Fatalf("payloads must be a (possibly empty) map: %#v", c.envelope["payloads"])
 	}
 	cl, ok := c.envelope["client"].(map[string]any)
-	if !ok || cl["pid"] == nil || cl["version"] != Version {
+	if !ok || cl["pid"] == nil || cl["version"] != Version || cl["build_id"] != BuildID {
 		t.Fatalf("client identity malformed: %#v", c.envelope["client"])
 	}
 	if c.envelope["worktree_root"] != "/wt/cwd" || c.envelope["git_common_dir"] != "/wt/.git" {
@@ -306,7 +306,7 @@ func TestVersionAndHelpAreLocal(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &v); err != nil {
 		t.Fatalf("--version not JSON: %q", out)
 	}
-	if v["bin_version"] != Version || v["protocol_version"] != float64(client.ProtocolVersion) {
+	if len(v) != 3 || v["version"] != Version || v["build_id"] != BuildID || v["protocol_version"] != float64(client.ProtocolVersion) {
 		t.Fatalf("unexpected version payload: %#v", v)
 	}
 

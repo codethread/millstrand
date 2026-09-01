@@ -21,13 +21,14 @@ const defaultWeaverReadyTimeout = 5 * time.Minute
 
 type MillMetadata struct {
 	ProtocolVersion int    `json:"protocol_version"`
+	MillVersion     string `json:"mill_version,omitempty"`
 	PID             int    `json:"pid"`
 	MillID          string `json:"mill_id"`
 	StateRoot       string `json:"state_root"`
 	SocketPath      string `json:"socket_path"`
 	StartedAt       string `json:"started_at"`
-	// MillBuild is the writing mill's config.BuildID; absent in metadata from
-	// builds that predate stamping, so it never joins the required-field set.
+	// MillBuild and MillVersion are absent in metadata from builds that predate
+	// release stamping, so neither joins the required-field set.
 	MillBuild string `json:"mill_build,omitempty"`
 }
 
@@ -208,8 +209,8 @@ func readMillMetadata() (MillMetadata, error) {
 	// running: this is version skew, not an absent or stale mill.
 	if m.ProtocolVersion != MillProtocolVersion {
 		return MillMetadata{}, fmt.Errorf(
-			"%w: the running mill (pid %d, build %s) wrote %s with mill protocol v%d, but this strand (build %s) speaks v%d; rebuild strand from the running mill's checkout, or restart mill from this build",
-			ErrMillProtocolMismatch, m.PID, buildLabel(m.MillBuild), file, m.ProtocolVersion, buildLabel(config.BuildID), MillProtocolVersion)
+			"%w: the running mill (pid %d, version %s, build %s) wrote %s with mill protocol v%d, but this strand (version %s, build %s) speaks v%d; rebuild strand from the running mill's checkout, or restart mill from this build",
+			ErrMillProtocolMismatch, m.PID, buildLabel(m.MillVersion), buildLabel(m.MillBuild), file, m.ProtocolVersion, buildLabel(config.Version), buildLabel(config.BuildID), MillProtocolVersion)
 	}
 	return m, nil
 }

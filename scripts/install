@@ -18,10 +18,30 @@ if [ -z "$src" ] || [ ! -d "$src" ]; then
   echo "install: resolved canonical Millstrand source '$src' is empty or not a directory" >&2
   exit 1
 fi
+worktree="$(git rev-parse --show-toplevel)"
+if [ "$worktree" != "$src" ]; then
+  echo "install: refusing to install from linked worktree $worktree" >&2
+  echo "install: run make install from canonical checkout $src" >&2
+  exit 1
+fi
+cd "$src"
 
-build_id="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
-ldflags="-X millstrand-strand-cli/internal/config.InstalledSource=$src -X millstrand-strand-cli/internal/config.BuildID=$build_id"
+build_id="$(git rev-parse HEAD 2>/dev/null || echo dev)"
+if [ "$build_id" != "dev" ] && [ -n "$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then
+  build_id="${build_id}-dirty"
+fi
+version_file="$src/VERSION"
+if [ ! -f "$version_file" ]; then
+  echo "install: required version file is unavailable: $version_file" >&2
+  exit 1
+fi
+version="$(tr -d '\n' < "$version_file")"
+if [ "$(wc -l < "$version_file" | tr -d ' ')" != 1 ] || [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "install: VERSION must contain one MAJOR.MINOR.PATCH line" >&2
+  exit 1
+fi
+ldflags="-X millstrand-strand-cli/internal/config.InstalledSource=$src -X millstrand-strand-cli/internal/config.Version=$version -X millstrand-strand-cli/internal/config.BuildID=$build_id"
 
-echo "install: stamping InstalledSource=$src BuildID=$build_id"
+echo "install: stamping InstalledSource=$src Version=$version BuildID=$build_id"
 go install -ldflags "$ldflags" ./cli/cmd/strand
 go install -ldflags "$ldflags" ./cli/cmd/mill

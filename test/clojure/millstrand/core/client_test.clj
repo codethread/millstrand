@@ -219,6 +219,7 @@
         canonical (metadata/canonical-db-path db-file)
         world (temp-world)
         meta (metadata/metadata-shape {:pid 1
+                                       :version "0.5.1"
                                        :host "127.0.0.1"
                                        :port 1
                                        :storage-kind :sqlite-file

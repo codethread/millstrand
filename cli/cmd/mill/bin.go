@@ -368,7 +368,7 @@ func binEnvelope(world client.MillWorldRequest, argv []string) map[string]any {
 		"cwd":      world.CWD,
 		"is_tty":   false,
 		"tty_col":  nil,
-		"client":   map[string]any{"pid": os.Getpid(), "version": config.BuildID},
+		"client":   map[string]any{"pid": os.Getpid(), "version": config.Version, "build_id": config.BuildID},
 	}
 	if world.ConfigDir != "" {
 		envelope["workspace"] = world.ConfigDir

@@ -1,6 +1,7 @@
 (ns millstrand.e2e
   "Run end-to-end coverage for disposable Millstrand CLI and REPL worlds."
   (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.string]
             [millstrand.api.scheduler.alpha :as scheduler]
             [millstrand.api.weaver.alpha :as weaver-api]
@@ -153,8 +154,17 @@
         (throw cleanup-error)))))
 
 (defn build-cli! []
-  (run-process! "Go strand CLI build succeeds" ["go" "build" "-o" "./cli/bin/strand" "./cli/cmd/strand"])
-  (run-process! "Go mill CLI build succeeds" ["go" "build" "-o" "./cli/bin/mill" "./cli/cmd/mill"])
+  (run-process! "Release-stamped Go CLI build succeeds" ["make" "build"])
+  (doseq [[source target] [["bin/strand" strand-bin]
+                           ["bin/mill" mill-bin]]]
+    (let [target-file (io/file target)]
+      (.mkdirs (.getParentFile target-file))
+      (with-open [input (io/input-stream (java.io.File. checkout-root source))
+                  output (io/output-stream target-file)]
+        (io/copy input output))
+      (when-not (.setExecutable target-file true)
+        (throw (ex-info "Could not make copied CLI executable"
+                        {:path (.getAbsolutePath target-file)})))))
   strand-bin)
 
 (defn start-mill! []
@@ -380,7 +390,11 @@
 (defn smoke-cli-help! []
   (run-process! "Go CLI root help succeeds" [strand-bin "--help"])
   (run-process! "Bare strand prints help" [strand-bin])
-  (let [version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
+  (let [strand-version (parse-json (run-process! "strand version succeeds" [strand-bin "--version"]))
+        mill-version (parse-json (run-process! "mill version succeeds" [mill-bin "--version"]))
+        changelog (run-process! "mill changelog succeeds" [mill-bin "changelog"])
+        product-version (clojure.string/trim
+                         (slurp (java.io.File. checkout-root "VERSION")))
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
         ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve
         ;; the source paths.
@@ -389,9 +403,13 @@
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
-    (assert-contains version "bin_version" "Go CLI --version reports the bin version")
-    (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
-    (doseq [needle ["init" "weaver" "start" "prime"]]
+    (assert= strand-version mill-version "strand and mill report the same release identity")
+    (assert= #{:version :build_id :protocol_version}
+             (set (keys strand-version))
+             "version output has the complete release identity")
+    (assert= product-version (:version strand-version) "version output uses the source product version")
+    (assert-contains changelog (str "## " product-version) "mill changelog reports the installed release")
+    (doseq [needle ["init" "weaver" "start" "prime" "changelog"]]
       (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
     (assert= (str "Millstrand source: " checkout-root "\n"
                   "Millstrand reference: "

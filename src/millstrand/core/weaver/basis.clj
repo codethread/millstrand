@@ -317,11 +317,14 @@
 (defn -main
   "Build the selected-workspace basis and enter the Weaver runtime.
 
-  Mill supplies `--millstrand-source`; all remaining arguments are relayed to
+  Mill supplies `--millstrand-source` and `--millstrand-version`; all remaining
+  arguments are relayed to
   `millstrand.core.weaver.runtime/start-with-generation-basis!`."
   [& argv]
   (let [[workspace args] (take-launch-option (vec argv) "--workspace")
         [source args] (take-launch-option args "--millstrand-source")
+        [product-version args]
+        (take-launch-option args "--millstrand-version")
         [diagnostic-path runtime-args]
         (take-launch-option args "--dependency-diagnostic")]
     (try
@@ -333,7 +336,7 @@
         (.setContextClassLoader thread (:classloader generation-basis))
         ((requiring-resolve
           'millstrand.core.weaver.runtime/start-with-generation-basis!)
-         generation-basis runtime-args))
+         generation-basis product-version runtime-args))
       (catch Throwable throwable
         (when-let [diagnostic (dependency-diagnostic throwable)]
           (write-diagnostic! diagnostic-path diagnostic))

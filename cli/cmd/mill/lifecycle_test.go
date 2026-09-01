@@ -455,6 +455,21 @@ func TestResolveLaunchSourceUnusableInstalledAndNoCheckoutFailsLoud(t *testing.T
 	}
 }
 
+func TestResolveLaunchSourceRejectsProductVersionSkew(t *testing.T) {
+	source := tempSource(t)
+	if err := os.WriteFile(filepath.Join(source, config.VersionFileName), []byte("0.5.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	t.Setenv("MILLSTRAND_SOURCE", source)
+
+	if _, err := resolveLaunchSource(t.TempDir()); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected product version skew failure, got %v", err)
+	}
+}
+
 func TestStartFailsBeforeLaunchWhenSourceCannotResolve(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	t.Setenv("MILLSTRAND_SOURCE", "")
@@ -906,6 +921,9 @@ func tempSource(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.VersionFileName), []byte("0.5.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir

@@ -21,9 +21,12 @@ var allowedKeys = map[string]bool{"configFormat": true, "name": true}
 
 var InstalledSource string
 
-// BuildID identifies the build of both shipped binaries; ldflags stamp it with
-// the git short sha so metadata written by one build is attributable from the
-// other when their mill protocol versions diverge.
+// Version is the shared Millstrand product version stamped into both shipped
+// binaries from the source checkout's VERSION file.
+var Version = "dev"
+
+// BuildID identifies the source revision of both shipped binaries; local build
+// tooling appends "-dirty" when tracked or untracked checkout content differs.
 var BuildID = "dev"
 
 type World struct {

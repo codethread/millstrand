@@ -1,9 +1,10 @@
-.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo-configs kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop
+.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo-configs kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
 		'Millstrand development commands:' \
 		'  make build              Build repo-local strand, mill, and kanban-tree binaries' \
+		'  make version-check      Validate VERSION and the matching changelog release' \
 		'  make land-quality       Build and run the local landing quality DAG' \
 		'    LAND_QUALITY_HEAVY_LIMIT=N sets its positive heavy-job cap (default 2)' \
 		'  make test-go            Run Go tests in every Go module' \
@@ -24,10 +25,12 @@ MILL_CLI := ./cli/cmd/mill
 # kanban-tree is repo-local development tooling too, on the same terms.
 KANBAN_TREE_CLI := ./tools/kanban-tree
 LAND_QUALITY_CLI := ./tools/land-quality
-# BuildID falls back to the compiled-in "dev" when git is unavailable; it is
-# informational (skew attribution), so unlike InstalledSource it may degrade.
-BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-SOURCE_LDFLAGS := -X millstrand-strand-cli/internal/config.InstalledSource=$(CURDIR) -X millstrand-strand-cli/internal/config.BuildID=$(BUILD_ID)
+# BuildID falls back to the compiled-in "dev" when git is unavailable. A dirty
+# suffix keeps an uncommitted or untracked build distinct from its HEAD commit.
+VERSION_FILE := VERSION
+VERSION := $(shell tr -d '\n' < $(VERSION_FILE))
+BUILD_ID := $(shell revision=$$(git rev-parse HEAD 2>/dev/null || echo dev); if [ "$$revision" != dev ] && [ -n "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then echo "$$revision-dirty"; else echo "$$revision"; fi)
+SOURCE_LDFLAGS := -X millstrand-strand-cli/internal/config.InstalledSource=$(CURDIR) -X millstrand-strand-cli/internal/config.Version=$(VERSION) -X millstrand-strand-cli/internal/config.BuildID=$(BUILD_ID)
 QUICKDOC_DEPS := '{:deps {io.github.borkdude/quickdoc {:git/tag "v0.2.6" :git/sha "ce86780"}}}'
 QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 CLJ_KONDO := clj-kondo
@@ -35,10 +38,22 @@ CLJ_KONDO_VERSION := 2026.08.04
 
 # repo-local build for agents/worktrees validating CLI changes without touching
 # the user's global install; run the resulting ./bin/strand and ./bin/mill directly
-build: kanban-tree
+build: version-check kanban-tree
 	mkdir -p ./bin
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/strand $(GO_CLI)
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/mill $(MILL_CLI)
+
+version-check:
+	@lines=$$(wc -l < $(VERSION_FILE) | tr -d ' '); \
+	version=$$(tr -d '\n' < $(VERSION_FILE)); \
+	if [ "$$lines" != 1 ] || ! printf '%s\n' "$$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$'; then \
+		echo 'VERSION must contain one MAJOR.MINOR.PATCH line' >&2; \
+		exit 1; \
+	fi; \
+	if ! grep -Fq "## $$version -" CHANGELOG.md; then \
+		echo "CHANGELOG.md has no release heading for $$version" >&2; \
+		exit 1; \
+	fi
 
 # kanban-tree reads the board through the strand binary beside it.
 kanban-tree:
@@ -51,7 +66,7 @@ land-quality:
 	./bin/land-quality
 
 # stamp the user's global binaries with the canonical checkout, not a worktree.
-install:
+install: version-check
 	bash scripts/install
 
 # Interactive kanban TUI supplied by the pinned Millhouse Kanban root.

@@ -97,6 +97,12 @@
          #(= #{:status :stage :source-path :message :cause :coordinate}
              (set (keys %)))))
 (s/def :millstrand.basis/kind #{:project :extra})
+(s/def :millstrand.release/version
+  (s/and string?
+         #(boolean
+           (re-matches
+            #"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+            %))))
 (s/def :millstrand.basis/deps map?)
 (s/def :millstrand.basis/path
   #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))

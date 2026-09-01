@@ -19,6 +19,7 @@ const ProtocolVersion = protocolVersion
 
 type Metadata struct {
 	ProtocolVersion int    `json:"protocol_version"`
+	Version         string `json:"version"`
 	PID             int    `json:"pid"`
 	DatabaseKind    string `json:"database_kind"`
 	DatabaseLabel   string `json:"database_label"`

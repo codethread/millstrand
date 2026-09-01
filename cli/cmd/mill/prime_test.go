@@ -16,6 +16,9 @@ func writeSourceFixture(t *testing.T, files map[string]string) string {
 	if err := os.WriteFile(filepath.Join(src, "deps.edn"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(src, config.VersionFileName), []byte("0.5.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for rel, body := range files {
 		path := filepath.Join(src, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -6,6 +6,7 @@
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.spec.alpha :as s]
+            [millstrand.core.specs]
             [millstrand.core.weaver.protocol :as protocol])
   (:import [java.lang ProcessHandle]
            [java.net UnixDomainSocketAddress]
@@ -161,15 +162,18 @@
 
 (defn metadata-shape
   "Return the canonical EDN metadata map for a running weaver."
-  [{:keys [pid host port storage-kind storage-label canonical-db-path nonce generation-id
+  [{:keys [pid version host port storage-kind storage-label canonical-db-path nonce generation-id
            basis-fingerprint started-at world name]
     :as shape}]
   (let [socket-path (.getPath (socket-file world))
         name (or name (.getName (io/file (:config-dir world))))]
     (when (str/blank? name)
       (throw (ex-info "Weaver name must not be blank" {:name name})))
+    (when-not (s/valid? :millstrand.release/version version)
+      (throw (ex-info "Weaver product version is invalid" {:version version})))
     (require-storage-identity! shape)
     {:pid pid
+     :version version
      :transport :nrepl
      :protocol-version protocol/version
      :endpoint {:host host :port port}
@@ -189,7 +193,8 @@
 (defn- json-metadata-shape
   "Return the public JSON metadata shape consumed by non-Clojure clients."
   [metadata]
-  {"protocol_version" protocol/version
+  {"version" (:version metadata)
+   "protocol_version" protocol/version
    "pid" (:pid metadata)
    "weaver_id" (:nonce metadata)
    "config_dir" (:config-dir metadata)
@@ -343,6 +348,7 @@
   [metadata]
   (and (map? metadata)
        (valid-pid? (:pid metadata))
+       (s/valid? :millstrand.release/version (:version metadata))
        (= :nrepl (:transport metadata))
        (= protocol/version (:protocol-version metadata))
        (string? (:config-dir metadata))

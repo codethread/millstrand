@@ -568,6 +568,8 @@
       (let [status (socket-request rt "status" {})
             rejected (socket-request rt "queries" {})]
         (is (true? (get status "ok")))
+        (is (= (get-in rt [:metadata :version])
+               (get-in status ["result" "version"])))
         (is (nil? (get-in status ["result" "registry_projection"])))
         (let [projected (socket-request rt "status"
                                         {"include_registry_projection" true})

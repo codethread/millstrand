@@ -113,8 +113,9 @@ func millCommandPath(cmd *cobra.Command) []string {
 
 func newMillCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "mill",
-		Short: "Millstrand local router",
+		Use:     "mill",
+		Short:   "Millstrand local router",
+		Version: config.Version,
 		Long: `mill is the Millstrand local router: it supervises weavers and forwards
 strand invocations to the one selected for a workspace.
 
@@ -135,6 +136,7 @@ Environment:
 		// format may fail loudly.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return errfmt.ValidateFormat() },
 	}
+	root.SetVersionTemplate(fmt.Sprintf("{\"build_id\":%q,\"protocol_version\":%d,\"version\":%q}\n", config.BuildID, client.ProtocolVersion, config.Version))
 	root.AddCommand(&cobra.Command{Use: "start", Short: "Start mill in the foreground", RunE: func(cmd *cobra.Command, args []string) error {
 		return start()
 	}})
@@ -212,6 +214,9 @@ Environment:
 		return runMillstrandPrime()
 	}})
 	root.AddCommand(prime)
+	root.AddCommand(&cobra.Command{Use: "changelog", Short: "Print the installed Millstrand changelog", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		return runChangelog()
+	}})
 	root.AddCommand(newBinCommand())
 	stampUsageErrors(root)
 	return root
@@ -238,7 +243,7 @@ func start() (err error) {
 	defer func() { _ = os.Remove(socketPath) }()
 	defer func() { _ = os.Remove(metadataPath) }()
 
-	meta := client.MillMetadata{ProtocolVersion: client.MillProtocolVersion, PID: os.Getpid(), MillID: fmt.Sprintf("mill-%d-%d", os.Getpid(), time.Now().UnixNano()), StateRoot: root, SocketPath: socketPath, StartedAt: time.Now().UTC().Format(time.RFC3339Nano), MillBuild: config.BuildID}
+	meta := client.MillMetadata{ProtocolVersion: client.MillProtocolVersion, MillVersion: config.Version, PID: os.Getpid(), MillID: fmt.Sprintf("mill-%d-%d", os.Getpid(), time.Now().UnixNano()), StateRoot: root, SocketPath: socketPath, StartedAt: time.Now().UTC().Format(time.RFC3339Nano), MillBuild: config.BuildID}
 	b, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
@@ -312,7 +317,7 @@ func (s *server) handle(conn net.Conn) {
 	}
 	switch req.Operation {
 	case "status", "ping":
-		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: map[string]any{"healthy": true, "protocol_version": client.MillProtocolVersion, "pid": s.meta.PID, "mill_id": s.meta.MillID, "state_root": s.meta.StateRoot, "socket_path": s.meta.SocketPath, "started_at": s.meta.StartedAt}})
+		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: map[string]any{"healthy": true, "version": config.Version, "build_id": config.BuildID, "protocol_version": client.MillProtocolVersion, "pid": s.meta.PID, "mill_id": s.meta.MillID, "state_root": s.meta.StateRoot, "socket_path": s.meta.SocketPath, "started_at": s.meta.StartedAt}})
 	case "init":
 		if err := validateInitRequest(req.World); err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-invalid-request", "invalid mill init request", err.Error()))
