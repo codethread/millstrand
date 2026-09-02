@@ -27,14 +27,6 @@
   "POSIX script that validates and runs the target repository's quality contract."
   (script "land-quality-gate.sh"))
 
-(def release-preflight-script
-  "POSIX script that validates the release worktree before mutation."
-  (script "release-preflight.sh"))
-
-(def release-identity-script
-  "POSIX script that validates release commits, pins, builds, and worktree state."
-  (script "release-identity.sh"))
-
 (def land-merge-script
   "Idempotently ready and squash-merge the feature PR."
   (script "land-merge.sh"))
