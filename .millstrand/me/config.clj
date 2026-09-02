@@ -10,6 +10,7 @@
             [me.workflows.fix :as fix]
             [me.workflows.land :as land]
             [me.workflows.land-policy :as land-policy]
+            [me.workflows.release :as release]
             [me.workflows.story :as story]
             [millhouse.spools.chime :as chime]
             [millhouse.spools.cron :as cron]
@@ -38,6 +39,7 @@
 (workflow/use-workflow! story/story)
 (workflow/use-workflow! explore/explore)
 (workflow/use-workflow! fix/fix)
+(workflow/use-workflow! release/release)
 
 (lifecycle/use-resource! delegation-contracts/delegation-contracts)
 (chime/use-rule! attention/hitl-checkpoint-ready-rule)

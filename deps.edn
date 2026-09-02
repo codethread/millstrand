@@ -18,6 +18,7 @@
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
+                      millstrand/workspace-config {:local/root ".millstrand"}
                       org.clojure/test.check {:mvn/version "1.1.1"}
                       clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
