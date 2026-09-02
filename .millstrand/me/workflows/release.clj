@@ -1,5 +1,5 @@
 (ns me.workflows.release
-  "The coordinator release workflow for versioned Millstrand publication."
+  "The release workflow for versioned Millstrand publication."
   (:require [clojure.spec.alpha :as s]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]
@@ -24,8 +24,8 @@
 (workflow/defworkflow release
   "Prepare, verify, tag, and publish one Millstrand release.
 
-  The coordinator supplies the semantic `version` and the absolute `worktree`
-  for clean-main checks and shell gates. The workflow makes the two-commit
+  The caller supplies the semantic `version` and the absolute `worktree` for
+  clean-main checks and shell gates. The workflow makes the two-commit
   release shape explicit: VERSION and changelog first, then a Homebrew formula
   pinned to that release commit. Full quality and identity checks run before a
   human publish checkpoint. Publication uses one atomic push for main and the
@@ -44,13 +44,8 @@
                   :attributes
                   {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                    "shell/timeout-secs" 120
-                   "shell/argv"
-                   ["sh" "-c"
-                    (str "set -eu; "
-                         "test -z \"$(git status --short)\"; "
-                         "test \"$(git branch --show-current)\" = main; "
-                         "git fetch origin; "
-                         "test \"$(git rev-list --count HEAD..origin/main)\" -eq 0")]}
+                   "shell/argv" (support/sh-gate support/release-preflight-script
+                                                 "release-preflight")}
                   (format-alpha/prose
                    "
                    Require a clean worktree on `main` with no remote commits
@@ -124,18 +119,9 @@
                    "shell/timeout-secs" 1200
                    "shell/argv"
                    (fn [{:keys [version]}]
-                     ["sh" "-c"
-                      (str "set -eu; test \"$(cat VERSION)\" = \"$1\"; "
-                           "test \"$(git show -s --format=%s HEAD)\" = \"chore: pin Homebrew to $1\"; "
-                           "test \"$(git show -s --format=%s HEAD^)\" = \"chore: release $1\"; "
-                           "release_commit=$(git rev-parse HEAD^); "
-                           "test \"$(grep -Fc \"$release_commit\" Formula/millstrand.rb)\" -eq 3; "
-                           "test \"$(grep -Fc \"$1\" Formula/millstrand.rb)\" -eq 3; "
-                           "make version-check; make build; "
-                           "test \"$(./bin/mill --version | jq -r .version)\" = \"$1\"; "
-                           "test \"$(./bin/strand --version | jq -r .version)\" = \"$1\"; "
-                           "test -z \"$(git status --short)\"")
-                      "release-identity" version])}
+                     (support/sh-gate support/release-identity-script
+                                      "release-identity"
+                                      version))}
                   (format-alpha/prose
                    "
                    Build both CLIs and require their reported versions to match
