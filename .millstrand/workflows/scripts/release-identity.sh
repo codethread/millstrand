@@ -32,10 +32,12 @@ release_subject=$(git show -s --format=%s "$release_commit") \
 expect_equal "formula commit subject" "$formula_subject" "chore: pin Homebrew to $version"
 expect_equal "release commit subject" "$release_subject" "chore: release $version"
 
-formula_paths=$(git diff-tree --root --no-commit-id --name-only -r "$formula_commit" | LC_ALL=C sort) \
+formula_paths=$(git diff-tree --root --no-commit-id --name-only -r "$formula_commit") \
   || die "cannot inspect paths in formula commit $formula_commit"
-release_paths=$(git diff-tree --root --no-commit-id --name-only -r "$release_commit" | LC_ALL=C sort) \
+release_paths=$(git diff-tree --root --no-commit-id --name-only -r "$release_commit") \
   || die "cannot inspect paths in release commit $release_commit"
+formula_paths=$(printf '%s\n' "$formula_paths" | LC_ALL=C sort)
+release_paths=$(printf '%s\n' "$release_paths" | LC_ALL=C sort)
 expected_formula_paths=Formula/millstrand.rb
 expected_release_paths=$(printf '%s\n' CHANGELOG.md VERSION | LC_ALL=C sort)
 expect_equal "formula commit paths" "$formula_paths" "$expected_formula_paths"
