@@ -21,6 +21,12 @@
 (s/def ::worktree absolute-path?)
 (s/def ::release-params (s/keys :req-un [::version ::worktree]))
 
+(def ^:private release-preflight-script
+  (support/script "release-preflight.sh"))
+
+(def ^:private release-identity-script
+  (support/script "release-identity.sh"))
+
 (workflow/defworkflow release
   "Prepare, verify, tag, and publish one Millstrand release.
 
@@ -44,7 +50,7 @@
                   :attributes
                   {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                    "shell/timeout-secs" 120
-                   "shell/argv" (support/sh-gate support/release-preflight-script
+                   "shell/argv" (support/sh-gate release-preflight-script
                                                  "release-preflight")}
                   (format-alpha/prose
                    "
@@ -119,7 +125,7 @@
                    "shell/timeout-secs" 1200
                    "shell/argv"
                    (fn [{:keys [version]}]
-                     (support/sh-gate support/release-identity-script
+                     (support/sh-gate release-identity-script
                                       "release-identity"
                                       version))}
                   (format-alpha/prose
