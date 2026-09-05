@@ -15,8 +15,10 @@ func restartProgressFixture(t testing.TB) (*server, client.MillWorldRequest) {
 	probe := &restartProbeResult{
 		Stage: "probe/failure", ProbeWorkspace: "probe", SourceWorkspace: cfg,
 		Log: "probe.log", Completed: []string{},
-		Diagnostics: []map[string]any{{"stage": "probe/failure", "status": "failed",
-			"data": map[string]any{"detail": strings.Repeat("x", 3*1024*1024)}}},
+		Diagnostics: []map[string]any{{
+			"stage": "probe/failure", "status": "failed",
+			"data": map[string]any{"detail": strings.Repeat("x", 3*1024*1024)},
+		}},
 	}
 	if err := writeRestartRecord(world, restartRecord{
 		State: restartStateFailed, TransitionID: "retained-transition", Probe: probe,
@@ -65,10 +67,14 @@ func TestRestartProgressRejectsMalformedResponse(t *testing.T) {
 			t.Fatalf("valid phase %q rejected: %q, %v", state, got, err)
 		}
 	}
-	for _, result := range []any{nil, "probing", map[string]any{},
-		map[string]any{"state": nil}, map[string]any{"state": 1},
+	for _, result := range []any{
+		nil, "probing",
+		map[string]any{},
+		map[string]any{"state": nil},
+		map[string]any{"state": 1},
 		map[string]any{"state": "unknown"},
-		map[string]any{"state": "probing", "probe": "unexpected"}} {
+		map[string]any{"state": "probing", "probe": "unexpected"},
+	} {
 		if _, err := restartProgressState(result); err == nil {
 			t.Fatalf("malformed progress accepted: %v", result)
 		}
