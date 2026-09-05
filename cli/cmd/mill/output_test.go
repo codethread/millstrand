@@ -28,7 +28,7 @@ func TestHumanLifecycleStatus(t *testing.T) {
 		{"stopped", "weaver-stop", map[string]any{"state": "stopped", "pid": 42}, []string{"Weaver stopped\n"}},
 		{"restart", "weaver-restart", map[string]any{"state": "running", "workspace": "/tmp/demo", "generation_id": "new"}, []string{"Weaver restart complete", "Workspace  /tmp/demo"}},
 		{"failed probe", "weaver-restart", map[string]any{"state": "failed", "generation_id": "old", "diagnostics": []any{map[string]any{"stage": "probe", "status": "failed", "data": map[string]any{"message": "init failed", "log_path": "/tmp/probe.log"}}}}, []string{"Weaver restart failed", "Reason     init failed", "/tmp/probe.log", "Current weaver is still running.", "--json"}},
-		{"retained probe failure", "weaver-status", map[string]any{"state": "running", "restart_failure": map[string]any{"message": "init failed"}}, []string{"Weaver running", "last attempt failed", "Reason     init failed"}},
+		{"retained probe failure", "weaver-status", map[string]any{"state": "running", "restart_failure": map[string]any{"stage": "probe", "message": "init failed"}}, []string{"Weaver running", "last attempt failed", "Reason     init failed"}},
 		{"mill", "status", map[string]any{"healthy": true, "pid": 42, "socket_path": "/tmp/mill.sock"}, []string{"Mill running (PID 42)", "Socket     /tmp/mill.sock"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,6 +99,23 @@ func TestStatusRejectsMalformedResponse(t *testing.T) {
 		var out bytes.Buffer
 		if err := writeStatusResult(&out, false, "weaver-status", result, 0); err == nil {
 			t.Fatalf("accepted malformed response %#v", result)
+		}
+	}
+}
+
+func TestHumanStatusRejectsMalformedFailureDetailsBeforePrinting(t *testing.T) {
+	for _, fields := range []map[string]any{
+		{"state": "running", "restart_failure": "probe failed"},
+		{"state": "running", "restart_failure": nil},
+		{"state": "running", "restart_failure": map[string]any{"stage": "probe"}},
+		{"state": "failed", "diagnostics": "bad diagnostics"},
+		{"state": "failed", "diagnostics": []any{"probe failed"}},
+		{"state": "failed", "diagnostics": []any{map[string]any{"stage": "probe", "status": "failed", "data": "invalid"}}},
+	} {
+		var out bytes.Buffer
+		err := writeStatusResult(&out, false, "weaver-status", fields, 0)
+		if err == nil || out.Len() != 0 {
+			t.Fatalf("malformed failure was rendered: fields=%v, err=%v, output=%q", fields, err, &out)
 		}
 	}
 }

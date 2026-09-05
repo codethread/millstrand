@@ -73,6 +73,11 @@ var (
 	millLogMu   sync.Mutex
 )
 
+type millLogEvent struct {
+	Time    string `json:"time"`
+	Message string `json:"message"`
+}
+
 // startClaimInstalledFn is a deterministic seam for overlap tests.  The
 // default hook is inert; production callers still hold s.mu while the claim is
 // installed and the hook is called.
@@ -87,7 +92,7 @@ func millLogf(format string, args ...any) {
 	defer millLogMu.Unlock()
 	message := fmt.Sprintf(format, args...)
 	if millLogJSON {
-		_ = json.NewEncoder(millLogOut).Encode(map[string]any{"time": time.Now().Format(time.RFC3339), "message": message})
+		_ = json.NewEncoder(millLogOut).Encode(millLogEvent{Time: time.Now().Format(time.RFC3339), Message: message})
 		return
 	}
 	newStatusOutput(millLogOut).event(time.Now(), message)

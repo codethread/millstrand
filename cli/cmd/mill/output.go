@@ -53,6 +53,31 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 	if !ok {
 		return fmt.Errorf("malformed %s response: expected status object", operation)
 	}
+	var failure map[string]any
+	if value, present := fields["restart_failure"]; present {
+		failure, ok = value.(map[string]any)
+		if !ok || failure == nil {
+			return fmt.Errorf("malformed %s response: restart_failure must be an object", operation)
+		}
+		for _, key := range []string{"stage", "message"} {
+			text, ok := failure[key].(string)
+			if !ok || strings.TrimSpace(text) == "" {
+				return fmt.Errorf("malformed %s response: restart_failure.%s must be a non-blank string", operation, key)
+			}
+		}
+	}
+	var diagnostics []map[string]any
+	if value, present := fields["diagnostics"]; present {
+		diagnostics, ok = restartDiagnosticRows(value)
+		if !ok {
+			return fmt.Errorf("malformed %s response: diagnostics must be an array of objects", operation)
+		}
+		for _, row := range diagnostics {
+			if err := validateRestartDiagnostic(row); err != nil {
+				return fmt.Errorf("malformed %s response: diagnostics: %w", operation, err)
+			}
+		}
+	}
 	state := statusText(fields, "state")
 	subject := "Weaver"
 	if operation == "status" {
@@ -130,13 +155,13 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 		}
 		o.detail("Restart", o.paint(code, restart))
 	}
-	if failure, ok := fields["restart_failure"].(map[string]any); ok {
+	if failure != nil {
 		o.detail("Restart", o.paint("31", "last attempt failed; current weaver is still running"))
 		o.detail("Reason", statusText(failure, "message"))
 		o.detail("Logs", statusText(failure, "log_path"))
 	}
-	if rows, ok := restartDiagnosticRows(fields["diagnostics"]); ok {
-		for _, row := range rows {
+	if len(diagnostics) > 0 {
+		for _, row := range diagnostics {
 			if row["status"] != "failed" {
 				continue
 			}
