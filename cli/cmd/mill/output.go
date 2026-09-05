@@ -59,9 +59,18 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 		if !ok || failure == nil {
 			return fmt.Errorf("malformed %s response: restart_failure must be an object", operation)
 		}
+		for key, value := range failure {
+			switch key {
+			case "stage", "message", "log_path", "exit_evidence":
+			default:
+				return fmt.Errorf("malformed %s response: restart_failure has unknown field %q", operation, key)
+			}
+			if _, ok := value.(string); !ok {
+				return fmt.Errorf("malformed %s response: restart_failure.%s must be a string (got %T)", operation, key, value)
+			}
+		}
 		for _, key := range []string{"stage", "message"} {
-			text, ok := failure[key].(string)
-			if !ok || strings.TrimSpace(text) == "" {
+			if strings.TrimSpace(statusText(failure, key)) == "" {
 				return fmt.Errorf("malformed %s response: restart_failure.%s must be a non-blank string", operation, key)
 			}
 		}
