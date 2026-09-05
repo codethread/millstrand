@@ -258,21 +258,8 @@ mill changelog
     strand help
     ```
 
-To have Mill remember the workspace across supervisor restarts, first start
-Mill, then use `mill init --auto-start`. The flag writes `"autoStart": true` to
-shared `config.json`, registers the workspace, and starts its Weaver
-immediately. It requires the running Mill and returns its transport or start
-failure; it does not register the workspace offline. An explicit
-`mill weaver start` records a true registration only when shared `config.json`
-already has `"autoStart": true`; with omitted or false values, it starts the
-Weaver without registering. A later config change to true does not retroactively
-create that registration. On the next Mill startup, omitted or false
-`autoStart` values prune registrations; after setting the value true, run
-`mill weaver start` or `mill init --auto-start` to register again.
-Unknown keys in shared or local config are ignored with file/key warnings on
-Weaver startup; status and invoke reads do not log them. Known type errors and
-the local overlay's misplaced `configFormat` key still fail. A local
-`autoStart` key is unknown and cannot enable remembered startup.
+To have Mill remember the workspace across supervisor restarts, first start Mill, then use `mill init --auto-start`. The flag writes `"autoStart": true` to shared `config.json`, registers the workspace, and starts its Weaver immediately. It requires the running Mill and returns its transport or start failure; it does not register the workspace offline. An explicit `mill weaver start` records a true registration only when shared `config.json` already has `"autoStart": true`; with omitted or false values, it starts the Weaver without registering. A later config change to true does not retroactively create that registration. On the next Mill startup, omitted or false `autoStart` values prune registrations; after setting the value true, run `mill weaver start` or `mill init --auto-start` to register again.
+Unknown keys in shared or local config are ignored with file/key warnings on Weaver startup; status and invoke reads do not log them. Known type errors and the local overlay's misplaced `configFormat` key still fail. A local `autoStart` key is unknown and cannot enable remembered startup.
 3. Spawn your favourite agent and have **it** explain millstrand
 4. Check the [docs](https://codethread.github.io/millstrand/)
 

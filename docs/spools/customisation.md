@@ -24,28 +24,11 @@ When absent, `mill init` creates the shared half: `config.json`, `deps.edn` with
 
 ## Remembered Weaver startup
 
-`mill weaver start` records a true remembered-start registration only when
-shared `config.json` has `"autoStart": true`, including when the selected
-Weaver is already running. With `autoStart` omitted or false, explicit start
-never registers, including if the config later changes to true. On the next
-Mill startup, Mill re-reads shared `config.json`, prunes registrations with
-omitted or false `autoStart`, and starts the remaining remembered workspaces
-with at most four starts in flight. It logs failures and continues with other
-workspaces.
+`mill weaver start` records a true remembered-start registration only when shared `config.json` has `"autoStart": true`, including when the selected Weaver is already running. With `autoStart` omitted or false, explicit start never registers, including if the config later changes to true. On the next Mill startup, Mill re-reads shared `config.json`, prunes registrations with omitted or false `autoStart`, and starts the remaining remembered workspaces with at most four starts in flight. It logs failures and continues with other workspaces.
 
-If a registration is pruned, changing `config.json` to `"autoStart": true`
-does not recreate it during that Mill lifetime. Run `mill weaver start` after
-that change, or run `mill init --auto-start`, to register it again. Registration
-state is Mill-owned data under the existing XDG state root, not a workspace file
-or local overlay.
+If a registration is pruned, changing `config.json` to `"autoStart": true` does not recreate it during that Mill lifetime. Run `mill weaver start` after that change, or run `mill init --auto-start`, to register it again. Registration state is Mill-owned data under the existing XDG state root, not a workspace file or local overlay.
 
-Unknown keys in `config.json` and `config.local.json` are ignored for
-compatibility. When the Weaver starts, Mill logs a warning for each file and
-its unknown key names, including during remembered startup. Config reads for
-status and invoke retain those warnings but do not log them. Known value types
-still fail validation, and `config.local.json` rejects the known misplaced
-`configFormat` key. A local `autoStart` key is unknown and is ignored with the
-same startup warning; it cannot enable remembered startup.
+Unknown keys in `config.json` and `config.local.json` are ignored for compatibility. When the Weaver starts, Mill logs a warning for each file and its unknown key names, including during remembered startup. Config reads for status and invoke retain those warnings but do not log them. Known value types still fail validation, and `config.local.json` rejects the known misplaced `configFormat` key. A local `autoStart` key is unknown and is ignored with the same startup warning; it cannot enable remembered startup.
 
 ## A private repo-local workspace
 

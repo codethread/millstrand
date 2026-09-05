@@ -32,13 +32,7 @@ is Mill-owned state under the existing XDG state root.
   already running. With `autoStart` omitted or false, explicit start never
   registers. Explicit start does not add or edit the `autoStart` key in
   `config.json`.
-- **DELTA-Mas-001.CC4:** On Mill startup, remembered registrations are checked
-  against current shared `config.json`. Entries with omitted or false
-  `autoStart` are pruned before start attempts. Remaining true entries are
-  attempted with at most four starts in flight. Before launching each Weaver
-  or waiting for its readiness, Mill writes an autostart progress log naming
-  the workspace and attempt. It logs each attempt and failure and continues
-  after an individual failure.
+- **DELTA-Mas-001.CC4:** On Mill startup, remembered registrations are checked against current shared `config.json`. Entries with omitted or false `autoStart` are pruned before start attempts. Remaining true entries are attempted with at most four starts in flight. Before launching each Weaver or waiting for its readiness, Mill writes an autostart progress log naming the workspace and announcing the start attempt; the contract does not require an attempt identifier or counter. Each eligible registration gets one start attempt per Mill boot. Mill logs that start and any failure, releases the start slot, and continues after an individual failure.
 - **DELTA-Mas-001.CC5:** A registration pruned during startup is not recreated
   by changing its config to `"autoStart": true` later in that same Mill
   lifetime. After shared `autoStart` is true, `mill weaver start` or

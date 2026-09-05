@@ -35,11 +35,7 @@ and usage documentation.
   explicit start never registers. At Mill boot, read current shared configs,
   prune false or omitted entries, and schedule the survivors through a
   four-slot concurrency limit.
-- **PLAN-Mas-001.A4:** Isolate each remembered-start attempt. Write an
-  autostart progress log naming the workspace and attempt before launching its
-  Weaver or waiting for readiness. Log registration, attempt, success, and
-  failure context through Mill's existing logging path; release its slot and
-  continue scanning after an error.
+- **PLAN-Mas-001.A4:** Isolate each remembered-start attempt. Give each eligible registration one start attempt per Mill boot. Write an autostart progress log naming the workspace and announcing the start attempt before launching its Weaver or waiting for readiness; the contract does not require an attempt identifier or counter. Log registration, start, success, and failure context through Mill's existing logging path; release its slot and continue scanning after an error.
 - **PLAN-Mas-001.A5:** Emit config unknown-key warnings in the Weaver startup
   path, including remembered autostart, with each config file and key named.
   Keep known type errors and the local overlay's known misplaced `configFormat`
