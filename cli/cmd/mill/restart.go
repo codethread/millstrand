@@ -578,6 +578,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 		}
 		probe = *t.probe
 	} else {
+		millLogf("Verifying replacement weaver for %s…", t.world.ConfigDir)
 		probe, err = probeRuntime(source, t.world)
 		if err != nil {
 			// Probe transport/shape failures are retained as diagnostics while the
@@ -599,6 +600,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 		s.failRestart(t, "state", err, probe.Log)
 		return
 	}
+	millLogf("Replacing weaver for %s…", t.world.ConfigDir)
 	if t.old != nil {
 		if err := stopRecordedGeneration(t.old, t.world); err != nil {
 			s.failRestart(t, "stop", err, probe.Log)
@@ -636,6 +638,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 		s.failRestart(t, "state", err, weaverLogPath(t.world.StateDir))
 		return
 	}
+	millLogf("Weaver ready after restart (PID %v). Workspace: %s", status["pid"], t.world.ConfigDir)
 	s.completeTransition(t, status, nil, false)
 }
 
@@ -644,6 +647,7 @@ func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err e
 		s.failRestart(t, "probe", err, "")
 		return
 	}
+	millLogf("Replacement verification failed for %s; current weaver is still running: %v", t.world.ConfigDir, err)
 	if probe == nil {
 		probe = &restartProbeResult{
 			Success:         false,
@@ -688,6 +692,7 @@ func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err e
 }
 
 func (s *server) failRestart(t *weaverTransition, stage string, err error, logPath string) {
+	millLogf("Weaver restart failed at %s for %s: %v", stage, t.world.ConfigDir, err)
 	failure := &restartFailure{Stage: stage, Message: err.Error(), LogPath: logPath}
 	stateErr := s.setTransitionState(t, restartStateFailed, nil, failure)
 	if stateErr != nil {

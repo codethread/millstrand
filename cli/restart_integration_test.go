@@ -57,14 +57,14 @@ func newRestartProcessHarness(t *testing.T) *restartProcessHarness {
 	h.pids = append(h.pids, h.mill.Process.Pid)
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "mill listening") {
+		if strings.Contains(scanner.Text(), "Mill ready") {
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("read mill readiness: %v", err)
 	}
-	if !strings.Contains(scanner.Text(), "mill listening") {
+	if !strings.Contains(scanner.Text(), "Mill ready") {
 		t.Fatalf("mill exited before readiness (pid %d)", h.mill.Process.Pid)
 	}
 	t.Cleanup(func() { h.cleanup(t) })
@@ -111,6 +111,9 @@ func reapMill(t *testing.T, cmd *exec.Cmd, timeout time.Duration) {
 }
 
 func (h *restartProcessHarness) run(args ...string) (string, error) {
+	if len(args) >= 2 && args[0] == "weaver" && (args[1] == "start" || args[1] == "status" || args[1] == "restart" || args[1] == "stop") {
+		args = append(args, "--json")
+	}
 	cmd := exec.Command(h.millBin, args...)
 	cmd.Dir = h.source
 	var output bytes.Buffer

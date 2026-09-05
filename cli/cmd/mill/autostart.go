@@ -61,7 +61,7 @@ func registerAutoStart(world config.World, cwd, name string) error {
 	if err := atomicWriteAutoStart(path, append(b, '\n')); err != nil {
 		return fmt.Errorf("write autostart registration for %s: %w", world.ConfigDir, err)
 	}
-	millLogf("autostart registered config_dir=%s cwd=%s", world.ConfigDir, absoluteCWD)
+	millLogf("Automatic startup enabled for %s (from %s)", world.ConfigDir, absoluteCWD)
 	return nil
 }
 
@@ -73,7 +73,7 @@ func removeAutoStart(configDir string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	millLogf("autostart registration removed config_dir=%s", configDir)
+	millLogf("Automatic startup disabled for %s", configDir)
 	return nil
 }
 
@@ -118,16 +118,16 @@ func readAutoStartRegistrations() ([]autoStartRegistration, error) {
 	for _, path := range matches {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			millLogf("autostart registration read failed path=%s: %v", path, err)
+			millLogf("Could not read automatic startup registration %s: %v", path, err)
 			continue
 		}
 		var entry autoStartRegistration
 		if err := json.Unmarshal(b, &entry); err != nil {
-			millLogf("autostart registration malformed path=%s: %v", path, err)
+			millLogf("Invalid automatic startup registration %s: %v", path, err)
 			continue
 		}
 		if !entry.Enabled || strings.TrimSpace(entry.ConfigDir) == "" || strings.TrimSpace(entry.CWD) == "" {
-			millLogf("autostart registration malformed path=%s: missing enabled config_dir or cwd", path)
+			millLogf("Invalid automatic startup registration %s: missing enabled, config_dir or cwd", path)
 			continue
 		}
 		entries = append(entries, entry)
@@ -156,7 +156,7 @@ func (s *server) shuttingDown() bool {
 func (s *server) startAutostart() {
 	entries, err := readAutoStartRegistrations()
 	if err != nil {
-		millLogf("autostart registry read failed: %v", err)
+		millLogf("Could not read automatic startup registry: %v", err)
 		return
 	}
 	if len(entries) == 0 {
@@ -175,12 +175,12 @@ func (s *server) startAutostart() {
 			}
 			cfg, _, err := config.Load(entry.ConfigDir)
 			if err != nil {
-				millLogf("autostart config read failed config_dir=%s: %v", entry.ConfigDir, err)
+				millLogf("Could not read startup config for %s: %v", entry.ConfigDir, err)
 				continue
 			}
 			if !cfg.AutoStart {
 				if err := removeAutoStart(entry.ConfigDir); err != nil {
-					millLogf("autostart registration removal failed config_dir=%s: %v", entry.ConfigDir, err)
+					millLogf("Could not remove startup registration for %s: %v", entry.ConfigDir, err)
 				}
 				continue
 			}
@@ -196,17 +196,16 @@ func (s *server) startAutostart() {
 				if s.shuttingDown() {
 					return
 				}
-				millLogf("autostart starting config_dir=%s", entry.ConfigDir)
+				millLogf("Starting weaver automatically for %s…", entry.ConfigDir)
 				status, err := s.startWeaverWithShutdown(client.MillWorldRequest{CWD: entry.CWD, ConfigDir: entry.ConfigDir, Name: entry.Name}, s.shutdown)
 				if err != nil {
-					millLogf("autostart failed config_dir=%s: %v", entry.ConfigDir, err)
+					millLogf("Automatic startup failed for %s: %v", entry.ConfigDir, err)
 					return
 				}
 				if state, _ := status["state"].(string); state == restartStateFailed {
-					millLogf("autostart failed config_dir=%s: retained failed startup state", entry.ConfigDir)
+					millLogf("Automatic startup failed for %s; previous startup failure needs attention", entry.ConfigDir)
 					return
 				}
-				millLogf("autostart started config_dir=%s", entry.ConfigDir)
 			}(entry)
 		}
 	}()

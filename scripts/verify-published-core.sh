@@ -199,7 +199,7 @@ XDG_STATE_HOME="$state_root" "$mill_bin" init --workspace "$config_dir" >/dev/nu
 if ! weaver_output=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$config_dir" 2>&1); then
   die "weaver start failed for .millstrand: $weaver_output"
 fi
-if ! status_before=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$config_dir" 2>&1); then
+if ! status_before=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --json --workspace "$config_dir" 2>&1); then
   die "weaver status failed for .millstrand: $status_before"
 fi
 if ! echo "$status_before" | jq -e '.state == "running" and (.database_path | type) == "string"' >/dev/null 2>&1; then
@@ -214,7 +214,7 @@ mv "$config_dir" "$alias_dir"
 if ! weaver_output=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$alias_dir" 2>&1); then
   die "weaver start failed for .ms: $weaver_output"
 fi
-if ! status_after=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$alias_dir" 2>&1); then
+if ! status_after=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --json --workspace "$alias_dir" 2>&1); then
   die "weaver status failed for .ms: $status_after"
 fi
 if ! echo "$status_after" | jq -e '.state == "running"' >/dev/null 2>&1; then

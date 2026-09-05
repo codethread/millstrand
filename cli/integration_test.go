@@ -56,6 +56,9 @@ func (h harness) startMill(t *testing.T) {
 // (a subcommand flag) when an explicit workspace is selected.
 func (h harness) millCmd(workspace, cwd, stdin string, args ...string) (string, error) {
 	full := append([]string{}, args...)
+	if len(args) >= 2 && args[0] == "weaver" && (args[1] == "start" || args[1] == "status" || args[1] == "restart" || args[1] == "stop") {
+		full = append(full, "--json")
+	}
 	if workspace != "" {
 		full = append(full, "--workspace", workspace)
 	}

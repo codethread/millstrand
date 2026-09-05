@@ -104,7 +104,7 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 		t.Fatalf("stop should remove weaver.json, stat err=%v", err)
 	}
 	logText := logs.String()
-	for _, want := range []string{"weaver started config_dir=" + world.ConfigDir, "weaver stopped config_dir=" + world.ConfigDir, "pid=" + intString(stoppedPID)} {
+	for _, want := range []string{"Weaver " + filepath.Base(world.ConfigDir) + " ready", "Workspace: " + world.ConfigDir, "Weaver stopped (PID " + intString(stoppedPID)} {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("missing log %q in:\n%s", want, logText)
 		}

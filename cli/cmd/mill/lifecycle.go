@@ -38,7 +38,7 @@ func resolveLifecycleWorldWithWarnings(req client.MillWorldRequest, emitWarnings
 
 func emitConfigWarnings(c config.Config) {
 	for _, warning := range c.Warnings {
-		millLogf("warning: ignoring unknown config key(s) file=%s keys=%s", warning.File, strings.Join(warning.Keys, ","))
+		millLogf("Warning: ignoring unknown config keys in %s: %s", warning.File, strings.Join(warning.Keys, ","))
 	}
 }
 
@@ -326,7 +326,7 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	registered.identity = identity
 	registered.generationID = identity.GenerationID
 	status["generation_id"] = registered.generationID
-	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
+	millLogf("Weaver %s ready (PID %v). Workspace: %s. Logs: %s", name, status["pid"], world.ConfigDir, logPath)
 	return status, nil
 }
 
@@ -570,7 +570,7 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 			}
 			st := baseStatus(world, "stopped")
 			st["pid"] = identity.PID
-			millLogf("weaver stopped (unsupervised) config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, identity.PID)
+			millLogf("Weaver stopped (PID %d). Workspace: %s", identity.PID, world.ConfigDir)
 			return st, nil
 		}
 		return baseStatus(world, "stopped"), nil
@@ -589,7 +589,7 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	delete(s.children, world.ConfigDir)
 	status := baseStatus(world, "stopped")
 	status["pid"] = pid
-	millLogf("weaver stopped config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, pid)
+	millLogf("Weaver stopped (PID %d). Workspace: %s", pid, world.ConfigDir)
 	return status, nil
 }
 

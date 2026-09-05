@@ -67,7 +67,11 @@ type weaverChild struct {
 	generationID string
 }
 
-var millLogOut io.Writer = os.Stdout
+var (
+	millLogOut  io.Writer = os.Stdout
+	millLogJSON bool
+	millLogMu   sync.Mutex
+)
 
 // startClaimInstalledFn is a deterministic seam for overlap tests.  The
 // default hook is inert; production callers still hold s.mu while the claim is
@@ -79,7 +83,14 @@ var startClaimInstalledFn = func(string) {}
 var startClaimLookupFn = func(string) {}
 
 func millLogf(format string, args ...any) {
-	_, _ = fmt.Fprintf(millLogOut, format+"\n", args...)
+	millLogMu.Lock()
+	defer millLogMu.Unlock()
+	message := fmt.Sprintf(format, args...)
+	if millLogJSON {
+		_ = json.NewEncoder(millLogOut).Encode(map[string]any{"time": time.Now().Format(time.RFC3339), "message": message})
+		return
+	}
+	newStatusOutput(millLogOut).event(time.Now(), message)
 }
 
 var launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
@@ -131,7 +142,7 @@ Environment:
                        envelope {type, code, message, details} as one line on
                        stderr, and nothing else, for a caller composing over
                        this CLI
-  NO_COLOR             drop ANSI colour from the pretty rendering`,
+  NO_COLOR             disable ANSI colour in status and error output`,
 		// Silencing hands the whole failure output to writeMillCommandFailure,
 		// which renders once and decides for itself which of Cobra's help
 		// pointer and usage block the failure has earned.
@@ -143,16 +154,22 @@ Environment:
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return errfmt.ValidateFormat() },
 	}
 	root.SetVersionTemplate(fmt.Sprintf("{\"build_id\":%q,\"protocol_version\":%d,\"version\":%q}\n", config.BuildID, client.ProtocolVersion, config.Version))
-	root.AddCommand(&cobra.Command{Use: "start", Short: "Start mill in the foreground", RunE: func(cmd *cobra.Command, args []string) error {
+	startCmd := &cobra.Command{Use: "start", Short: "Start mill in the foreground", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		millLogJSON, _ = cmd.Flags().GetBool("json")
 		return start()
-	}})
-	root.AddCommand(&cobra.Command{Use: "status", Short: "Check the active mill", RunE: func(cmd *cobra.Command, args []string) error {
+	}}
+	startCmd.Flags().Bool("json", false, "write timestamped JSON log events")
+	root.AddCommand(startCmd)
+	statusCmd := &cobra.Command{Use: "status", Short: "Check the active mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		result, err := client.MillStatus()
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(os.Stdout).Encode(result)
-	}})
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		return writeStatusResult(cmd.OutOrStdout(), jsonOutput, "status", result, 0)
+	}}
+	statusCmd.Flags().Bool("json", false, "print the full status as JSON")
+	root.AddCommand(statusCmd)
 	initCmd := &cobra.Command{Use: "init", Short: "Bootstrap missing selected config workspace files through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		stealth, _ := cmd.Flags().GetBool("stealth")
@@ -179,31 +196,39 @@ Environment:
 		if cmd.Flags().Changed("name") && strings.TrimSpace(name) == "" {
 			return errors.New("--name requires a non-empty value")
 		}
-		return runWeaverLifecycleWithReadyTimeout("weaver-start", workspace, name, readyTimeout)
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-start", workspace, name, readyTimeout)
 	}}
 	start.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
 	start.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
+	start.Flags().Bool("json", false, "print the full result as JSON without progress messages")
 	weaver.AddCommand(start)
 	restart := &cobra.Command{Use: "restart", Short: "Probe and replace the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		readyTimeout, _ := cmd.Flags().GetString("ready-timeout")
-		return runWeaverLifecycleWithReadyTimeout("weaver-restart", workspace, "", readyTimeout)
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-restart", workspace, "", readyTimeout)
 	}}
 	restart.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	restart.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
+	restart.Flags().Bool("json", false, "print the full result as JSON without progress messages")
 	weaver.AddCommand(restart)
 	status := &cobra.Command{Use: "status", Short: "Show selected workspace weaver status through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
-		return runWeaverLifecycle("weaver-status", workspace, "")
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-status", workspace, "", "")
 	}}
 	status.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
+	status.Flags().Bool("json", false, "print the full result as JSON without progress messages")
 	weaver.AddCommand(status)
 	stop := &cobra.Command{Use: "stop", Short: "Stop the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
-		return runWeaverLifecycle("weaver-stop", workspace, "")
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-stop", workspace, "", "")
 	}}
 	stop.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
+	stop.Flags().Bool("json", false, "print the full result as JSON without progress messages")
 	weaver.AddCommand(stop)
 	repl := &cobra.Command{Use: "repl", Short: "Attach directly to the selected workspace's live weaver nREPL", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
@@ -259,7 +284,7 @@ func start() (err error) {
 	if err := os.WriteFile(metadataPath, append(b, '\n'), 0o644); err != nil {
 		return err
 	}
-	millLogf("mill listening state_root=%s socket=%s pid=%d", meta.StateRoot, meta.SocketPath, meta.PID)
+	millLogf("Mill ready (PID %d, v%s). Listening on %s", meta.PID, config.Version, meta.SocketPath)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -271,6 +296,7 @@ func start() (err error) {
 	}()
 	s.startAutostart()
 	defer func() {
+		millLogf("Stopping mill and its weavers…")
 		s.stopAutostart()
 		if shutdownErr := s.stopAll(); shutdownErr != nil {
 			if err == nil {
@@ -279,6 +305,9 @@ func start() (err error) {
 				err = fmt.Errorf("mill stopped with request error: %v; custody shutdown failed: %w",
 					err, shutdownErr)
 			}
+		}
+		if err == nil {
+			millLogf("Mill stopped")
 		}
 	}()
 	for {

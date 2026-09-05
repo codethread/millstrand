@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
 	"time"
-
-	"golang.org/x/term"
 
 	"millstrand-strand-cli/internal/client"
 )
@@ -63,11 +62,7 @@ func runInit(workspace string, stealth, autoStart bool) error {
 	return emitJSON(result)
 }
 
-func runWeaverLifecycle(operation, workspace, name string) error {
-	return runWeaverLifecycleWithReadyTimeout(operation, workspace, name, "")
-}
-
-func runWeaverLifecycleWithReadyTimeout(operation, workspace, name, readyTimeout string) error {
+func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, name, readyTimeout string) error {
 	world, err := worldRequest(workspace, name)
 	if err != nil {
 		return err
@@ -77,62 +72,70 @@ func runWeaverLifecycleWithReadyTimeout(operation, workspace, name, readyTimeout
 		return err
 	}
 	world.ReadyTimeoutMs = ms
-	if operation != "weaver-restart" || !term.IsTerminal(int(os.Stderr.Fd())) {
+	if jsonOutput || operation == "weaver-status" {
 		result, err := client.MillCall(operation, world)
 		if err != nil {
 			return err
 		}
-		return emitJSON(result)
+		return writeStatusResult(out, jsonOutput, operation, result, 0)
 	}
 
-	type restartOutcome struct {
+	ui := newStatusOutput(out)
+	started := time.Now()
+	message := map[string]string{
+		"weaver-start":   "Starting weaver…",
+		"weaver-restart": "Restarting weaver…",
+		"weaver-stop":    "Stopping weaver…",
+	}[operation]
+	ui.event(started, message)
+	type lifecycleOutcome struct {
 		result any
 		err    error
 	}
-	completed := make(chan restartOutcome, 1)
-	fmt.Fprintln(os.Stderr, "verifying new weaver")
-	fmt.Fprintln(os.Stderr, "  weaver init")
+	completed := make(chan lifecycleOutcome, 1)
 	go func() {
 		result, err := client.MillCall(operation, world)
-		completed <- restartOutcome{result: result, err: err}
+		completed <- lifecycleOutcome{result: result, err: err}
 	}()
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	cutoverReported := false
+	lastState := ""
+	lastReport := started
 	for {
 		select {
 		case outcome := <-completed:
 			if outcome.err != nil {
 				return outcome.err
 			}
-			return emitJSON(outcome.result)
-		case <-ticker.C:
-			if cutoverReported {
-				continue
+			return ui.result(operation, outcome.result, time.Since(started))
+		case now := <-ticker.C:
+			if operation == "weaver-restart" {
+				status, err := client.MillCall("weaver-status", world)
+				if err != nil {
+					return fmt.Errorf("read weaver restart progress (restart may still be running; check mill weaver status): %w", err)
+				}
+				fields, ok := status.(map[string]any)
+				if !ok {
+					return fmt.Errorf("read weaver restart progress: expected status object, got %T", status)
+				}
+				state := statusText(fields, "state")
+				if state != lastState {
+					switch state {
+					case "probing":
+						ui.event(now, "Verifying replacement; current weaver is still serving…")
+					case "restarting":
+						ui.event(now, "Replacing weaver; waiting for it to be ready…")
+					case "running", "failed", "none", "stopped", "starting", "stale":
+					default:
+						return fmt.Errorf("read weaver restart progress: unexpected state %q", state)
+					}
+					lastState = state
+				}
 			}
-			status, statusErr := client.MillCall("weaver-status", world)
-			if statusErr != nil {
-				return fmt.Errorf("read weaver restart progress: %w", statusErr)
-			}
-			fields, ok := status.(map[string]any)
-			if !ok {
-				return fmt.Errorf("read weaver restart progress: expected status object, got %T", status)
-			}
-			state, ok := fields["state"].(string)
-			if !ok {
-				return fmt.Errorf("read weaver restart progress: status has invalid state: %v", status)
-			}
-			switch state {
-			case "restarting":
-				fmt.Fprintln(os.Stderr, "closing open handles")
-				fmt.Fprintln(os.Stderr, "starting new weaver")
-				cutoverReported = true
-			case "probing", "running", "failed":
-			case "":
-				return fmt.Errorf("read weaver restart progress: status has empty state: %v", status)
-			default:
-				return fmt.Errorf("read weaver restart progress: unexpected state %q in %v", state, status)
+			if now.Sub(lastReport) >= 10*time.Second {
+				ui.event(now, fmt.Sprintf("Still waiting for weaver (%s elapsed)…", now.Sub(started).Round(time.Second)))
+				lastReport = now
 			}
 		}
 	}
