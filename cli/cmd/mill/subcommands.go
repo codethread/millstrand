@@ -111,11 +111,11 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 			return ui.result(operation, outcome.result, time.Since(started))
 		case now := <-ticker.C:
 			if operation == "weaver-restart" {
-				status, err := client.MillCall("weaver-restart-progress", world)
+				status, err := client.MillCall("weaver-restart-status", world)
 				if err != nil {
 					return fmt.Errorf("read weaver restart progress (restart may still be running; check mill weaver status): %w", err)
 				}
-				state, err := restartProgressState(status)
+				state, err := restartStatusState(status)
 				if err != nil {
 					return fmt.Errorf("read weaver restart progress: %w", err)
 				}

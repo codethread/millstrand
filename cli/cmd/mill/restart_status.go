@@ -8,7 +8,7 @@ import (
 
 // Progress describes only the in-memory transition. Idle means no transition
 // is registered, not that the weaver is healthy or a restart succeeded.
-func (s *server) weaverRestartProgress(req client.MillWorldRequest) (map[string]any, error) {
+func (s *server) weaverRestartStatus(req client.MillWorldRequest) (map[string]any, error) {
 	world, err := resolveLifecycleWorld(req)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,7 @@ func (s *server) weaverRestartProgress(req client.MillWorldRequest) (map[string]
 	return map[string]any{"state": state}, nil
 }
 
-func restartProgressState(result any) (string, error) {
+func restartStatusState(result any) (string, error) {
 	fields, ok := result.(map[string]any)
 	if !ok || len(fields) != 1 {
 		return "", fmt.Errorf("restart progress must be an object containing only state")

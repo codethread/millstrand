@@ -486,10 +486,10 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
-	case "weaver-restart-progress":
-		result, err := s.weaverRestartProgress(req.World)
+	case "weaver-restart-status":
+		result, err := s.weaverRestartStatus(req.World)
 		if err != nil {
-			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-progress-failed", "weaver restart progress failed", err.Error()))
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-status-failed", "weaver restart progress failed", err.Error()))
 			return
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})

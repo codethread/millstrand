@@ -9,7 +9,7 @@ import (
 	"millstrand-strand-cli/internal/client"
 )
 
-func restartProgressFixture(t testing.TB) (*server, client.MillWorldRequest) {
+func restartStatusFixture(t testing.TB) (*server, client.MillWorldRequest) {
 	t.Helper()
 	world, cfg := forwardWorld(t)
 	probe := &restartProbeResult{
@@ -29,11 +29,11 @@ func restartProgressFixture(t testing.TB) (*server, client.MillWorldRequest) {
 	return &server{transitions: map[string]*weaverTransition{}}, client.MillWorldRequest{ConfigDir: world.ConfigDir}
 }
 
-func TestRestartProgressReportsOnlyActivePhaseAndRetainsFullStatus(t *testing.T) {
-	s, world := restartProgressFixture(t)
+func TestRestartStatusReportsOnlyActivePhaseAndRetainsFullStatus(t *testing.T) {
+	s, world := restartStatusFixture(t)
 	request := client.MillRequest{
 		ProtocolVersion: client.MillProtocolVersion, RequestID: "progress", World: world,
-		Operation: "weaver-restart-progress",
+		Operation: "weaver-restart-status",
 	}
 	fullBefore, err := s.weaverStatus(world)
 	if err != nil || fullBefore["state"] != "failed" || fullBefore["probe"] == nil {
@@ -61,9 +61,9 @@ func TestRestartProgressReportsOnlyActivePhaseAndRetainsFullStatus(t *testing.T)
 	}
 }
 
-func TestRestartProgressRejectsMalformedResponse(t *testing.T) {
+func TestRestartStatusRejectsMalformedResponse(t *testing.T) {
 	for _, state := range []string{"idle", "probing", "restarting", "running", "failed"} {
-		if got, err := restartProgressState(map[string]any{"state": state}); err != nil || got != state {
+		if got, err := restartStatusState(map[string]any{"state": state}); err != nil || got != state {
 			t.Fatalf("valid phase %q rejected: %q, %v", state, got, err)
 		}
 	}
@@ -75,18 +75,18 @@ func TestRestartProgressRejectsMalformedResponse(t *testing.T) {
 		map[string]any{"state": "unknown"},
 		map[string]any{"state": "probing", "probe": "unexpected"},
 	} {
-		if _, err := restartProgressState(result); err == nil {
+		if _, err := restartStatusState(result); err == nil {
 			t.Fatalf("malformed progress accepted: %v", result)
 		}
 	}
 }
 
 func BenchmarkRestartPolling(b *testing.B) {
-	s, world := restartProgressFixture(b)
+	s, world := restartStatusFixture(b)
 	for _, variant := range []struct {
 		name string
 		read func(client.MillWorldRequest) (map[string]any, error)
-	}{{"full-status", s.weaverStatus}, {"progress", s.weaverRestartProgress}} {
+	}{{"full-status", s.weaverStatus}, {"progress", s.weaverRestartStatus}} {
 		b.Run(variant.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
