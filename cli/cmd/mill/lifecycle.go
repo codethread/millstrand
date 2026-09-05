@@ -144,10 +144,6 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	return s.startWeaverWithShutdown(req, nil)
 }
 
-func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, error) {
-	return s.startWeaverWithShutdown(req, nil)
-}
-
 func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <-chan struct{}) (map[string]any, error) {
 	world, err := resolveLifecycleWorldWithWarnings(req, true)
 	if err != nil {
