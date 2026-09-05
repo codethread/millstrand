@@ -232,7 +232,7 @@
     (when (zero? attempts)
       (throw (ex-info "CLI weaver did not become ready" {})))
     (let [running? (try
-                     (= "running" (:state (parse-json (run-mill-config! workspace "weaver" "status"))))
+                     (= "running" (:state (parse-json (run-mill-config! workspace "weaver" "status" "--json"))))
                      (catch AssertionError _ false))]
       (when-not running?
         (Thread/sleep 200)
@@ -333,7 +333,7 @@
         v2 (java.io.File. workspace "local-v2")
         deps-local (java.io.File. workspace "deps.local.edn")
         init-local (java.io.File. workspace "init.local.clj")
-        status #(parse-json (run-mill-config! workspace "weaver" "status"))]
+        status #(parse-json (run-mill-config! workspace "weaver" "status" "--json"))]
     (delete-tree! (smoke-workspace (str db-file ".replacement")))
     (run-mill-config! workspace "init")
     (write-smoke-deps! workspace)

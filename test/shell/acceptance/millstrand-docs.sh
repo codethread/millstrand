@@ -107,11 +107,11 @@ printf '{:deps {io.millstrand/batteries {:local/root "%s"}}}\n' \
   "$repo_root/spools/batteries" >.millstrand/deps.edn
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" .millstrand/init.clj
 
-run_capture "mill weaver status before start" "$status_before" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status
+run_capture "mill weaver status before start" "$status_before" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json
 jq -e '(.state != "running")' "$status_before" >/dev/null
 
 run_recorded "mill weaver start" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start
-run_capture "mill weaver status after start" "$status_running" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status
+run_capture "mill weaver status after start" "$status_running" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json
 jq -e '(.state == "running")' "$status_running" >/dev/null
 
 run_recorded "mill weaver stop" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop
@@ -122,7 +122,7 @@ mv .millstrand .ms
 }
 
 run_recorded "mill weaver restart from .ms" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start
-run_capture "mill weaver status from .ms" "$status_alias" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status
+run_capture "mill weaver status from .ms" "$status_alias" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json
 jq -e '(.state == "running")' "$status_alias" >/dev/null
 run_recorded "mill weaver final stop" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop
 

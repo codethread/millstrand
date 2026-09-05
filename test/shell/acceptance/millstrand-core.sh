@@ -58,11 +58,11 @@ printf '{:deps {io.millstrand/batteries {:local/root "%s"}}}\n' \
   "$repo_root/spools/batteries" >"$config_dir/deps.edn"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" "$config_dir/init.clj"
 
-XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$config_dir" >"$status_before"
+XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json --workspace "$config_dir" >"$status_before"
 jq -e '(.database_path | type) == "string" and (.database_path | length) > 0' "$status_before" >/dev/null
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start --workspace "$config_dir" >/dev/null
-XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$config_dir" >"$status_running"
+XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json --workspace "$config_dir" >"$status_running"
 jq -er '.database_path' "$status_running" >"$tmp_root/database-path.txt"
 database_path=$(sed -n '1p' "$tmp_root/database-path.txt")
 database_path=$(realpath "$database_path")
@@ -82,13 +82,13 @@ jq -e '.' "$list_before" >/dev/null
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop --workspace "$config_dir" >/dev/null
 mv "$config_dir" "$alias_dir"
 
-XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$alias_dir" >"$status_alias"
+XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json --workspace "$alias_dir" >"$status_alias"
 jq -e '(.state != "running")' "$status_alias" >/dev/null
 alias_database_path=$(jq -er '.database_path' "$status_alias")
 [[ "$(realpath "$alias_database_path")" == "$database_path" ]]
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start --workspace "$alias_dir" >/dev/null
-XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$alias_dir" >"$status_reopened"
+XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --json --workspace "$alias_dir" >"$status_reopened"
 XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$alias_dir" list --limit 1 >"$list_after"
 jq -e '(.state == "running")' "$status_reopened" >/dev/null
 reopened_database_path=$(jq -er '.database_path' "$status_reopened")

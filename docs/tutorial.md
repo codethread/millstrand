@@ -93,6 +93,8 @@ The weaver is the long-lived Clojure process that owns the graph and runtime sta
 mill weaver status
 ```
 
+Mill prints readable status to stdout. Start, restart, and stop show timestamped progress while you wait; status shows the workspace, PID, start time, and detailed log path. Color appears only at a terminal, and `NO_COLOR` disables it. For scripts, add `--json` to `mill status` or `mill weaver start|status|restart|stop` to receive the full result without progress messages. `mill start --json` writes timestamped JSON events.
+
 ## The strand model
 
 A strand has an id, a title, one lifecycle `state`, timestamps, and an open map of `attributes`. The state is `active`, `closed`, or `replaced`. Concepts such as owner, priority, outcome, and project are attributes whose names your workspace or a spool defines.

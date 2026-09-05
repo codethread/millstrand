@@ -57,14 +57,14 @@ func newRestartProcessHarness(t *testing.T) *restartProcessHarness {
 	h.pids = append(h.pids, h.mill.Process.Pid)
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "mill listening") {
+		if strings.Contains(scanner.Text(), "Mill ready") {
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("read mill readiness: %v", err)
 	}
-	if !strings.Contains(scanner.Text(), "mill listening") {
+	if !strings.Contains(scanner.Text(), "Mill ready") {
 		t.Fatalf("mill exited before readiness (pid %d)", h.mill.Process.Pid)
 	}
 	t.Cleanup(func() { h.cleanup(t) })
@@ -111,6 +111,9 @@ func reapMill(t *testing.T, cmd *exec.Cmd, timeout time.Duration) {
 }
 
 func (h *restartProcessHarness) run(args ...string) (string, error) {
+	if len(args) >= 2 && args[0] == "weaver" && (args[1] == "start" || args[1] == "status" || args[1] == "restart" || args[1] == "stop") {
+		args = append(args, "--json")
+	}
 	cmd := exec.Command(h.millBin, args...)
 	cmd.Dir = h.source
 	var output bytes.Buffer
@@ -203,6 +206,57 @@ func (h *restartProcessHarness) restartAsync(workspace, timeout string) <-chan p
 type processResult struct {
 	output string
 	err    error
+}
+
+func TestMillLifecyclePresentationAcceptance(t *testing.T) {
+	h := newRestartProcessHarness(t)
+	workspace := shortTempDir(t)
+	h.initWorld(t, workspace)
+	for _, step := range []struct {
+		operation string
+		want      []string
+		state     string
+	}{
+		{"start", []string{"Starting weaver…", "running (PID ", "Workspace", "Logs"}, "running"},
+		{"status", []string{"running (PID ", "Workspace", "Since", "Logs"}, "running"},
+		{"restart", []string{"Restarting weaver…", "Weaver restart complete", "Workspace"}, "running"},
+		{"stop", []string{"Stopping weaver…", "stopped", "Workspace"}, "none"},
+	} {
+		cmd := exec.Command(h.millBin, "weaver", step.operation, "--workspace", workspace)
+		cmd.Dir = h.source
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil || stderr.Len() != 0 {
+			t.Fatalf("human %s: %v\nstdout: %s\nstderr: %s", step.operation, err, &stdout, &stderr)
+		}
+		for _, want := range step.want {
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("human %s missing %q:\n%s", step.operation, want, &stdout)
+			}
+		}
+		if strings.ContainsAny(stdout.String(), "\x1b{") {
+			t.Fatalf("human %s contains ANSI or raw metadata: %s", step.operation, &stdout)
+		}
+		jsonOut, err := h.run("weaver", step.operation, "--workspace", workspace)
+		if err != nil {
+			t.Fatalf("JSON %s: %v\n%s", step.operation, err, jsonOut)
+		}
+		result := decodeObject(t, jsonOut)
+		wantState := step.state
+		if step.operation == "stop" {
+			wantState = "stopped"
+		}
+		if result["state"] != wantState {
+			t.Fatalf("JSON %s result: %v", step.operation, result)
+		}
+		status := h.status(t, workspace)
+		if status["state"] != step.state {
+			t.Fatalf("JSON status after %s: %v", step.operation, status)
+		}
+		if step.state == "running" {
+			h.pids = append(h.pids, requiredPID(t, status))
+		}
+	}
 }
 
 func TestDisposableWeaverRestartAcceptance(t *testing.T) {
@@ -304,6 +358,18 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "source/dependency")
+		human := exec.Command(h.millBin, "weaver", "restart", "--workspace", workspace)
+		human.Dir = h.source
+		humanOut, err := human.Output()
+		if err != nil {
+			t.Fatalf("human failed probe: %v\n%s", err, humanOut)
+		}
+		for _, want := range []string{"Weaver restart failed", "Current weaver is still running.", "Reason", "--json"} {
+			if !strings.Contains(string(humanOut), want) {
+				t.Fatalf("human failed probe missing %q:\n%s", want, humanOut)
+			}
+		}
+		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "human source/dependency")
 	})
 
 	t.Run("invalid candidate registry probe retains diagnostics", func(t *testing.T) {

@@ -491,7 +491,7 @@
   mill errors or reports no path."
   [workspace]
   (let [{:keys [exit out err]}
-        (shell/sh "mill" "weaver" "status" "--workspace" workspace)]
+        (shell/sh "mill" "weaver" "status" "--json" "--workspace" workspace)]
     (when-not (zero? exit)
       (throw (ex-info (str "mill weaver status failed for workspace " workspace)
                       {:exit exit :err (str/trim (str err))})))

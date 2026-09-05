@@ -170,7 +170,7 @@ func TestAutostartQueueLimitsConcurrentStartsAndContinuesAfterFailure(t *testing
 	if len(s.children) != len(worlds)-1 {
 		t.Fatalf("launch failure stopped successful autostarts: children=%d want=%d", len(s.children), len(worlds)-1)
 	}
-	if !strings.Contains(logs.String(), "autostart starting config_dir=") {
+	if !strings.Contains(logs.String(), "Starting weaver automatically for ") {
 		t.Fatalf("missing prelaunch autostart log in %q", logs.String())
 	}
 }
