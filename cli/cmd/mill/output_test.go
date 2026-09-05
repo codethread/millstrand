@@ -122,19 +122,3 @@ func TestHumanStatusRejectsMalformedFailureDetailsBeforePrinting(t *testing.T) {
 		}
 	}
 }
-
-func TestRestartProgressTracksReplacementWhileOldGenerationServes(t *testing.T) {
-	for _, tt := range []struct {
-		fields map[string]any
-		want   string
-	}{
-		{map[string]any{"state": "running", "restart_state": "probing"}, "probing"},
-		{map[string]any{"state": "restarting"}, "restarting"},
-		{map[string]any{"state": "running", "restart_state": "failed"}, "failed"},
-		{map[string]any{"state": "running"}, "running"},
-	} {
-		if got := restartProgressState(tt.fields); got != tt.want {
-			t.Fatalf("progress for %v = %q, want %q", tt.fields, got, tt.want)
-		}
-	}
-}

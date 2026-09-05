@@ -111,24 +111,20 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 			return ui.result(operation, outcome.result, time.Since(started))
 		case now := <-ticker.C:
 			if operation == "weaver-restart" {
-				status, err := client.MillCall("weaver-status", world)
+				status, err := client.MillCall("weaver-restart-status", world)
 				if err != nil {
 					return fmt.Errorf("read weaver restart progress (restart may still be running; check mill weaver status): %w", err)
 				}
-				fields, ok := status.(map[string]any)
-				if !ok {
-					return fmt.Errorf("read weaver restart progress: expected status object, got %T", status)
+				state, err := restartStatusState(status)
+				if err != nil {
+					return fmt.Errorf("read weaver restart progress: %w", err)
 				}
-				state := restartProgressState(fields)
 				if state != lastState {
 					switch state {
 					case "probing":
 						ui.event(now, "Verifying replacement; current weaver is still serving…")
 					case "restarting":
 						ui.event(now, "Replacing weaver; waiting for it to be ready…")
-					case "running", "failed", "none", "stopped", "starting", "stale":
-					default:
-						return fmt.Errorf("read weaver restart progress: unexpected state %q", state)
 					}
 					lastState = state
 				}
@@ -139,15 +135,6 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 			}
 		}
 	}
-}
-
-func restartProgressState(fields map[string]any) string {
-	// During probing, state describes the serving old generation;
-	// restart_state carries the replacement's progress.
-	if restart := statusText(fields, "restart_state"); restart != "" {
-		return restart
-	}
-	return statusText(fields, "state")
 }
 
 // runWeaverRepl resolves the live weaver's nREPL endpoint and launch source

@@ -62,6 +62,9 @@
       :fingerprint basis-fingerprint
       :classloader classloader})))
 
+(defn- runtime-coordinate []
+  {:local/root (.getCanonicalPath (io/file "."))})
+
 (defn- start-runtime! [db-file opts]
   (let [world (:world opts)]
     (weaver-runtime/start!
@@ -239,7 +242,7 @@
         result (try
                  (fresh-runtime-probe!
                   world {:old-generation-baseline {:status :admitted :projection {}}
-                         :generation-basis (generation-basis world)})
+                         :runtime-coordinate (runtime-coordinate)})
                  (finally
                    (delete-tree! (io/file (:config-dir world) ".."))))]
     (is (true? (:success result)))
@@ -250,6 +253,24 @@
     (is (nil? @weaver-runtime/current-runtime))
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
+
+(deftest fresh-runtime-probe-rejects-invalid-source-and-coordinate
+  (let [world (temp-world)
+        opts {:old-generation-baseline {:status :admitted :projection {}}
+              :runtime-coordinate (runtime-coordinate)}]
+    (try
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Fresh runtime probe requires a selected world"
+           (weaver-runtime/fresh-runtime-probe!
+            (assoc world :config-dir 42) opts)))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Fresh runtime probe options have an invalid shape"
+           (weaver-runtime/fresh-runtime-probe!
+            world (assoc opts :runtime-coordinate {:local/root ""}))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest fresh-runtime-probe-resolves-copied-relative-local-roots-from-source
   (let [world (temp-world)
@@ -274,7 +295,7 @@
               (weaver-runtime/fresh-runtime-probe!
                world {:old-generation-baseline
                       {:status :admitted :projection {}}
-                      :generation-basis (generation-basis world)}))]
+                      :runtime-coordinate (runtime-coordinate)}))]
         (is (true? (:success result)))
         (is (some #{(.getCanonicalPath (io/file source-root "src"))}
                   @captured-roots)))
@@ -285,7 +306,8 @@
   (let [world (temp-world)
         module-root (io/file (:config-dir world) ".." "probe-module")
         module-source (io/file module-root "src" "probe" "candidate_module.clj")
-        module-source-root (.getCanonicalPath (io/file module-root "src"))]
+        module-source-root (.getCanonicalPath (io/file module-root "src"))
+        captured-coordinate (atom nil)]
     (io/make-parents module-source)
     (spit (io/file module-root "deps.edn") "{:paths [\"src\"]}\n")
     (spit module-source
@@ -302,6 +324,9 @@
       (let [result
             (binding [basis/*create-basis*
                       (fn [{:keys [project extra aliases args]}]
+                        (reset! captured-coordinate
+                                (get-in args [:extra-deps
+                                              'io.millstrand/millstrand]))
                         {:libs (merge (:deps project) (:deps extra)
                                       (:extra-deps args))
                          :classpath-roots [module-source-root]
@@ -309,8 +334,9 @@
               (weaver-runtime/fresh-runtime-probe!
                world {:old-generation-baseline
                       {:status :admitted :projection {}}
-                      :generation-basis (generation-basis world)}))]
+                      :runtime-coordinate (runtime-coordinate)}))]
         (is (true? (:success result)))
+        (is (= (runtime-coordinate) @captured-coordinate))
         (is (= ["all"]
                (get-in result [:candidate-registries "queries" "effective"
                                "queries" "candidate-only" "value"]))))
@@ -341,7 +367,7 @@
         (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
                              {:status :admitted :projection {}}
-                             :generation-basis (generation-basis world)})]
+                             :runtime-coordinate (runtime-coordinate)})]
           (is (false? (:success result)))
           (is (= :probe/failure (:stage result)))
           (is (not= "/foreign" (:probe/workspace result)))
@@ -483,7 +509,7 @@
         (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
                              {:status :admitted :projection {}}
-                             :generation-basis (generation-basis world)})]
+                             :runtime-coordinate (runtime-coordinate)})]
           (is (false? (:success result)))
           (is (= :probe/failure (:stage result)))
           (is (string? (:probe/workspace result)))
@@ -508,7 +534,7 @@
                      #(fresh-runtime-probe!
                        world {:old-generation-baseline
                               {:status :admitted :projection {}}
-                              :generation-basis (generation-basis world)}))]
+                              :runtime-coordinate (runtime-coordinate)}))]
         (is (false? (:success result)))
         (is (= "post-start probe failure"
                (get-in result [:failure :message])))

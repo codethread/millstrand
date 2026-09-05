@@ -149,6 +149,10 @@
    (s/keys :opt-un [:millstrand.generation-basis/dependency-source-workspace])
    #(every? #{:dependency-source-workspace} (keys %))))
 
+(s/def :millstrand.weaver-start/runtime-coordinate
+  (s/and map?
+         #(non-blank-string? (:local/root %))))
+
 (s/def :millstrand.hook/key
   (s/or :keyword keyword?
         :symbol symbol?
@@ -493,6 +497,14 @@
          #(= #{:status :projection} (set (keys %)))
          #(= :admitted (:status %))
          #(s/valid? :millstrand.registry-projection/registry (:projection %))))
+
+(s/def ::fresh-runtime-probe-options
+  (s/and
+   (s/keys :req-un [:millstrand.weaver-start/old-generation-baseline
+                    :millstrand.weaver-start/runtime-coordinate]
+           :opt-un [:millstrand.weaver-start/expected-version])
+   #(every? #{:old-generation-baseline :runtime-coordinate :expected-version}
+            (keys %))))
 
 (defn- json-safe-value?
   "Return true for the closed JSON value grammar used by wire results."

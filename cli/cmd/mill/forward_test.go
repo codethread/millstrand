@@ -701,7 +701,7 @@ func mustFrame(t *testing.T, v any) []byte {
 	return b
 }
 
-func forwardWorld(t *testing.T) (config.World, string) {
+func forwardWorld(t testing.TB) (config.World, string) {
 	t.Helper()
 	xdg, err := os.MkdirTemp("/tmp", "mill-forward-")
 	if err != nil {

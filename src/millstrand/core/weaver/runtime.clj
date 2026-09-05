@@ -520,6 +520,16 @@
                      :explain (s/explain-data ::specs/weaver-start-options opts)})))
   opts)
 
+(defn- require-fresh-runtime-probe-options! [opts]
+  (when-not (s/valid? ::specs/fresh-runtime-probe-options opts)
+    (throw (ex-info "Fresh runtime probe options have an invalid shape"
+                    {:reason :invalid-fresh-runtime-probe-options
+                     :options opts
+                     :spec ::specs/fresh-runtime-probe-options
+                     :explain (s/explain-data
+                               ::specs/fresh-runtime-probe-options opts)})))
+  opts)
+
 (defn- publishes-ambient-runtime? [publish? probe?]
   ;; Probe mode is a private candidate-runtime boundary. Its publication
   ;; preference cannot cross into the process-wide ambient runtime.
@@ -827,131 +837,118 @@
 (defn fresh-runtime-probe!
   "Probe a fresh unpublished runtime generation from a selected world.
 
+  `opts` requires an admitted `:old-generation-baseline` and the Millstrand
+  `:runtime-coordinate` used to resolve the candidate generation. It may also
+  include the Mill-supplied `:expected-version`.
+
   The selected world's config is copied into a disposable workspace. The probe
   uses in-memory storage and the effect-free module-refresh staging path. A
   failed probe retains its workspace and append-only diagnostics for inspection;
   a successful probe stops and removes the disposable workspace before return.
   No ambient runtime, canonical metadata, scheduler, event lane, lifecycle
   effect, or process custody operation is started by the probe."
-  ([world]
-   (fresh-runtime-probe! world {}))
-  ([world opts]
-   (when-not (and (map? world)
-                  (every? #(and (string? (get world %))
-                                (not (str/blank? (get world %))))
-                          [:config-dir :state-dir :data-dir]))
-     (throw (ex-info "Fresh runtime probe requires a selected world"
-                     {:world world})))
-   (when-not (s/valid? :millstrand.weaver-start/old-generation-baseline
-                       (:old-generation-baseline opts))
-     (throw (ex-info "Fresh runtime probe requires an admitted old-generation baseline"
-                     {:baseline (:old-generation-baseline opts)
-                      :explain (s/explain-data
-                                :millstrand.weaver-start/old-generation-baseline
-                                (:old-generation-baseline opts))})))
-   (when-not (s/valid? :millstrand.core.specs/generation-basis
-                       (:generation-basis opts))
-     (throw (ex-info "Fresh runtime probe requires a valid generation basis"
-                     {:explain (s/explain-data
-                                :millstrand.core.specs/generation-basis
-                                (:generation-basis opts))})))
-   (let [probe-root (.toFile (Files/createTempDirectory
-                              "millstrand-restart-probe-"
-                              (make-array FileAttribute 0)))
-         probe-config (io/file probe-root "config")
-         probe-state (io/file probe-root "state")
-         probe-data (io/file probe-root "data")
-         probe-log (io/file probe-root "probe.edn")
-         probe-world (assoc (weaver-config/world (.getPath probe-config)
-                                                 (.getPath probe-state)
-                                                 (.getPath probe-data))
-                            :source-config-dir (:config-dir world))
-         diagnostics (atom [])
-         started-runtime (atom nil)
-         report! (fn [entry]
-                   (let [entry (assoc entry :at (str (Instant/now)))]
-                     (swap! diagnostics conj entry)
-                     (spit probe-log (str (pr-str entry) "\n") :append true)))]
-     (try
-       (report! {:stage :config/read :status :completed
-                 :data {:source/workspace (:config-dir world)}})
-       (copy-tree! (:config-dir world) probe-config)
-       (report! {:stage :probe/workspace :status :completed
-                 :data {:workspace (.getPath probe-root)}})
-       (let [runtime-coordinate
-             (get-in opts [:generation-basis :reserved-deps
-                           'io.millstrand/millstrand])
-             generation-basis
-             (basis/create-generation-basis (.getCanonicalPath probe-config)
-                                            runtime-coordinate
-                                            {:dependency-source-workspace
-                                             (:config-dir world)})
-             runtime (reset! started-runtime
-                             (start! nil (merge opts
-                                                {:world probe-world
-                                                 :generation-basis generation-basis
-                                                 :publish? false
-                                                 :storage :sqlite-memory
-                                                 :probe? true
-                                                 :diagnostic! report!
-                                                 :old-generation-baseline
-                                                 (:old-generation-baseline opts)})))
-             _ (report-probe-skipped! report!)
-             result (assoc (or (:probe-result runtime) {})
-                           :success true
-                           :stage :probe/complete
-                           :probe/workspace (.getPath probe-root)
-                           :source/workspace (:config-dir world)
-                           :completed (mapv :stage @diagnostics)
-                           :diagnostics @diagnostics
-                           :log (.getPath probe-log))]
-         (stop! runtime)
-         (delete-tree! probe-root)
-         result)
-       (catch Throwable throwable
+  [world opts]
+  (require-fresh-runtime-probe-options! opts)
+  (when-not (and (map? world)
+                 (every? #(and (string? (get world %))
+                               (not (str/blank? (get world %))))
+                         [:config-dir :state-dir :data-dir]))
+    (throw (ex-info "Fresh runtime probe requires a selected world"
+                    {:world world})))
+  (let [probe-root (.toFile (Files/createTempDirectory
+                             "millstrand-restart-probe-"
+                             (make-array FileAttribute 0)))
+        probe-config (io/file probe-root "config")
+        probe-state (io/file probe-root "state")
+        probe-data (io/file probe-root "data")
+        probe-log (io/file probe-root "probe.edn")
+        probe-world (assoc (weaver-config/world (.getPath probe-config)
+                                                (.getPath probe-state)
+                                                (.getPath probe-data))
+                           :source-config-dir (:config-dir world))
+        diagnostics (atom [])
+        started-runtime (atom nil)
+        report! (fn [entry]
+                  (let [entry (assoc entry :at (str (Instant/now)))]
+                    (swap! diagnostics conj entry)
+                    (spit probe-log (str (pr-str entry) "\n") :append true)))]
+    (try
+      (report! {:stage :config/read :status :completed
+                :data {:source/workspace (:config-dir world)}})
+      (copy-tree! (:config-dir world) probe-config)
+      (report! {:stage :probe/workspace :status :completed
+                :data {:workspace (.getPath probe-root)}})
+      (let [generation-basis
+            (basis/create-generation-basis (.getCanonicalPath probe-config)
+                                           (:runtime-coordinate opts)
+                                           {:dependency-source-workspace
+                                            (:config-dir world)})
+            runtime (reset! started-runtime
+                            (start! nil (merge (dissoc opts :runtime-coordinate)
+                                               {:world probe-world
+                                                :generation-basis generation-basis
+                                                :publish? false
+                                                :storage :sqlite-memory
+                                                :probe? true
+                                                :diagnostic! report!
+                                                :old-generation-baseline
+                                                (:old-generation-baseline opts)})))
+            _ (report-probe-skipped! report!)
+            result (assoc (or (:probe-result runtime) {})
+                          :success true
+                          :stage :probe/complete
+                          :probe/workspace (.getPath probe-root)
+                          :source/workspace (:config-dir world)
+                          :completed (mapv :stage @diagnostics)
+                          :diagnostics @diagnostics
+                          :log (.getPath probe-log))]
+        (stop! runtime)
+        (delete-tree! probe-root)
+        result)
+      (catch Throwable throwable
          ;; `start!` has its own startup rollback, but failures after it returns
          ;; (diagnostic reporting, result assembly, or stop) still own live
          ;; probe resources. Stop them best-effort while retaining the first
          ;; failure as the primary throwable and the probe log as evidence.
-         (when-let [runtime @started-runtime]
-           (report-failure! report! throwable
-                            {:stage :probe/runtime-stop
-                             :status :failed
-                             :data {:reason :post-start-probe-failure}})
-           (try
-             (stop! runtime)
-             (catch Throwable stop-failure
-               (.addSuppressed throwable stop-failure))))
-         (let [initial-failure-context (failure-context throwable)
+        (when-let [runtime @started-runtime]
+          (report-failure! report! throwable
+                           {:stage :probe/runtime-stop
+                            :status :failed
+                            :data {:reason :post-start-probe-failure}})
+          (try
+            (stop! runtime)
+            (catch Throwable stop-failure
+              (.addSuppressed throwable stop-failure))))
+        (let [initial-failure-context (failure-context throwable)
            ;; The probe envelope is producer-owned. Exception data belongs in
            ;; the failure diagnostic below; merging it here would let thrown
            ;; `:success` or `:stage` keys replace the authoritative outcome.
-               failure {:success false
-                        :stage :probe/failure
-                        :probe/workspace (.getPath probe-root)
-                        :source/workspace (:config-dir world)
-                        :completed (mapv :stage @diagnostics)
-                        :diagnostics @diagnostics
-                        :log (.getPath probe-log)}]
-           (report-failure! report! throwable {:stage :probe/failure
-                                               :status :failed
-                                               :data initial-failure-context})
-           (when-not (some #(= :lifecycle/plan (:stage %)) @diagnostics)
-             (report-failure! report! throwable
-                              {:stage :lifecycle/plan
-                               :status :skipped
-                               :data {:available? false
-                                      :reason :probe-failed-before-plan
-                                      :plan {}}}))
-           (doseq [[stage reason] [[:publication :probe-mode]
-                                   [:lifecycle/apply :probe-mode]
-                                   [:scheduler/rearm :probe-mode]]]
-             (report-failure! report! throwable
-                              {:stage stage :status :skipped :data {:reason reason}}))
-           (assoc failure
-                  :completed (mapv :stage @diagnostics)
-                  :diagnostics @diagnostics
-                  :failure (failure-context throwable))))))))
+              failure {:success false
+                       :stage :probe/failure
+                       :probe/workspace (.getPath probe-root)
+                       :source/workspace (:config-dir world)
+                       :completed (mapv :stage @diagnostics)
+                       :diagnostics @diagnostics
+                       :log (.getPath probe-log)}]
+          (report-failure! report! throwable {:stage :probe/failure
+                                              :status :failed
+                                              :data initial-failure-context})
+          (when-not (some #(= :lifecycle/plan (:stage %)) @diagnostics)
+            (report-failure! report! throwable
+                             {:stage :lifecycle/plan
+                              :status :skipped
+                              :data {:available? false
+                                     :reason :probe-failed-before-plan
+                                     :plan {}}}))
+          (doseq [[stage reason] [[:publication :probe-mode]
+                                  [:lifecycle/apply :probe-mode]
+                                  [:scheduler/rearm :probe-mode]]]
+            (report-failure! report! throwable
+                             {:stage stage :status :skipped :data {:reason reason}}))
+          (assoc failure
+                 :completed (mapv :stage @diagnostics)
+                 :diagnostics @diagnostics
+                 :failure (failure-context throwable)))))))
 
 (def ^{:doc "Probe a fresh unpublished runtime generation from a selected world."}
   probe!
