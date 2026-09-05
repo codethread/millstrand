@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,6 +23,7 @@ func TestHumanLifecycleStatus(t *testing.T) {
 		{"stale", "weaver-status", map[string]any{"state": "stale", "stale_reason": "process exited"}, []string{"Weaver stale", "Reason     process exited"}},
 		{"starting", "weaver-status", map[string]any{"state": "starting", "pid": 42}, []string{"Weaver starting (PID 42)"}},
 		{"probing", "weaver-status", map[string]any{"state": "probing"}, []string{"Weaver probing"}},
+		{"serving while probing", "weaver-status", map[string]any{"state": "running", "restart_state": "probing"}, []string{"Weaver running", "Restart    probing"}},
 		{"cutover", "weaver-status", map[string]any{"state": "restarting"}, []string{"Weaver restarting"}},
 		{"stopped", "weaver-stop", map[string]any{"state": "stopped", "pid": 42}, []string{"Weaver stopped\n"}},
 		{"restart", "weaver-restart", map[string]any{"state": "running", "workspace": "/tmp/demo", "generation_id": "new"}, []string{"Weaver restart complete", "Workspace  /tmp/demo"}},
@@ -73,11 +76,45 @@ func TestStatusColorAndTimestamp(t *testing.T) {
 	}
 }
 
+func TestRedirectedStatusFileNeverUsesColor(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	path := filepath.Join(t.TempDir(), "status.txt")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	ui := newStatusOutput(file)
+	if err := ui.result("weaver-status", map[string]any{"state": "running"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.ReadFile(path)
+	if err != nil || string(output) != "Weaver running\n" {
+		t.Fatalf("redirected status = %q, err=%v", output, err)
+	}
+}
+
 func TestStatusRejectsMalformedResponse(t *testing.T) {
 	for _, result := range []any{nil, "running", map[string]any{}, map[string]any{"state": "surprise"}} {
 		var out bytes.Buffer
 		if err := writeStatusResult(&out, false, "weaver-status", result, 0); err == nil {
 			t.Fatalf("accepted malformed response %#v", result)
+		}
+	}
+}
+
+func TestRestartProgressTracksReplacementWhileOldGenerationServes(t *testing.T) {
+	for _, tt := range []struct {
+		fields map[string]any
+		want   string
+	}{
+		{map[string]any{"state": "running", "restart_state": "probing"}, "probing"},
+		{map[string]any{"state": "restarting"}, "restarting"},
+		{map[string]any{"state": "running", "restart_state": "failed"}, "failed"},
+		{map[string]any{"state": "running"}, "running"},
+	} {
+		if got := restartProgressState(tt.fields); got != tt.want {
+			t.Fatalf("progress for %v = %q, want %q", tt.fields, got, tt.want)
 		}
 	}
 }

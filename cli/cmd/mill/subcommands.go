@@ -119,7 +119,7 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 				if !ok {
 					return fmt.Errorf("read weaver restart progress: expected status object, got %T", status)
 				}
-				state := statusText(fields, "state")
+				state := restartProgressState(fields)
 				if state != lastState {
 					switch state {
 					case "probing":
@@ -139,6 +139,15 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 			}
 		}
 	}
+}
+
+func restartProgressState(fields map[string]any) string {
+	// During probing, state describes the serving old generation;
+	// restart_state carries the replacement's progress.
+	if restart := statusText(fields, "restart_state"); restart != "" {
+		return restart
+	}
+	return statusText(fields, "state")
 }
 
 // runWeaverRepl resolves the live weaver's nREPL endpoint and launch source

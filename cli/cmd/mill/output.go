@@ -124,7 +124,11 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 	o.detail("Logs", statusText(fields, "log_path"))
 	o.detail("Reason", statusText(fields, "stale_reason"))
 	if restart := statusText(fields, "restart_state"); restart != "" && restart != state {
-		o.detail("Restart", o.paint("31", restart))
+		code := "33"
+		if restart == "failed" {
+			code = "31"
+		}
+		o.detail("Restart", o.paint(code, restart))
 	}
 	if failure, ok := fields["restart_failure"].(map[string]any); ok {
 		o.detail("Restart", o.paint("31", "last attempt failed; current weaver is still running"))
