@@ -1,6 +1,7 @@
 package process
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -149,6 +150,15 @@ func TestCancelTerminatesProcessTreeAndRetainsCancellation(t *testing.T) {
 	terminal := waitTerminal(t, custody, row.Handle)
 	if terminal.Cancellation == nil || terminal.Cancellation.Reason == "" {
 		t.Fatalf("cancellation result = %#v", terminal)
+	}
+	if terminal.Cancellation.Stop != StopGraceful {
+		t.Fatalf("tree stopped on the terminate signal but was recorded as %q", terminal.Cancellation.Stop)
+	}
+	if terminal.Cancellation.ObservedExit == nil {
+		t.Fatal("cancellation retained no observed exit for the leader")
+	}
+	if terminal.Exit != nil {
+		t.Fatalf("cancelled record must not report an ordinary exit: %#v", terminal.Exit)
 	}
 }
 
@@ -387,6 +397,17 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	if terminal.Cancellation == nil || terminal.Cancellation.Reason == "" {
 		t.Fatalf("cancellation result = %#v", terminal)
 	}
+	// The escalation is the point: a caller must be able to tell this tree was
+	// killed rather than allowed to finish.
+	if terminal.Cancellation.Stop != StopForced {
+		t.Fatalf("SIGKILL escalation was recorded as %q, not %q", terminal.Cancellation.Stop, StopForced)
+	}
+	if terminal.Cancellation.ObservedExit == nil {
+		t.Fatal("forced cancellation retained no observed exit for the leader")
+	}
+	if terminal.Exit != nil {
+		t.Fatalf("cancelled record must not report an ordinary exit: %#v", terminal.Exit)
+	}
 }
 
 func TestShutdownKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
@@ -443,6 +464,57 @@ func TestShutdownCancelsOwnedTrees(t *testing.T) {
 	}
 	if _, err := custody.Launch("owner/shutdown", "another", testSpec(t, []string{"true"})); err == nil {
 		t.Fatal("closed custody should reject new launches")
+	}
+}
+
+// A cancellation whose signalling never resolved must not read as a settled
+// stop, and the wire shape must carry the evidence a consumer classifies on.
+func TestCancellationEvidenceIsUncertainWhenSignallingFails(t *testing.T) {
+	custody, err := NewCustody(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := custody.Launch("owner/uncertain", "run", testSpec(t, []string{"sleep", "30"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The tree does stop, but the signalling that stopped it reported a failure,
+	// so Mill cannot claim to know how it went down.
+	custody.signalGroup = func(pid int, signal syscall.Signal) error {
+		if signal == syscall.SIGTERM {
+			_ = signalProcessGroup(pid, syscall.SIGKILL)
+			return errors.New("injected signalling failure")
+		}
+		return signalProcessGroup(pid, signal)
+	}
+	if _, err := custody.Cancel("owner/uncertain", row.Handle); err == nil {
+		t.Fatal("a failed process-group signal should be reported to the caller")
+	}
+
+	terminal := waitTerminal(t, custody, row.Handle)
+	if terminal.Cancellation == nil || terminal.Cancellation.Stop != StopUncertain {
+		t.Fatalf("unresolved cancellation was recorded as %#v", terminal.Cancellation)
+	}
+	encoded, err := json.Marshal(terminal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Exit         *ExitResult `json:"exit"`
+		Cancellation *struct {
+			Reason       string      `json:"reason"`
+			Stop         string      `json:"stop"`
+			ObservedExit *ExitResult `json:"observed_exit"`
+		} `json:"cancellation"`
+	}
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire.Exit != nil {
+		t.Fatalf("cancelled record encoded an ordinary exit: %s", encoded)
+	}
+	if wire.Cancellation == nil || wire.Cancellation.Stop != StopUncertain || wire.Cancellation.Reason == "" {
+		t.Fatalf("cancellation wire shape = %s", encoded)
 	}
 }
 

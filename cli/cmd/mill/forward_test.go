@@ -252,7 +252,7 @@ func TestInvokeClassifiesActualRestartAndDurableCleanup(t *testing.T) {
 	t.Cleanup(func() {
 		launchWeaver, probeRuntime, waitForReplacementReadyStatus = originalLaunch, originalProbe, originalReady
 	})
-	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := startForwardOwnedBlockingProcess(t)
 		if launches.Add(1) == 1 {
 			oldPID.Store(int32(cmd.Process.Pid))

@@ -22,16 +22,17 @@ var controlOperations = map[string]bool{
 }
 
 func (s *server) handleProcessControl(conn net.Conn, raw map[string]json.RawMessage) {
-	requestID, weaverID, operation, arguments, err := decodeControlRequest(raw)
+	request, err := decodeControlRequest(raw)
+	requestID := request.RequestID
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "protocol", "process/malformed-request", "malformed process control request", err.Error()))
 		return
 	}
-	if !controlOperations[operation] {
-		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "protocol", "process/operation-not-allowed", "process operation is not available", operation))
+	if !controlOperations[request.Operation] {
+		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "protocol", "process/operation-not-allowed", "process operation is not available", request.Operation))
 		return
 	}
-	world, err := s.worldForWeaver(weaverID)
+	world, err := s.admitControlCaller(request.WeaverID, request.LaunchToken)
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "domain", "process/stale-weaver", "process control caller is not an admitted Weaver", err.Error()))
 		return
@@ -41,7 +42,7 @@ func (s *server) handleProcessControl(conn net.Conn, raw map[string]json.RawMess
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "domain", "process/unavailable", "Mill process custody is unavailable", err.Error()))
 		return
 	}
-	result, err := dispatchProcessControl(custody, operation, arguments)
+	result, err := dispatchProcessControl(custody, request.Operation, request.Arguments)
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "domain", processErrorCode(err), "process custody operation failed", err.Error()))
 		return
@@ -49,37 +50,54 @@ func (s *server) handleProcessControl(conn net.Conn, raw map[string]json.RawMess
 	_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: requestID, OK: true, Result: result})
 }
 
-func decodeControlRequest(raw map[string]json.RawMessage) (string, string, string, map[string]any, error) {
-	allowed := map[string]bool{"protocol_version": true, "request_id": true, "weaver_id": true, "operation": true, "arguments": true}
+// controlRequest is the decoded process control frame. LaunchToken is optional:
+// only a weaver that has not yet published its identity needs to present it.
+type controlRequest struct {
+	RequestID   string
+	WeaverID    string
+	LaunchToken string
+	Operation   string
+	Arguments   map[string]any
+}
+
+func decodeControlRequest(raw map[string]json.RawMessage) (controlRequest, error) {
+	allowed := map[string]bool{"protocol_version": true, "request_id": true, "weaver_id": true, "launch_token": true, "operation": true, "arguments": true}
+	request := controlRequest{RequestID: controlString(raw, "request_id")}
 	for key := range raw {
 		if !allowed[key] {
-			return controlString(raw, "request_id"), "", "", nil, fmt.Errorf("unknown control request field %q", key)
+			return request, fmt.Errorf("unknown control request field %q", key)
 		}
 	}
 	var version int
-	var requestID, weaverID, operation string
-	var arguments map[string]any
 	if err := unmarshalControl(raw, "protocol_version", &version); err != nil {
-		return "", "", "", nil, err
+		return request, err
 	}
 	if version != client.MillProtocolVersion {
-		return controlString(raw, "request_id"), "", "", nil, errors.New("unsupported process control protocol version")
+		return request, errors.New("unsupported process control protocol version")
 	}
-	for key, target := range map[string]any{"request_id": &requestID, "weaver_id": &weaverID, "operation": &operation} {
+	for key, target := range map[string]any{"request_id": &request.RequestID, "weaver_id": &request.WeaverID, "operation": &request.Operation} {
 		if err := unmarshalControl(raw, key, target); err != nil {
-			return requestID, weaverID, operation, nil, err
+			return request, err
 		}
 	}
-	if strings.TrimSpace(requestID) == "" || strings.TrimSpace(weaverID) == "" || strings.TrimSpace(operation) == "" {
-		return requestID, weaverID, operation, nil, errors.New("request_id, weaver_id, and operation must be non-blank strings")
+	if strings.TrimSpace(request.RequestID) == "" || strings.TrimSpace(request.WeaverID) == "" || strings.TrimSpace(request.Operation) == "" {
+		return request, errors.New("request_id, weaver_id, and operation must be non-blank strings")
 	}
-	if err := unmarshalControl(raw, "arguments", &arguments); err != nil || arguments == nil {
+	if _, present := raw["launch_token"]; present {
+		if err := unmarshalControl(raw, "launch_token", &request.LaunchToken); err != nil {
+			return request, err
+		}
+		if strings.TrimSpace(request.LaunchToken) == "" {
+			return request, errors.New("launch_token must be a non-blank string when present")
+		}
+	}
+	if err := unmarshalControl(raw, "arguments", &request.Arguments); err != nil || request.Arguments == nil {
 		if err == nil {
 			err = errors.New("arguments must be an object")
 		}
-		return requestID, weaverID, operation, nil, err
+		return request, err
 	}
-	return requestID, weaverID, operation, arguments, nil
+	return request, nil
 }
 
 func controlString(raw map[string]json.RawMessage, key string) string {
@@ -211,13 +229,58 @@ func processErrorCode(err error) string {
 	}
 }
 
-func (s *server) worldForWeaver(weaverID string) (config.World, error) {
+// launchTokenEnvVar carries a mill-generated per-launch secret to the weaver it
+// launched. It is never written to an artifact. Mill puts it only on that
+// weaver's environment; any descendant that inherits the weaver env sees it.
+const launchTokenEnvVar = "MILLSTRAND_MILL_LAUNCH_TOKEN"
+
+func launchTokenEnv(token string) []string {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	return []string{launchTokenEnvVar + "=" + token}
+}
+
+// admitControlCaller resolves the world whose custody a process control caller
+// may reach.
+//
+// A ready weaver is admitted by published identity, exactly as before. A weaver
+// that mill launched and is still starting has published no identity yet, but
+// its config evaluation legitimately needs its own custody — to recover runs
+// left by an earlier generation, or to schedule pending work. Such a caller is
+// admitted only by presenting the launch token mill handed to that specific
+// still-live launch, and the first admitted request pins the token to one
+// weaver identity for the rest of startup. A stale or unrelated caller has
+// neither a supervised identity nor a live launch token, and is rejected.
+func (s *server) admitControlCaller(weaverID, launchToken string) (config.World, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.children {
 		if child != nil && child.identity.WeaverID == weaverID {
 			return child.world, nil
 		}
+	}
+	if strings.TrimSpace(launchToken) == "" {
+		return config.World{}, fmt.Errorf("no running Weaver with identity %q", weaverID)
+	}
+	for _, child := range s.children {
+		if child == nil || child.unsupervised || child.launchToken == "" || child.launchToken != launchToken {
+			continue
+		}
+		if child.identity.WeaverID != "" {
+			// The launch this token names has already published a different
+			// identity, so the token no longer speaks for the caller.
+			return config.World{}, fmt.Errorf("launch token belongs to Weaver %q, not %q", child.identity.WeaverID, weaverID)
+		}
+		if child.cmd == nil || child.cmd.Process == nil || !processAlive(child.cmd.Process.Pid) {
+			return config.World{}, errors.New("launch token names a Weaver that is no longer running")
+		}
+		if child.startupWeaverID == "" {
+			child.startupWeaverID = weaverID
+		} else if child.startupWeaverID != weaverID {
+			return config.World{}, fmt.Errorf("launch token is already bound to Weaver %q", child.startupWeaverID)
+		}
+		return child.world, nil
 	}
 	return config.World{}, fmt.Errorf("no running Weaver with identity %q", weaverID)
 }

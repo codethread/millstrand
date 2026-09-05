@@ -260,7 +260,8 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		return nil, err
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver start %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
-	cmd, err := launchWeaver(source, weaverArgs(world, name, source), logFile, logFile)
+	launchToken := newOpaqueID("launch")
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), logFile, logFile)
 	if err != nil {
 		_ = logFile.Close()
 		return nil, err
@@ -280,7 +281,7 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		status["generation_id"] = child.generationID
 		return status, nil
 	}
-	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation")}
+	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
 	s.children[world.ConfigDir] = registered
 	s.mu.Unlock()
 	go func() {

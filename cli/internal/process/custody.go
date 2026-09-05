@@ -35,9 +35,28 @@ type ExitResult struct {
 	Signal *string `json:"signal"`
 }
 
-// CancellationResult records Mill-requested process cancellation.
+// Stop values classify how a cancelled process tree actually stopped. They are
+// generic process facts: a consumer must not read StopForced or StopUncertain
+// as work that finished on its own terms.
+const (
+	// StopGraceful means the whole tree was gone within the grace period after
+	// the terminate signal, with no escalation.
+	StopGraceful = "graceful"
+	// StopForced means Mill had to escalate to a kill signal, and the tree was
+	// confirmed gone afterwards.
+	StopForced = "forced"
+	// StopUncertain means Mill could establish neither fact: there was no live
+	// leader to signal, signalling failed, or the group outlived the kill.
+	StopUncertain = "uncertain"
+)
+
+// CancellationResult records Mill-requested process cancellation. Stop retains
+// the escalation evidence that would otherwise be lost once the tree is gone,
+// and ObservedExit retains the leader's wait status seen under cancellation.
 type CancellationResult struct {
-	Reason string `json:"reason"`
+	Reason       string      `json:"reason"`
+	Stop         string      `json:"stop"`
+	ObservedExit *ExitResult `json:"observed_exit,omitempty"`
 }
 
 // LaunchFailure records a process that could not be started.
@@ -65,6 +84,7 @@ type custodyRecord struct {
 	stdout      *os.File
 	stderr      *os.File
 	cancelled   string
+	stop        string
 	done        chan struct{}
 	cleanupErr  error
 	treeDone    chan struct{}
@@ -349,9 +369,15 @@ func (c *Custody) finishWait(row *custodyRecord, err, observeErr error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if row.cancelled != "" {
+		stop := row.stop
+		if stop == "" {
+			// Cancellation was requested but no signalled tree cleanup resolved,
+			// so Mill never observed how the tree stopped.
+			stop = StopUncertain
+		}
 		row.Phase = "terminal"
 		row.Exit = nil
-		row.Cancellation = &CancellationResult{Reason: row.cancelled}
+		row.Cancellation = &CancellationResult{Reason: row.cancelled, Stop: stop, ObservedExit: exitResult(row.cmd, err)}
 	} else {
 		row.Phase = "terminal"
 		row.Cancellation = nil
@@ -443,9 +469,10 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 	record := row.Record
 	c.mu.Unlock()
 	if shouldTerminate {
-		err := terminateProcessTreeWithSignal(pid, c.signalGroup)
+		stop, err := terminateProcessTreeWithSignal(pid, c.signalGroup)
 		c.mu.Lock()
 		row.treeErr = err
+		row.stop = stop
 		close(treeDone)
 		c.mu.Unlock()
 		if err != nil {
@@ -530,9 +557,11 @@ func (c *Custody) Shutdown() error {
 		go func(target treeTarget) {
 			var err error
 			if target.start {
-				err = terminateProcessTreeWithSignal(target.pid, c.signalGroup)
+				var stop string
+				stop, err = terminateProcessTreeWithSignal(target.pid, c.signalGroup)
 				c.mu.Lock()
 				target.row.treeErr = err
+				target.row.stop = stop
 				close(target.done)
 				c.mu.Unlock()
 			} else {
@@ -608,28 +637,31 @@ func waitProcessGroupGone(pid, leaderPID int, timeout time.Duration) (bool, erro
 	}
 }
 
-func terminateProcessTreeWithSignal(pid int, signalGroup func(int, syscall.Signal) error) error {
+// terminateProcessTreeWithSignal stops one process tree and reports how it
+// stopped. The stop classification is retained cancellation evidence, so it is
+// returned alongside any failure rather than being collapsed into it.
+func terminateProcessTreeWithSignal(pid int, signalGroup func(int, syscall.Signal) error) (string, error) {
 	if err := signalGroup(pid, syscall.SIGTERM); err != nil {
-		return err
+		return StopUncertain, err
 	}
 	gone, err := waitProcessGroupGone(pid, pid, processTreeGracePeriod)
 	if err != nil {
-		return err
+		return StopUncertain, err
 	}
 	if gone {
-		return nil
+		return StopGraceful, nil
 	}
 	if err := signalGroup(pid, syscall.SIGKILL); err != nil {
-		return err
+		return StopUncertain, err
 	}
 	gone, err = waitProcessGroupGone(pid, pid, processTreeGracePeriod)
 	if err != nil {
-		return err
+		return StopUncertain, err
 	}
 	if !gone {
-		return fmt.Errorf("process group %d survived SIGKILL", pid)
+		return StopUncertain, fmt.Errorf("process group %d survived SIGKILL", pid)
 	}
-	return nil
+	return StopForced, nil
 }
 
 func minDuration(a, b time.Duration) time.Duration {

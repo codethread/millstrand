@@ -65,6 +65,14 @@ type weaverChild struct {
 	// generationID is Mill's opaque identity for this process generation.  It
 	// is not derived from a PID or from user configuration.
 	generationID string
+	// launchToken is the secret mill handed to this launch, and is how a weaver
+	// proves it is this child while it is still starting and has published no
+	// identity yet.  Discovered (unsupervised) children never have one.
+	launchToken string
+	// startupWeaverID is the weaver identity bound to launchToken on its first
+	// admitted pre-ready control request.  It pins the token to one caller for
+	// the rest of startup.
+	startupWeaverID string
 }
 
 var (
@@ -98,9 +106,15 @@ func millLogf(format string, args ...any) {
 	newStatusOutput(millLogOut).event(time.Now(), message)
 }
 
-var launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+// launchWeaver starts one weaver process. env carries per-launch entries that
+// are added to mill's own environment; it is the private channel for launch
+// facts a weaver must prove back to mill before it publishes its identity.
+var launchWeaver = func(source string, args, env []string, out, errOut io.Writer) (*exec.Cmd, error) {
 	cmd := exec.Command("clojure", args...)
 	cmd.Dir = source
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdout = out
 	cmd.Stderr = errOut
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

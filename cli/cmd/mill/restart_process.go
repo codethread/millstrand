@@ -228,7 +228,8 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 		return nil, nil, err
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver replacement %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
-	cmd, err := launchWeaver(source, weaverArgs(world, name, source), logFile, logFile)
+	launchToken := newOpaqueID("launch")
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), logFile, logFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(logFile, "=== replacement startup failure: %s ===\n", err)
 		_ = logFile.Close()
@@ -236,7 +237,7 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	}
 	done := make(chan error, 1)
 	waitDone := make(chan struct{})
-	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation")}
+	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
 	s.mu.Lock()
 	if s.children == nil {
 		s.children = map[string]*weaverChild{}

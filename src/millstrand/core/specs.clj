@@ -773,9 +773,16 @@
                           :millstrand.process/signal])
          #(exact-keys? #{:code :signal} %)))
 (s/def :millstrand.process/reason non-blank-string?)
+;; How a cancelled process tree actually stopped. `:forced` and `:uncertain`
+;; are not settled work: the tree was killed, or Mill could not establish that
+;; it stopped at all.
+(s/def :millstrand.process/stop #{:graceful :forced :uncertain})
+(s/def :millstrand.process/observed-exit :millstrand.process/exit)
 (s/def :millstrand.process/cancellation
-  (s/and (s/keys :req-un [:millstrand.process/reason])
-         #(exact-keys? #{:reason} %)))
+  (s/and (s/keys :req-un [:millstrand.process/reason
+                          :millstrand.process/stop]
+                 :opt-un [:millstrand.process/observed-exit])
+         #(every? #{:reason :stop :observed-exit} (keys %))))
 (s/def :millstrand.process/message non-blank-string?)
 (s/def :millstrand.process/launch-failure
   (s/and (s/keys :req-un [:millstrand.process/message])
@@ -814,15 +821,23 @@
 (s/def :millstrand.process-protocol/protocol-version #{3})
 (s/def :millstrand.process-protocol/request-id non-blank-string?)
 (s/def :millstrand.process-protocol/weaver-id non-blank-string?)
+;; Present only while a Mill-launched Weaver is still starting: it proves the
+;; caller is that launch before any identity has been published.
+(s/def :millstrand.process-protocol/launch-token non-blank-string?)
 (s/def :millstrand.process-protocol/operation process-control-operations)
 (s/def :millstrand.process-protocol/arguments map?)
 (s/def :millstrand.core.weaver.process-protocol/control-request
   (s/and (s/keys :req-un [:millstrand.process-protocol/request-id
                           :millstrand.process-protocol/weaver-id
                           :millstrand.process-protocol/operation
-                          :millstrand.process-protocol/arguments])
-         #(= #{:protocol-version :request-id :weaver-id :operation :arguments}
-             (set (keys %)))))
+                          :millstrand.process-protocol/arguments]
+                 :opt-un [:millstrand.process-protocol/launch-token])
+         #(every? #{:protocol-version :request-id :weaver-id :launch-token
+                    :operation :arguments}
+                  (keys %))
+         #(every? (set (keys %))
+                  [:protocol-version :request-id :weaver-id :operation
+                   :arguments])))
 (s/def :millstrand.process-protocol/ok boolean?)
 (s/def :millstrand.process-protocol/error (s/nilable map?))
 (s/def :millstrand.process-protocol/result any?)
