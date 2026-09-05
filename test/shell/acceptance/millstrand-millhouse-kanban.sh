@@ -37,7 +37,7 @@ cp "$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-init.c
 
 mill_log="$tmp_root/mill.log"
 exec 3< <(exec env GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
-  "$repo_root/bin/mill" start 2>&1)
+  "$repo_root/bin/mill" start --json 2>&1)
 mill_pid=$!
 mill_ready_line=""
 read_status=0
@@ -50,7 +50,7 @@ while :; do
   fi
   if IFS= read -r -t "$read_timeout" mill_line <&3; then
     printf '%s\n' "$mill_line" >>"$mill_log"
-    if [[ "$mill_line" == mill\ listening\ state_root=* ]]; then
+    if jq -e '(.message // "") | startswith("Mill ready (")' <<<"$mill_line" >/dev/null 2>&1; then
       mill_ready_line="$mill_line"
       break
     fi
@@ -76,7 +76,7 @@ cat <&3 >>"$mill_log" &
 mill_drain_pid=$!
 mill_status_log="$tmp_root/mill-status.log"
 if ! mill_status_json=$(GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
-  "$repo_root/bin/mill" status 2>"$mill_status_log"); then
+  "$repo_root/bin/mill" status --json 2>"$mill_status_log"); then
   echo "mill readiness health request failed" >&2
   sed -n '1,160p' "$mill_status_log" >&2
   sed -n '1,160p' "$mill_log" >&2

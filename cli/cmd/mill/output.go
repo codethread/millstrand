@@ -32,12 +32,12 @@ func (o statusOutput) paint(code, text string) string {
 }
 
 func (o statusOutput) event(at time.Time, message string) {
-	fmt.Fprintf(o.out, "%s  %s\n", o.paint("2", at.Format("15:04:05")), message)
+	_, _ = fmt.Fprintf(o.out, "%s  %s\n", o.paint("2", at.Format("15:04:05")), message)
 }
 
 func (o statusOutput) detail(label, value string) {
 	if value != "" {
-		fmt.Fprintf(o.out, "  %-10s %s\n", label, value)
+		_, _ = fmt.Fprintf(o.out, "  %-10s %s\n", label, value)
 	}
 }
 
@@ -104,7 +104,7 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 	if elapsed > 0 {
 		o.event(time.Now(), heading)
 	} else {
-		fmt.Fprintln(o.out, heading)
+		_, _ = fmt.Fprintln(o.out, heading)
 	}
 	workspace := statusText(fields, "config_dir")
 	if workspace == "" {
@@ -146,13 +146,13 @@ func (o statusOutput) result(operation string, result any, elapsed time.Duration
 				o.detail("Logs", statusText(data, "log_path"))
 			}
 			if row["stage"] == "probe" && fields["generation_id"] != nil {
-				fmt.Fprintln(o.out, "  Current weaver is still running.")
+				_, _ = fmt.Fprintln(o.out, "  Current weaver is still running.")
 			}
 		}
-		fmt.Fprintln(o.out, "  Use --json for full restart diagnostics.")
+		_, _ = fmt.Fprintln(o.out, "  Use --json for full restart diagnostics.")
 	}
 	if state == "none" || state == "stopped" {
-		fmt.Fprintln(o.out, "  Start with: mill weaver start --workspace "+fmt.Sprintf("%q", workspace))
+		_, _ = fmt.Fprintln(o.out, "  Start with: mill weaver start --workspace "+fmt.Sprintf("%q", workspace))
 	}
 	return nil
 }
