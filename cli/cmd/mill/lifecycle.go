@@ -18,15 +18,28 @@ import (
 )
 
 func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
+	return resolveLifecycleWorldWithWarnings(req, false)
+}
+
+func resolveLifecycleWorldWithWarnings(req client.MillWorldRequest, emitWarnings bool) (config.World, error) {
 	world, err := config.BootstrapTargetWorld(req.CWD, req.ConfigDir)
 	if err != nil {
 		return config.World{}, err
 	}
-	_, loaded, err := config.Load(world.ConfigDir)
+	loaded, selected, err := config.Load(world.ConfigDir)
 	if err != nil {
 		return config.World{}, err
 	}
-	return loaded, nil
+	if emitWarnings {
+		emitConfigWarnings(loaded)
+	}
+	return selected, nil
+}
+
+func emitConfigWarnings(c config.Config) {
+	for _, warning := range c.Warnings {
+		millLogf("warning: ignoring unknown config key(s) file=%s keys=%s", warning.File, strings.Join(warning.Keys, ","))
+	}
 }
 
 const defaultWeaverReadyTimeout = 5 * time.Minute
@@ -128,11 +141,15 @@ func friendlyName(world config.World, requested string) (string, error) {
 }
 
 func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error) {
-	return s.startWeaverLoop(req)
+	return s.startWeaverWithShutdown(req, nil)
 }
 
 func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, error) {
-	world, err := resolveLifecycleWorld(req)
+	return s.startWeaverWithShutdown(req, nil)
+}
+
+func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <-chan struct{}) (map[string]any, error) {
+	world, err := resolveLifecycleWorldWithWarnings(req, true)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +157,10 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
-		waitForStartClaim(claim)
-		return s.startWeaverLoop(req)
+		if !waitForStartClaimWithShutdown(claim, shutdown) {
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		}
+		return s.startWeaverWithShutdown(req, shutdown)
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
 		// A probe leaves the admitted old generation serving.  Starting during
@@ -150,7 +169,7 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		if transition.state() == restartStateProbing {
 			return s.admittedGenerationStatus(world, transition), nil
 		}
-		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+		return waitForLifecycleTransitionShutdown(transition, readyTimeoutFor(req.ReadyTimeoutMs), shutdown)
 	}
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
 		return nil, recordErr
@@ -162,15 +181,17 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	s.mu.Lock()
 	if claim := s.startClaims[world.ConfigDir]; claim != nil {
 		s.mu.Unlock()
-		waitForStartClaim(claim)
-		return s.startWeaverLoop(req)
+		if !waitForStartClaimWithShutdown(claim, shutdown) {
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		}
+		return s.startWeaverWithShutdown(req, shutdown)
 	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		s.mu.Unlock()
 		if transition.state() == restartStateProbing {
 			return s.admittedGenerationStatus(world, transition), nil
 		}
-		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+		return waitForLifecycleTransitionShutdown(transition, readyTimeoutFor(req.ReadyTimeoutMs), shutdown)
 	}
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 		status, stale := readStatus(world)
@@ -205,6 +226,13 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	startClaimInstalledFn(world.ConfigDir)
 	s.mu.Unlock()
 	defer s.releaseStartClaim(world.ConfigDir, claim)
+	if shutdown != nil {
+		select {
+		case <-shutdown:
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		default:
+		}
+	}
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
 		return nil, err
@@ -218,6 +246,13 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	name, err := friendlyName(world, req.Name)
 	if err != nil {
 		return nil, err
+	}
+	if shutdown != nil {
+		select {
+		case <-shutdown:
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		default:
+		}
 	}
 	// Weaver stdout/stderr go to a per-weaver log, never to mill's own log:
 	// appended across restarts so a crashed boot stays post-mortem readable,
@@ -235,6 +270,7 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		return nil, err
 	}
 	done := make(chan error, 1)
+	waitDone := make(chan struct{})
 	s.mu.Lock()
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 		s.mu.Unlock()
@@ -248,10 +284,11 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		status["generation_id"] = child.generationID
 		return status, nil
 	}
-	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
+	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation")}
 	s.children[world.ConfigDir] = registered
 	s.mu.Unlock()
 	go func() {
+		defer close(waitDone)
 		err := cmd.Wait()
 		_ = logFile.Close()
 		done <- err
@@ -262,13 +299,10 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	if req.ReadyTimeoutMs > 0 {
 		readyTimeout = time.Duration(req.ReadyTimeoutMs) * time.Millisecond
 	}
-	status, err := waitForReadyStatus(world, cmd.Process.Pid, done, readyTimeout)
+	status, err := waitForReadyStatusContext(world, cmd.Process.Pid, done, readyTimeout, shutdown)
 	if err != nil {
 		terminateProcess(cmd.Process)
-		select {
-		case <-done:
-		default:
-		}
+		waitForStartedChild(cmd, done, waitDone, 5*time.Second)
 		// The ready wait runs unlocked, so a sibling start may have replaced
 		// this entry after our weaver died; only the still-registered owner
 		// may remove supervision state and world artifacts, or a failed
@@ -298,6 +332,69 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	status["generation_id"] = registered.generationID
 	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
 	return status, nil
+}
+
+// waitForStartedChild joins the cmd.Wait goroutine after a failed or cancelled
+// readiness wait. The join matters for autostart shutdown: removing the child
+// from supervision before Wait completes can let a launch outlive the mill.
+func waitForStartedChild(cmd *exec.Cmd, done <-chan error, waitDone <-chan struct{}, grace time.Duration) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	if waitDone == nil {
+		// Test-created children predate the separate completion signal. Their
+		// error channel is still sufficient when readiness did not consume it.
+		waitDone = doneToClosed(done)
+	}
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-waitDone:
+		return
+	case <-timer.C:
+		_ = cmd.Process.Kill()
+	}
+	// A killed process must still be reaped before its supervision entry is
+	// released. The channel is buffered, so this cannot block the Wait goroutine.
+	<-waitDone
+}
+
+func doneToClosed(done <-chan error) <-chan struct{} {
+	closed := make(chan struct{})
+	go func() {
+		<-done
+		close(closed)
+	}()
+	return closed
+}
+
+func waitForStartClaimWithShutdown(claim chan struct{}, shutdown <-chan struct{}) bool {
+	if shutdown == nil {
+		waitForStartClaim(claim)
+		return true
+	}
+	select {
+	case <-claim:
+		return true
+	case <-shutdown:
+		return false
+	}
+}
+
+func waitForLifecycleTransitionShutdown(t *weaverTransition, timeout time.Duration, shutdown <-chan struct{}) (map[string]any, error) {
+	if shutdown == nil {
+		return waitForLifecycleTransition(t, timeout)
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-t.done:
+		return t.result, t.err
+	case <-shutdown:
+		return nil, errors.New("weaver start cancelled during mill shutdown")
+	case <-timer.C:
+		return nil, fmt.Errorf("weaver restart did not become ready before timeout")
+	}
 }
 
 // releaseChild removes the supervision entry for configDir only when it is

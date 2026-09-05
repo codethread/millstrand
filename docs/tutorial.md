@@ -47,7 +47,29 @@ mill init
 
 `mill init` creates `.millstrand`, the repository's Millstrand workspace. It contains shared config, startup code, and approved spool coordinates. Runtime metadata, sockets, and the SQLite database live outside the repository under Millstrand's state directory.
 
-You do not need a running `mill` process for `mill init`. It is a local bootstrap command and never initializes the database or runs `git init` for you.
+You do not need a running `mill` process for ordinary `mill init`. It is a
+local bootstrap command and never initializes the database or runs `git init`
+for you. The `--auto-start` variant is different: it requires a running Mill
+because Mill writes the registration and starts the Weaver during the command.
+
+To remember this workspace for Weaver startup after a later Mill restart, add
+the explicit opt-in during init:
+
+```sh
+mill init --auto-start
+```
+
+`--auto-start` writes `"autoStart": true` to the shared `config.json`, records
+the workspace, and starts its Weaver immediately. If no Mill is running, the
+command returns the Mill transport error and does not register the workspace.
+The setting is not available in `config.local.json`.
+
+Unknown keys in either config file are ignored for compatibility. Weaver
+startup reports them in the Mill log by file and key; status and invoke reads
+do not log the retained warnings. Wrong types for known keys still fail, and
+`config.local.json` rejects the known misplaced `configFormat` key. A local
+`autoStart` key is unknown, so it is ignored with the startup warning and
+cannot enable remembered startup.
 
 Without `--workspace`, commands resolve the canonical Git repository root and select its `.millstrand` or `.ms` directory. Linked worktrees therefore share one default workspace. Conflicting, invalid, or unsupported legacy markers fail with remediation instead of being guessed or migrated. Outside a supported Git worktree, no-flag selection also fails.
 
@@ -69,11 +91,19 @@ mill weaver start --workspace "${workspace:?}"
 mill start
 ```
 
-If it reports that `mill` is already running, keep the existing supervisor and continue. Open another terminal in `learn-millstrand`, then start this workspace's weaver:
+If it reports that `mill` is already running, keep the existing supervisor and continue. Open another terminal in `learn-millstrand`. For a workspace initialized with `--auto-start`, Mill starts its Weaver during supervisor startup. Otherwise start it explicitly:
 
 ```sh
 mill weaver start
 ```
+
+An explicit `mill weaver start` records a remembered true registration only
+when shared `config.json` already has `"autoStart": true`. With `autoStart`
+omitted or false, explicit start never registers, including if the config later
+changes to true. At the next Mill startup, an existing registration is kept only
+when shared `config.json` has `"autoStart": true`; omitted or false values are
+pruned. After pruning, set `autoStart` to true before running `mill weaver start`
+or run `mill init --auto-start` again.
 
 The weaver is the long-lived Clojure process that owns the graph and runtime state. Its first start prepares the database. Check both the workspace selection and process state with:
 

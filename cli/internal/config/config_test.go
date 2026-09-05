@@ -36,20 +36,24 @@ func TestLoadRequiresConfigFormat(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnsupportedKeysAndValues(t *testing.T) {
+func TestLoadIgnoresUnknownKeysAndRetainsWarnings(t *testing.T) {
 	d := t.TempDir()
-	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","where":"x"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","where":"x","another":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), "unsupported client config key: where") {
-		t.Fatalf("expected unsupported key error, got %v", err)
+	c, _, err := Load(d)
+	if err != nil {
+		t.Fatalf("unknown keys should be ignored, got %v", err)
+	}
+	if len(c.Warnings) != 1 || len(c.Warnings[0].Keys) != 2 || c.Warnings[0].Keys[0] != "another" || c.Warnings[0].Keys[1] != "where" {
+		t.Fatalf("unexpected unknown-key warnings: %#v", c.Warnings)
 	}
 
 	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","source":"/tmp/source"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), "unsupported client config key: source") {
-		t.Fatalf("expected unsupported source key error, got %v", err)
+	if _, _, err := Load(d); err != nil {
+		t.Fatalf("unknown source key should be ignored, got %v", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"old"}`), 0o644); err != nil {
@@ -102,6 +106,31 @@ func TestLoadAcceptsConfigName(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNullAutoStart(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":null}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), "client config autoStart must be a boolean") {
+		t.Fatalf("expected autoStart boolean validation error, got %v", err)
+	}
+}
+
+func TestLoadRejectsNonBooleanAutoStart(t *testing.T) {
+	for _, value := range []string{`"yes"`, `1`} {
+		t.Run(value, func(t *testing.T) {
+			d := t.TempDir()
+			data := []byte(`{"configFormat":"alpha","autoStart":` + value + `}`)
+			if err := os.WriteFile(filepath.Join(d, ConfigFileName), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), "client config autoStart must be a boolean") {
+				t.Fatalf("expected autoStart boolean validation error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadAppliesLocalNameOverlay(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","name":"shared"}`), 0o644); err != nil {
@@ -145,12 +174,14 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 		name string
 		json string
 		want string
+		key  string
 	}{
-		{"config-format", `{"configFormat":"alpha"}`, "local client config must not declare configFormat"},
-		{"unknown-key", `{"where":"x"}`, "unsupported local client config key: where"},
-		{"blank-name", `{"name":""}`, "local client config name must be a non-blank string"},
-		{"non-string-name", `{"name":false}`, "local client config name must be a non-blank string"},
-		{"malformed", `{"name":`, "malformed local client config"},
+		{"config-format", `{"configFormat":"alpha"}`, "local client config must not declare configFormat", ""},
+		{"unknown-key", `{"where":"x"}`, "", "where"},
+		{"unknown-auto-start", `{"autoStart":true}`, "", "autoStart"},
+		{"blank-name", `{"name":""}`, "local client config name must be a non-blank string", ""},
+		{"non-string-name", `{"name":false}`, "local client config name must be a non-blank string", ""},
+		{"malformed", `{"name":`, "malformed local client config", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -161,8 +192,21 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(d, LocalConfigFileName), []byte(tc.json), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected %q error, got %v", tc.want, err)
+			c, _, err := Load(d)
+			if tc.want != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("expected %q error, got %v", tc.want, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unknown local key should be ignored, got %v", err)
+			}
+			if len(c.Warnings) != 1 || filepath.Base(c.Warnings[0].File) != LocalConfigFileName {
+				t.Fatalf("expected local unknown-key warning, got %#v", c.Warnings)
+			}
+			if len(c.Warnings[0].Keys) != 1 || c.Warnings[0].Keys[0] != tc.key {
+				t.Fatalf("unexpected local warning: %#v", c.Warnings[0])
 			}
 		})
 	}

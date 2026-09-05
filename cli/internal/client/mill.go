@@ -55,6 +55,7 @@ type MillWorldRequest struct {
 	ConfigDir      string `json:"config_dir,omitempty"`
 	Source         string `json:"source,omitempty"`
 	Name           string `json:"name,omitempty"`
+	AutoStart      bool   `json:"auto_start,omitempty"`
 	ReadyTimeoutMs int64  `json:"ready_timeout_ms,omitempty"`
 	Stealth        bool   `json:"stealth,omitempty"`
 }
@@ -100,6 +101,16 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 	defer func() { _ = conn.Close() }()
 	deadline := 5 * time.Second
 	switch operation {
+	case "init":
+		// --auto-start performs a synchronous weaver boot after registration,
+		// so init needs the same socket budget as an explicit weaver start.
+		if world.AutoStart {
+			if world.ReadyTimeoutMs > 0 {
+				deadline = time.Duration(world.ReadyTimeoutMs)*time.Millisecond + 5*time.Second
+			} else {
+				deadline = defaultWeaverReadyTimeout + 5*time.Second
+			}
+		}
 	case "weaver-start":
 		// Weaver startup waits for the child process to publish ready metadata.
 		// The client protocol deadline must cover the mill-side ready wait plus

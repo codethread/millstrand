@@ -44,6 +44,11 @@ type server struct {
 	// workspace. They keep one workspace's external socket write from blocking
 	// lifecycle access or invocations for another workspace.
 	admissionLocks map[string]*sync.Mutex
+	// shutdown is closed exactly once when mill receives its termination signal.
+	// Autostart workers observe it before taking a slot and before launching.
+	shutdown     chan struct{}
+	shutdownOnce sync.Once
+	autostartWG  sync.WaitGroup
 }
 
 type weaverChild struct {
@@ -51,6 +56,7 @@ type weaverChild struct {
 	world    config.World
 	name     string
 	done     chan error
+	waitDone chan struct{}
 	identity weaverIdentity
 	// unsupervised means this child was discovered from runtime metadata rather
 	// than launched and owned by this mill.  Such a child needs endpoint-backed
@@ -150,10 +156,12 @@ Environment:
 	initCmd := &cobra.Command{Use: "init", Short: "Bootstrap missing selected config workspace files through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		stealth, _ := cmd.Flags().GetBool("stealth")
-		return runInit(workspace, stealth)
+		autoStart, _ := cmd.Flags().GetBool("auto-start")
+		return runInit(workspace, stealth, autoStart)
 	}}
 	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	initCmd.Flags().Bool("stealth", false, "keep repo-local .millstrand/.ms and Claude guidance untracked through .git/info/exclude")
+	initCmd.Flags().Bool("auto-start", false, "enable and register this workspace for automatic weaver startup")
 	root.AddCommand(initCmd)
 
 	weaver := &cobra.Command{Use: "weaver", Short: "Manage supervised weavers"}
@@ -255,9 +263,15 @@ func start() (err error) {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() { <-sig; _ = listener.Close() }()
-	s := server{meta: meta, children: map[string]*weaverChild{}, custodies: map[string]*process.Custody{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
+	s := server{meta: meta, children: map[string]*weaverChild{}, custodies: map[string]*process.Custody{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}, shutdown: make(chan struct{})}
+	go func() {
+		<-sig
+		s.signalShutdown()
+		_ = listener.Close()
+	}()
+	s.startAutostart()
 	defer func() {
+		s.stopAutostart()
 		if shutdownErr := s.stopAll(); shutdownErr != nil {
 			if err == nil {
 				err = shutdownErr
@@ -348,6 +362,25 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		if stealth != nil {
+			if req.World.AutoStart {
+				if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
+					return
+				}
+				if err := registerAutoStart(world, req.World.CWD, ""); err != nil {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
+					return
+				}
+				started, err := s.startWeaver(req.World)
+				if err != nil {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", err.Error()))
+					return
+				}
+				if isRetainedFailedStart(started) {
+					_ = json.NewEncoder(conn).Encode(retainedFailedInitResponse(req.RequestID, started))
+					return
+				}
+			}
 			result := config.StealthInitResult{ConfigDir: world.ConfigDir, ConfigFile: world.ConfigFile, Stealth: *stealth}
 			if err := result.Validate(); err != nil {
 				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
@@ -357,6 +390,27 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		result := map[string]any{"config_dir": world.ConfigDir, "config_file": world.ConfigFile}
+		if req.World.AutoStart {
+			if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
+				return
+			}
+			if err := registerAutoStart(world, req.World.CWD, ""); err != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
+				return
+			}
+			started, startErr := s.startWeaver(req.World)
+			if startErr != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", startErr.Error()))
+				return
+			}
+			if isRetainedFailedStart(started) {
+				_ = json.NewEncoder(conn).Encode(retainedFailedInitResponse(req.RequestID, started))
+				return
+			}
+			result["auto_start"] = true
+			result["weaver"] = started
+		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-start":
 		result, err := s.startWeaver(req.World)
@@ -368,6 +422,22 @@ func (s *server) handle(conn net.Conn) {
 			}
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", err.Error()))
 			return
+		}
+		world, worldErr := resolveLifecycleWorld(req.World)
+		if worldErr != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", worldErr.Error()))
+			return
+		}
+		cfg, _, configErr := config.Load(world.ConfigDir)
+		if configErr != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start config read failed", configErr.Error()))
+			return
+		}
+		if cfg.AutoStart {
+			if registerErr := registerAutoStart(world, req.World.CWD, req.World.Name); registerErr != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start registration failed", registerErr.Error()))
+				return
+			}
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-restart":
@@ -482,4 +552,23 @@ func cleanupPreviousMillState(root, socketPath, metadataPath string) error {
 
 func errorResponse(requestID, typ, code, message, detail string) client.MillResponse {
 	return client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: requestID, OK: false, Error: &client.ResponseError{Type: typ, Code: code, Message: message, Details: map[string]any{"detail": detail}}}
+}
+
+func isRetainedFailedStart(result map[string]any) bool {
+	state, _ := result["state"].(string)
+	return state == restartStateFailed
+}
+
+func retainedFailedInitResponse(requestID string, status map[string]any) client.MillResponse {
+	return client.MillResponse{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       requestID,
+		OK:              false,
+		Error: &client.ResponseError{
+			Type:    "domain",
+			Code:    "mill/init-weaver-start-failed",
+			Message: "mill init weaver start failed",
+			Details: map[string]any{"status": status},
+		},
+	}
 }

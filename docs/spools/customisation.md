@@ -10,7 +10,7 @@ If you have not met the weaver, workspaces, or the strand model yet, read the [t
 
 ```text
 .millstrand/
-  config.json        -> shared alpha workspace config (the low-privilege format marker)
+  config.json        -> shared alpha workspace config (format marker and optional autoStart)
   config.local.json  -> personal config overlay
   init.clj           -> shared trusted startup code loaded by the weaver
   init.local.clj     -> personal startup overlay loaded after init.clj
@@ -20,7 +20,32 @@ If you have not met the weaver, workspaces, or the strand model yet, read the [t
   spools/            -> optional local spools, created only when you add one
 ```
 
-When absent, `mill init` creates the shared half: `config.json`, `deps.edn` with the seeded batteries dependency, `init.clj` with its explicit module, and `me/help.clj`. It does not create an empty `spools/` directory. Its `.gitignore` ignores `config.local.json`, `deps.local.edn`, and `init.local.clj`. Shared config is committed and reviewed; the local overlays stay on your machine. Explicit `--workspace` bootstrap preserves existing files.
+When absent, `mill init` creates the shared half: `config.json`, `deps.edn` with the seeded batteries dependency, `init.clj` with its explicit module, and `me/help.clj`. It does not create an empty `spools/` directory. Its `.gitignore` ignores `config.local.json`, `deps.local.edn`, and `init.local.clj`. Shared config is committed and reviewed; the local overlays stay on your machine. Explicit `--workspace` bootstrap preserves existing files. Use `mill init --auto-start` with a running Mill when this workspace should be remembered for Weaver startup; the flag writes `"autoStart": true` to shared config, registers the workspace, and starts it immediately. If Mill is unavailable or the Weaver start fails, the command returns that error. `config.local.json` has no supported `autoStart` setting.
+
+## Remembered Weaver startup
+
+`mill weaver start` records a true remembered-start registration only when
+shared `config.json` has `"autoStart": true`, including when the selected
+Weaver is already running. With `autoStart` omitted or false, explicit start
+never registers, including if the config later changes to true. On the next
+Mill startup, Mill re-reads shared `config.json`, prunes registrations with
+omitted or false `autoStart`, and starts the remaining remembered workspaces
+with at most four starts in flight. It logs failures and continues with other
+workspaces.
+
+If a registration is pruned, changing `config.json` to `"autoStart": true`
+does not recreate it during that Mill lifetime. Run `mill weaver start` after
+that change, or run `mill init --auto-start`, to register it again. Registration
+state is Mill-owned data under the existing XDG state root, not a workspace file
+or local overlay.
+
+Unknown keys in `config.json` and `config.local.json` are ignored for
+compatibility. When the Weaver starts, Mill logs a warning for each file and
+its unknown key names, including during remembered startup. Config reads for
+status and invoke retain those warnings but do not log them. Known value types
+still fail validation, and `config.local.json` rejects the known misplaced
+`configFormat` key. A local `autoStart` key is unknown and is ignored with the
+same startup warning; it cannot enable remembered startup.
 
 ## A private repo-local workspace
 

@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -16,8 +18,6 @@ const (
 	WorkspaceAlias      = ".ms"
 	LegacyWorkspace     = ".skein"
 )
-
-var allowedKeys = map[string]bool{"configFormat": true, "name": true}
 
 var InstalledSource string
 
@@ -37,10 +37,20 @@ type World struct {
 	DBPath     string
 }
 
+// UnknownKeyWarning records an ignored compatibility field. Warnings are
+// retained during parsing so callers that merely read config do not emit
+// diagnostics; the mill startup path decides when to present them.
+type UnknownKeyWarning struct {
+	File string
+	Keys []string
+}
+
 type Config struct {
-	ConfigFormat string `json:"configFormat"`
-	Name         string `json:"name,omitempty"`
-	Source       string `json:"-"`
+	ConfigFormat string              `json:"configFormat"`
+	Name         string              `json:"name,omitempty"`
+	AutoStart    bool                `json:"autoStart,omitempty"`
+	Source       string              `json:"-"`
+	Warnings     []UnknownKeyWarning `json:"-"`
 }
 
 func RepoWorld() (World, error) {
@@ -93,12 +103,11 @@ func Load(configDir string) (Config, World, error) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return Config{}, World{}, fmt.Errorf("malformed client config: %w", err)
 	}
-	for k := range raw {
-		if !allowedKeys[k] {
-			return Config{}, World{}, fmt.Errorf("unsupported client config key: %s", k)
-		}
-	}
-	var c Config
+	c := Config{Warnings: unknownKeyWarnings(w.ConfigFile, raw, map[string]bool{
+		"configFormat": true,
+		"name":         true,
+		"autoStart":    true,
+	})}
 	if v, ok := raw["configFormat"]; ok {
 		if err := json.Unmarshal(v, &c.ConfigFormat); err != nil {
 			return Config{}, World{}, fmt.Errorf("client config configFormat must be a string")
@@ -116,10 +125,64 @@ func Load(configDir string) (Config, World, error) {
 		}
 		c.Name = name
 	}
+	if v, ok := raw["autoStart"]; ok {
+		if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+			return Config{}, World{}, fmt.Errorf("client config autoStart must be a boolean")
+		}
+		if err := json.Unmarshal(v, &c.AutoStart); err != nil {
+			return Config{}, World{}, fmt.Errorf("client config autoStart must be a boolean")
+		}
+	}
 	if err := applyLocalOverlay(&c, filepath.Join(w.ConfigDir, LocalConfigFileName)); err != nil {
 		return Config{}, World{}, err
 	}
 	return c, w, nil
+}
+
+// SetAutoStart updates only the top-level autoStart setting in an existing
+// client config.  The caller has already bootstrapped and validated the
+// workspace; this boundary parser keeps all other config fields intact.
+func SetAutoStart(configDir string, enabled bool) error {
+	path := filepath.Join(configDir, ConfigFileName)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return fmt.Errorf("malformed client config: %w", err)
+	}
+	value, err := json.Marshal(enabled)
+	if err != nil {
+		return err
+	}
+	raw["autoStart"] = value
+	updated, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(configDir, ".config.json.autostart-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(updated, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func parseConfigName(label string, raw json.RawMessage) (string, error) {
@@ -131,6 +194,20 @@ func parseConfigName(label string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("%s must be a non-blank string", label)
 	}
 	return name, nil
+}
+
+func unknownKeyWarnings(file string, raw map[string]json.RawMessage, known map[string]bool) []UnknownKeyWarning {
+	unknown := make([]string, 0)
+	for key := range raw {
+		if !known[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	return []UnknownKeyWarning{{File: file, Keys: unknown}}
 }
 
 func applyLocalOverlay(c *Config, path string) error {
@@ -145,15 +222,10 @@ func applyLocalOverlay(c *Config, path string) error {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return fmt.Errorf("malformed local client config: %w", err)
 	}
-	for k := range raw {
-		switch k {
-		case "name":
-		case "configFormat":
-			return fmt.Errorf("local client config must not declare configFormat")
-		default:
-			return fmt.Errorf("unsupported local client config key: %s", k)
-		}
+	if _, ok := raw["configFormat"]; ok {
+		return fmt.Errorf("local client config must not declare configFormat")
 	}
+	c.Warnings = append(c.Warnings, unknownKeyWarnings(path, raw, map[string]bool{"name": true})...)
 	if v, ok := raw["name"]; ok {
 		name, err := parseConfigName("local client config name", v)
 		if err != nil {
