@@ -520,6 +520,16 @@
                      :explain (s/explain-data ::specs/weaver-start-options opts)})))
   opts)
 
+(defn- require-fresh-runtime-probe-options! [opts]
+  (when-not (s/valid? ::specs/fresh-runtime-probe-options opts)
+    (throw (ex-info "Fresh runtime probe options have an invalid shape"
+                    {:reason :invalid-fresh-runtime-probe-options
+                     :options opts
+                     :spec ::specs/fresh-runtime-probe-options
+                     :explain (s/explain-data
+                               ::specs/fresh-runtime-probe-options opts)})))
+  opts)
+
 (defn- publishes-ambient-runtime? [publish? probe?]
   ;; Probe mode is a private candidate-runtime boundary. Its publication
   ;; preference cannot cross into the process-wide ambient runtime.
@@ -827,6 +837,10 @@
 (defn fresh-runtime-probe!
   "Probe a fresh unpublished runtime generation from a selected world.
 
+  `opts` requires an admitted `:old-generation-baseline` and the Millstrand
+  `:runtime-coordinate` used to resolve the candidate generation. It may also
+  include the Mill-supplied `:expected-version`.
+
   The selected world's config is copied into a disposable workspace. The probe
   uses in-memory storage and the effect-free module-refresh staging path. A
   failed probe retains its workspace and append-only diagnostics for inspection;
@@ -836,25 +850,13 @@
   ([world]
    (fresh-runtime-probe! world {}))
   ([world opts]
+   (require-fresh-runtime-probe-options! opts)
    (when-not (and (map? world)
                   (every? #(and (string? (get world %))
                                 (not (str/blank? (get world %))))
                           [:config-dir :state-dir :data-dir]))
      (throw (ex-info "Fresh runtime probe requires a selected world"
                      {:world world})))
-   (when-not (s/valid? :millstrand.weaver-start/old-generation-baseline
-                       (:old-generation-baseline opts))
-     (throw (ex-info "Fresh runtime probe requires an admitted old-generation baseline"
-                     {:baseline (:old-generation-baseline opts)
-                      :explain (s/explain-data
-                                :millstrand.weaver-start/old-generation-baseline
-                                (:old-generation-baseline opts))})))
-   (when-not (s/valid? :millstrand.core.specs/generation-basis
-                       (:generation-basis opts))
-     (throw (ex-info "Fresh runtime probe requires a valid generation basis"
-                     {:explain (s/explain-data
-                                :millstrand.core.specs/generation-basis
-                                (:generation-basis opts))})))
    (let [probe-root (.toFile (Files/createTempDirectory
                               "millstrand-restart-probe-"
                               (make-array FileAttribute 0)))
@@ -878,16 +880,13 @@
        (copy-tree! (:config-dir world) probe-config)
        (report! {:stage :probe/workspace :status :completed
                  :data {:workspace (.getPath probe-root)}})
-       (let [runtime-coordinate
-             (get-in opts [:generation-basis :reserved-deps
-                           'io.millstrand/millstrand])
-             generation-basis
+       (let [generation-basis
              (basis/create-generation-basis (.getCanonicalPath probe-config)
-                                            runtime-coordinate
+                                            (:runtime-coordinate opts)
                                             {:dependency-source-workspace
                                              (:config-dir world)})
              runtime (reset! started-runtime
-                             (start! nil (merge opts
+                             (start! nil (merge (dissoc opts :runtime-coordinate)
                                                 {:world probe-world
                                                  :generation-basis generation-basis
                                                  :publish? false

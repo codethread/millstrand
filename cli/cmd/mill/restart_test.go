@@ -92,17 +92,20 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	}
 }
 
-func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
+func TestFreshRuntimeProbeExpressionSuppliesRuntimeCoordinate(t *testing.T) {
 	for _, want := range []string{
 		`(System/getenv "MILLSTRAND_PROBE_SOURCE")`,
 		`(System/getenv "MILLSTRAND_PROBE_VERSION")`,
-		`millstrand.core.weaver.basis/create-generation-basis`,
-		`:generation-basis generation-basis`,
+		`:runtime-coordinate {:local/root source}`,
 		`:expected-version`,
 	} {
 		if !strings.Contains(freshRuntimeProbeExpression, want) {
 			t.Fatalf("fresh runtime probe expression missing %q", want)
 		}
+	}
+	if strings.Contains(freshRuntimeProbeExpression,
+		"millstrand.core.weaver.basis/create-generation-basis") {
+		t.Fatal("fresh runtime probe expression must not resolve a preliminary basis")
 	}
 	args := freshRuntimeProbeArgs(filepath.Join("tmp", "millstrand"))
 	joined := strings.Join(args, " ")
