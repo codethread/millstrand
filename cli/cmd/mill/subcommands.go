@@ -46,7 +46,7 @@ func emitJSON(v any) error {
 	return json.NewEncoder(os.Stdout).Encode(v)
 }
 
-func runInit(workspace string, stealth bool) error {
+func runInit(workspace string, stealth, autoStart bool) error {
 	if stealth && workspace != "" {
 		return errors.New("--stealth cannot be combined with --workspace; stealth init creates the repo-local .millstrand workspace")
 	}
@@ -55,6 +55,7 @@ func runInit(workspace string, stealth bool) error {
 		return err
 	}
 	world.Stealth = stealth
+	world.AutoStart = autoStart
 	result, err := client.MillCall("init", world)
 	if err != nil {
 		return err

@@ -117,6 +117,36 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 }
 
+func TestConfigWarningsAreQuietUntilWeaverStartup(t *testing.T) {
+	var logs bytes.Buffer
+	originalLogOut := millLogOut
+	millLogOut = &logs
+	t.Cleanup(func() { millLogOut = originalLogOut })
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(`{"configFormat":"alpha","futureField":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, config.LocalConfigFileName), []byte(`{"futureLocal":"ignored"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}
+	if _, err := resolveLifecycleWorld(req); err != nil {
+		t.Fatal(err)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("ordinary config load emitted warnings: %s", logs.String())
+	}
+	if _, err := resolveLifecycleWorldWithWarnings(req, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"config.json", "futureField", "config.local.json", "futureLocal"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("startup warning missing %q in %s", want, logs.String())
+		}
+	}
+}
+
 func TestWeaverArgsUseMinimalBasisBootstrap(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "millstrand source")
 	world := config.World{ConfigDir: "/workspace", StateDir: "/state", DataDir: "/data"}

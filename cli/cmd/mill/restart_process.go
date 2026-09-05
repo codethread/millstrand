@@ -235,7 +235,8 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 		return nil, nil, replacementFailure(logPath, err)
 	}
 	done := make(chan error, 1)
-	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
+	waitDone := make(chan struct{})
+	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation")}
 	s.mu.Lock()
 	if s.children == nil {
 		s.children = map[string]*weaverChild{}
@@ -243,6 +244,7 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	s.children[world.ConfigDir] = child
 	s.mu.Unlock()
 	go func() {
+		defer close(waitDone)
 		err := cmd.Wait()
 		_ = logFile.Close()
 		done <- err
@@ -364,6 +366,10 @@ func waitRecordedExit(child *weaverChild, timeout time.Duration) bool {
 }
 
 func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+	return waitForReadyStatusContext(world, pid, done, timeout, nil)
+}
+
+func waitForReadyStatusContext(world config.World, pid int, done <-chan error, timeout time.Duration, shutdown <-chan struct{}) (map[string]any, error) {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -397,6 +403,15 @@ func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout 
 			terminatePID(pid)
 			return nil, fmt.Errorf("weaver did not publish ready metadata before timeout")
 		}
-		<-ticker.C
+		if shutdown == nil {
+			<-ticker.C
+			continue
+		}
+		select {
+		case <-ticker.C:
+		case <-shutdown:
+			terminatePID(pid)
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		}
 	}
 }

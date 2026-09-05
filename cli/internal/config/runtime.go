@@ -44,6 +44,17 @@ func CanonicalConfigIdentity(configDir string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
+// CanonicalWorldIdentity applies the workspace marker alias rule used by
+// runtime directories. Registries keyed by a workspace should use this value
+// too, so .ms and .millstrand do not create duplicate identities.
+func CanonicalWorldIdentity(configDir string) (string, error) {
+	identity, err := CanonicalConfigIdentity(configDir)
+	if err != nil {
+		return "", err
+	}
+	return markerNeutralIdentity(identity), nil
+}
+
 func WorldHash(canonicalConfigIdentity string) string {
 	sum := sha256.Sum256([]byte(canonicalConfigIdentity))
 	return hex.EncodeToString(sum[:])[:32]
