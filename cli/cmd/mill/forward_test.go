@@ -29,15 +29,11 @@ func startForwardOwnedBlockingProcess(t *testing.T) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=TestForwardOwnedBlockingHelperProcess")
 	cmd.Env = append(os.Environ(), "MILLSTRAND_FORWARD_HELPER_PROCESS=1")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	pid := cmd.Process.Pid
 	t.Cleanup(func() {
-		if processAlive(pid) {
-			terminatePID(pid)
+		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
+			terminatePID(cmd.Process.Pid)
+			waitForPIDExit(cmd.Process.Pid, time.Second)
 		}
-		waitForPIDExit(pid, time.Second)
 	})
 	return cmd
 }
@@ -252,8 +248,14 @@ func TestInvokeClassifiesActualRestartAndDurableCleanup(t *testing.T) {
 	t.Cleanup(func() {
 		launchWeaver, probeRuntime, waitForReplacementReadyStatus = originalLaunch, originalProbe, originalReady
 	})
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := startForwardOwnedBlockingProcess(t)
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
 		if launches.Add(1) == 1 {
 			oldPID.Store(int32(cmd.Process.Pid))
 			writeWeaverMetadata(t, world, cmd.Process.Pid, "old-weaver")

@@ -22,6 +22,15 @@ var controlOperations = map[string]bool{
 }
 
 func (s *server) handleProcessControl(conn net.Conn, raw map[string]json.RawMessage) {
+	peerPID := s.controlPeerPID
+	if peerPID == nil {
+		peerPID = unixPeerPID
+	}
+	callerPID, err := peerPID(conn)
+	if err != nil {
+		_ = json.NewEncoder(conn).Encode(errorResponse(controlString(raw, "request_id"), "domain", "process/stale-weaver", "process control caller is not an admitted Weaver", err.Error()))
+		return
+	}
 	request, err := decodeControlRequest(raw)
 	requestID := request.RequestID
 	if err != nil {
@@ -32,7 +41,7 @@ func (s *server) handleProcessControl(conn net.Conn, raw map[string]json.RawMess
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "protocol", "process/operation-not-allowed", "process operation is not available", request.Operation))
 		return
 	}
-	world, err := s.admitControlCaller(request.WeaverID, request.LaunchToken)
+	world, err := s.admitControlCaller(request.WeaverID, request.LaunchToken, callerPID)
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse(requestID, "domain", "process/stale-weaver", "process control caller is not an admitted Weaver", err.Error()))
 		return
@@ -252,11 +261,14 @@ func launchTokenEnv(token string) []string {
 // still-live launch, and the first admitted request pins the token to one
 // weaver identity for the rest of startup. A stale or unrelated caller has
 // neither a supervised identity nor a live launch token, and is rejected.
-func (s *server) admitControlCaller(weaverID, launchToken string) (config.World, error) {
+func (s *server) admitControlCaller(weaverID, launchToken string, callerPID int) (config.World, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.children {
 		if child != nil && child.identity.WeaverID == weaverID {
+			if child.identity.PID != callerPID {
+				return config.World{}, fmt.Errorf("weaver %q peer pid %d does not match supervised pid %d", weaverID, callerPID, child.identity.PID)
+			}
 			return child.world, nil
 		}
 	}
@@ -272,7 +284,7 @@ func (s *server) admitControlCaller(weaverID, launchToken string) (config.World,
 			// identity, so the token no longer speaks for the caller.
 			return config.World{}, fmt.Errorf("launch token belongs to Weaver %q, not %q", child.identity.WeaverID, weaverID)
 		}
-		if child.cmd == nil || child.cmd.Process == nil || !processAlive(child.cmd.Process.Pid) {
+		if child.cmd == nil || child.cmd.Process == nil || child.cmd.Process.Pid != callerPID || !processAlive(child.cmd.Process.Pid) {
 			return config.World{}, errors.New("launch token names a Weaver that is no longer running")
 		}
 		if child.startupWeaverID == "" {

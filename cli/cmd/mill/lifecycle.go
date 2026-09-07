@@ -261,29 +261,29 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver start %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
 	launchToken := newOpaqueID("launch")
-	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), logFile, logFile)
+	done := make(chan error, 1)
+	waitDone := make(chan struct{})
+	registered := &weaverChild{world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
+	register := func(cmd *exec.Cmd) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.children == nil {
+			s.children = map[string]*weaverChild{}
+		}
+		if child := s.children[world.ConfigDir]; child != nil && child.cmd != nil &&
+			child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
+			return fmt.Errorf("weaver supervision entry already exists for %s", world.ConfigDir)
+		}
+		registered.cmd = cmd
+		s.children[world.ConfigDir] = registered
+		return nil
+	}
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), register, logFile, logFile)
 	if err != nil {
+		s.releaseChild(world.ConfigDir, registered)
 		_ = logFile.Close()
 		return nil, err
 	}
-	done := make(chan error, 1)
-	waitDone := make(chan struct{})
-	s.mu.Lock()
-	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
-		s.mu.Unlock()
-		terminateProcess(cmd.Process)
-		go func() {
-			_ = cmd.Wait()
-			_ = logFile.Close()
-		}()
-		status := baseStatusWithName(world, "starting", child.name)
-		status["pid"] = child.cmd.Process.Pid
-		status["generation_id"] = child.generationID
-		return status, nil
-	}
-	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
-	s.children[world.ConfigDir] = registered
-	s.mu.Unlock()
 	go func() {
 		defer close(waitDone)
 		err := cmd.Wait()

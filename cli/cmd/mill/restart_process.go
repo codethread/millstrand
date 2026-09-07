@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"syscall"
 	"time"
@@ -229,21 +230,29 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver replacement %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
 	launchToken := newOpaqueID("launch")
-	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), logFile, logFile)
+	done := make(chan error, 1)
+	waitDone := make(chan struct{})
+	child := &weaverChild{world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
+	register := func(cmd *exec.Cmd) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.children == nil {
+			s.children = map[string]*weaverChild{}
+		}
+		if existing := s.children[world.ConfigDir]; existing != nil {
+			return fmt.Errorf("weaver supervision entry already exists for %s", world.ConfigDir)
+		}
+		child.cmd = cmd
+		s.children[world.ConfigDir] = child
+		return nil
+	}
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), launchTokenEnv(launchToken), register, logFile, logFile)
 	if err != nil {
+		s.releaseChild(world.ConfigDir, child)
 		_, _ = fmt.Fprintf(logFile, "=== replacement startup failure: %s ===\n", err)
 		_ = logFile.Close()
 		return nil, nil, replacementFailure(logPath, err)
 	}
-	done := make(chan error, 1)
-	waitDone := make(chan struct{})
-	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
-	s.mu.Lock()
-	if s.children == nil {
-		s.children = map[string]*weaverChild{}
-	}
-	s.children[world.ConfigDir] = child
-	s.mu.Unlock()
 	go func() {
 		defer close(waitDone)
 		err := cmd.Wait()

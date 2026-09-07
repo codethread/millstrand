@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
@@ -35,13 +38,14 @@ func startingChild(t *testing.T, token string) (*server, config.World) {
 	s := &server{children: map[string]*weaverChild{
 		world.ConfigDir: {cmd: cmd, world: world, name: "starting-weaver", launchToken: token},
 	}}
+	s.controlPeerPID = func(net.Conn) (int, error) { return cmd.Process.Pid, nil }
 	return s, world
 }
 
 func TestAdmitStartingWeaverByLaunchToken(t *testing.T) {
 	s, world := startingChild(t, "launch-token-one")
 
-	admitted, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one")
+	admitted, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one", s.children[world.ConfigDir].cmd.Process.Pid)
 	if err != nil {
 		t.Fatalf("starting weaver was refused its own custody: %v", err)
 	}
@@ -50,10 +54,10 @@ func TestAdmitStartingWeaverByLaunchToken(t *testing.T) {
 	}
 
 	// The token speaks for exactly one weaver identity for the rest of startup.
-	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one"); err != nil {
+	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one", s.children[world.ConfigDir].cmd.Process.Pid); err != nil {
 		t.Fatalf("bound weaver was refused on a repeat request: %v", err)
 	}
-	if _, err := s.admitControlCaller("weaver-nonce-two", "launch-token-one"); err == nil {
+	if _, err := s.admitControlCaller("weaver-nonce-two", "launch-token-one", s.children[world.ConfigDir].cmd.Process.Pid); err == nil {
 		t.Fatal("a second weaver identity reused the launch token")
 	}
 }
@@ -61,20 +65,20 @@ func TestAdmitStartingWeaverByLaunchToken(t *testing.T) {
 func TestAdmitControlCallerRejectsUnprovenCallers(t *testing.T) {
 	s, world := startingChild(t, "launch-token-one")
 
-	if _, err := s.admitControlCaller("weaver-nonce-one", ""); err == nil {
+	if _, err := s.admitControlCaller("weaver-nonce-one", "", s.children[world.ConfigDir].cmd.Process.Pid); err == nil {
 		t.Fatal("a caller with no identity and no launch token was admitted")
 	}
-	if _, err := s.admitControlCaller("weaver-nonce-one", "some-other-token"); err == nil {
+	if _, err := s.admitControlCaller("weaver-nonce-one", "some-other-token", s.children[world.ConfigDir].cmd.Process.Pid); err == nil {
 		t.Fatal("a caller presenting an unrelated launch token was admitted")
 	}
 
 	// A weaver that has published its identity is admitted by that identity, and
 	// its spent launch token no longer speaks for anyone else.
-	s.children[world.ConfigDir].identity = weaverIdentity{WeaverID: "weaver-nonce-one", PID: 1}
-	if _, err := s.admitControlCaller("weaver-nonce-one", ""); err != nil {
+	s.children[world.ConfigDir].identity = weaverIdentity{WeaverID: "weaver-nonce-one", PID: s.children[world.ConfigDir].cmd.Process.Pid}
+	if _, err := s.admitControlCaller("weaver-nonce-one", "", s.children[world.ConfigDir].cmd.Process.Pid); err != nil {
 		t.Fatalf("ready weaver was refused by identity: %v", err)
 	}
-	if _, err := s.admitControlCaller("stale-weaver-nonce", "launch-token-one"); err == nil {
+	if _, err := s.admitControlCaller("stale-weaver-nonce", "launch-token-one", s.children[world.ConfigDir].cmd.Process.Pid); err == nil {
 		t.Fatal("a stale caller was admitted with the token of a now-ready weaver")
 	}
 }
@@ -84,7 +88,7 @@ func TestAdmitControlCallerRejectsDeadAndDiscoveredChildren(t *testing.T) {
 	child := s.children[world.ConfigDir]
 
 	child.unsupervised = true
-	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one"); err == nil {
+	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one", child.cmd.Process.Pid); err == nil {
 		t.Fatal("a discovered child was admitted through a launch token")
 	}
 	child.unsupervised = false
@@ -93,8 +97,83 @@ func TestAdmitControlCallerRejectsDeadAndDiscoveredChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = child.cmd.Wait()
-	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one"); err == nil {
+	if _, err := s.admitControlCaller("weaver-nonce-one", "launch-token-one", child.cmd.Process.Pid); err == nil {
 		t.Fatal("a launch token outlived the process it names")
+	}
+}
+
+func TestInheritedChildCannotUseLaunchToken(t *testing.T) {
+	s, world := startingChild(t, "launch-token-inherited")
+	parent := s.children[world.ConfigDir]
+	// A descendant can inherit the launch environment, including the token. Use
+	// a live adversarial process so the rejection rests on peer identity, not on
+	// a dead-PID check.
+	adversary := exec.Command("sleep", "60")
+	adversary.Env = append(os.Environ(), launchTokenEnvVar+"=launch-token-inherited")
+	if err := adversary.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = adversary.Process.Kill()
+		_ = adversary.Wait()
+	})
+	if adversary.Process.Pid == parent.cmd.Process.Pid {
+		t.Fatal("adversarial process unexpectedly reused the Weaver pid")
+	}
+	s.controlPeerPID = func(net.Conn) (int, error) { return adversary.Process.Pid, nil }
+	response := callProcessControl(t, s, "launch-token-inherited", "process.list-owned", map[string]any{"owner": "harness"})
+	if response.OK {
+		t.Fatal("a descendant that inherited the launch token reached custody")
+	}
+	if response.Error == nil || response.Error.Code != "process/stale-weaver" {
+		t.Fatalf("inherited-child rejection = %+v", response.Error)
+	}
+}
+
+func TestUnixPeerPIDUsesKernelPeerIdentity(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "mill-pid-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	listener, err := net.Listen("unix", filepath.Join(root, "control.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	peer := make(chan int, 1)
+	peerErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			peerErr <- err
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		pid, err := unixPeerPID(conn)
+		if err != nil {
+			peerErr <- err
+			return
+		}
+		peer <- pid
+	}()
+	conn, err := net.Dial("unix", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	select {
+	case err := <-peerErr:
+		if strings.Contains(err.Error(), "unsupported") {
+			t.Skip(err)
+		}
+		t.Fatal(err)
+	case pid := <-peer:
+		if pid != os.Getpid() {
+			t.Fatalf("kernel peer pid = %d, want test pid %d", pid, os.Getpid())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out reading Unix peer PID")
 	}
 }
 
@@ -146,9 +225,12 @@ func TestStartWeaverHandsLaunchTokenToItsChild(t *testing.T) {
 
 	orig := launchWeaver
 	var launchedEnv []string
-	launchWeaver = func(_ string, _ []string, env []string, _, _ io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, _ []string, env []string, register func(*exec.Cmd) error, _, _ io.Writer) (*exec.Cmd, error) {
 		launchedEnv = append([]string(nil), env...)
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}

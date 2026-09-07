@@ -402,10 +402,17 @@ func TestLaunchReplacementRemovesChildAfterReadyPIDMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var launchedPID int
+	s := server{children: map[string]*weaverChild{}}
 	originalLaunch, originalReady := launchWeaver, waitForReplacementReadyStatus
 	t.Cleanup(func() { launchWeaver, waitForReplacementReadyStatus = originalLaunch, originalReady })
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
+		if registered := s.children[world.ConfigDir]; registered == nil || registered.cmd != cmd || cmd.Process != nil {
+			t.Fatalf("replacement supervision registration was not complete before Start: child=%#v process=%v", registered, cmd.Process)
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -419,7 +426,6 @@ func TestLaunchReplacementRemovesChildAfterReadyPIDMismatch(t *testing.T) {
 			"state_dir": world.StateDir, "data_dir": world.DataDir,
 		}, nil
 	}
-	s := server{children: map[string]*weaverChild{}}
 	_, _, err = s.launchReplacement(source, world, "replacement", time.Second)
 	if err == nil || !strings.Contains(err.Error(), "does not match launched pid") {
 		t.Fatalf("expected replacement PID mismatch, got %v", err)
@@ -572,8 +578,11 @@ func TestRestartConvergesAndReplacesExactlyOnce(t *testing.T) {
 			}
 		}
 	})
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -642,8 +651,11 @@ func TestRestartRetriesFailedReplacementStartupWithoutOldGeneration(t *testing.T
 	})
 	// launchReplacement invokes Start on the returned command, so it is still
 	// a real child and the readiness seam only supplies its published identity.
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -685,7 +697,7 @@ func TestRestartRetryRequiresDurableStopProofAndReplacementLaunchFailure(t *test
 		t.Fatal(err)
 	}
 	originalLaunch := launchWeaver
-	launchWeaver = func(string, []string, []string, io.Writer, io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(string, []string, []string, func(*exec.Cmd) error, io.Writer, io.Writer) (*exec.Cmd, error) {
 		return nil, errors.New("pre-start launch error")
 	}
 	t.Cleanup(func() { launchWeaver = originalLaunch })
@@ -799,8 +811,11 @@ func TestRestartCallerTimeoutDoesNotCancelSharedProbe(t *testing.T) {
 	}
 	origLaunch, origProbe := launchWeaver, probeRuntime
 	t.Cleanup(func() { launchWeaver, probeRuntime = origLaunch, origProbe })
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -850,8 +865,11 @@ func TestFailedProbeRetainsOldGenerationAndDiagnostics(t *testing.T) {
 	}
 	origLaunch, origProbe := launchWeaver, probeRuntime
 	t.Cleanup(func() { launchWeaver, probeRuntime = origLaunch, origProbe })
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}

@@ -31,7 +31,7 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	var launches int
 	var launchedSource string
 	var launchedArgs []string
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		launches++
 		launchedSource = source
 		launchedArgs = append([]string(nil), args...)
@@ -40,6 +40,9 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 		}
 		_, _ = io.WriteString(out, "probe: child stdout line\n")
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -117,6 +120,37 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 }
 
+func TestStartRegistersWeaverBeforeStartingProcess(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := server{children: map[string]*weaverChild{}}
+	orig := launchWeaver
+	launchWeaver = func(_ string, _ []string, _ []string, register func(*exec.Cmd) error, _, _ io.Writer) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
+		registered := s.children[world.ConfigDir]
+		if registered == nil || registered.cmd != cmd || cmd.Process != nil {
+			t.Fatalf("supervision registration was not complete before Start: child=%#v process=%v", registered, cmd.Process)
+		}
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		writeWeaverMetadata(t, world, cmd.Process.Pid, "registered-before-start")
+		return cmd, nil
+	}
+	t.Cleanup(func() { launchWeaver = orig; _ = s.stopAll() })
+	if _, err := s.startWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConfigWarningsAreQuietUntilWeaverStartup(t *testing.T) {
 	var logs bytes.Buffer
 	originalLogOut := millLogOut
@@ -190,8 +224,11 @@ func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 			}
 		}
 	})
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -394,8 +431,11 @@ func TestStartPassesConfiguredNameToWeaverMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	orig := launchWeaver
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -530,9 +570,9 @@ func TestStartFailsBeforeLaunchWhenSourceCannotResolve(t *testing.T) {
 	cfg := tempConfigWithoutSource(t)
 	orig := launchWeaver
 	launched := false
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		launched = true
-		return orig(source, args, nil, out, errOut)
+		return orig(source, args, nil, register, out, errOut)
 	}
 	t.Cleanup(func() { launchWeaver = orig })
 	s := server{children: map[string]*weaverChild{}}
@@ -627,9 +667,9 @@ func TestStartFailsLoudlyOnStaleMetadata(t *testing.T) {
 	}
 	orig := launchWeaver
 	launched := false
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		launched = true
-		return orig(source, args, nil, out, errOut)
+		return orig(source, args, nil, register, out, errOut)
 	}
 	t.Cleanup(func() { launchWeaver = orig })
 	s := server{children: map[string]*weaverChild{}}
@@ -776,8 +816,11 @@ func TestDifferentReposHaveDistinctRuntimeDirsAndStopSelectedOnly(t *testing.T) 
 	cfgA := tempConfig(t, source)
 	cfgB := tempConfig(t, source)
 	orig := launchWeaver
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -849,8 +892,11 @@ func TestStartFailsWhenWeaverExitsBeforeReadyMetadata(t *testing.T) {
 	source := tempSource(t)
 	cfg := tempConfig(t, source)
 	orig := launchWeaver
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("false")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -899,8 +945,11 @@ func TestStartUsesConfiguredReadyTimeout(t *testing.T) {
 	cfg := tempConfig(t, source)
 	started := make(chan int, 1)
 	orig := launchWeaver
-	launchWeaver = func(source string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(source string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}

@@ -108,7 +108,7 @@ func TestAutostartQueueLimitsConcurrentStartsAndContinuesAfterFailure(t *testing
 	var launchMu sync.Mutex
 	active, peak := 0, 0
 	originalLaunch := launchWeaver
-	launchWeaver = func(_ string, args []string, _ []string, out, errOut io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, args []string, _ []string, register func(*exec.Cmd) error, out, errOut io.Writer) (*exec.Cmd, error) {
 		configDir := configDirArg(args)
 		release := make(chan struct{})
 		launchMu.Lock()
@@ -129,6 +129,9 @@ func TestAutostartQueueLimitsConcurrentStartsAndContinuesAfterFailure(t *testing
 			return nil, errors.New("injected autostart launch failure")
 		}
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -229,8 +232,11 @@ func TestAutostartRegistrationRequiresExplicitOptInAcrossFreshServers(t *testing
 	s := newAutostartTestServer()
 	t.Cleanup(func() { _ = s.stopAll() })
 	originalLaunch := launchWeaver
-	launchWeaver = func(_ string, args []string, _ []string, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, args []string, _ []string, register func(*exec.Cmd) error, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -275,7 +281,7 @@ func TestInitAutoStartRegistersBeforeFailedLaunchAndStealthStartsImmediately(t *
 	}
 	prelaunch := make(chan prelaunchObservation, 1)
 	originalLaunch := launchWeaver
-	launchWeaver = func(_ string, args []string, _ []string, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, args []string, _ []string, register func(*exec.Cmd) error, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
 		entries, err := readAutoStartRegistrations()
 		prelaunch <- prelaunchObservation{
 			registered: err == nil && len(entries) == 1 && entries[0].ConfigDir == configDirArg(args),
@@ -325,9 +331,12 @@ func TestInitAutoStartRegistersBeforeFailedLaunchAndStealthStartsImmediately(t *
 	repo := tempMillstrandCheckout(t)
 	stealth := newAutostartTestServer()
 	started := make(chan struct{}, 1)
-	launchWeaver = func(_ string, args []string, _ []string, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, args []string, _ []string, register func(*exec.Cmd) error, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
 		started <- struct{}{}
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -399,8 +408,11 @@ func TestAutostartShutdownCancelsReadyWaitJoinsChildrenAndLeavesQueueUnstarted(t
 	s := newAutostartTestServer()
 	launches := make(chan autostartLaunch, len(worlds))
 	originalLaunch := launchWeaver
-	launchWeaver = func(_ string, args []string, _ []string, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
+	launchWeaver = func(_ string, args []string, _ []string, register func(*exec.Cmd) error, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "60")
+		if err := register(cmd); err != nil {
+			return nil, err
+		}
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
