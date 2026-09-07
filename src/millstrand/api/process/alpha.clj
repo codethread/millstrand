@@ -6,7 +6,12 @@
   terminal facts, and the owner/key reservation for the selected Mill lifetime.
   The API is not a `strand` op or a public JSON socket operation. Callers pass
   the runtime explicitly and reconcile terminal facts into their own durable
-  state machines."
+  state machines.
+
+  Cancellation results are typed process facts: `:stop` is `:graceful`,
+  `:forced`, or `:uncertain`, with the leader's optional `:observed-exit`.
+  During startup, Mill may admit the launching Weaver with an optional private
+  startup token; ready Weavers are admitted by their published identity."
   (:refer-clojure :exclude [get])
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.process.internal :as internal]

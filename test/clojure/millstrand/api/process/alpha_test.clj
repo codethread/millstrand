@@ -41,7 +41,9 @@
                      "process.cancel" (do (reset! phase "terminal")
                                           (-> (wire-record "terminal")
                                               (dissoc :exit)
-                                              (assoc :cancellation {:reason "cancelled"})))
+                                              (assoc :cancellation
+                                                     {:reason "cancelled"
+                                                      :stop "graceful"})))
                      "process.acknowledge" (do (reset! acknowledged true)
                                                {:acknowledged true
                                                 :handle "process-test"})))}]
@@ -93,6 +95,36 @@
                                       "handle" "process-test"}]]
              @calls))))
 
+(defn mill-wire-cancelled
+  [stop]
+  {"handle" "process-test"
+   "owner" "agent-harness/run"
+   "key" "run-42"
+   "phase" "terminal"
+   "output" {"stdout_ref" "/tmp/stdout.log"
+             "stderr_ref" "/tmp/stderr.log"}
+   "cancellation" {"reason" "cancelled by owner"
+                   "stop" stop
+                   "observed_exit" {"code" -1 "signal" "killed"}}})
+
+(t/deftest mill-wire-cancellation-projects-stop-and-observed-exit
+  (doseq [stop ["graceful" "forced"]]
+    (let [runtime {:process-control (fn [_ _] (mill-wire-cancelled stop))}
+          row (process/get runtime "process-test")]
+      (t/is (= {:handle "process-test"
+                :owner :agent-harness/run
+                :key "run-42"
+                :phase :terminal
+                :output {:stdout-ref "/tmp/stdout.log"
+                         :stderr-ref "/tmp/stderr.log"}
+                :cancellation {:reason "cancelled by owner"
+                               :stop (keyword stop)
+                               :observed-exit {:code -1 :signal "killed"}}}
+               row)
+            stop)
+      (t/is (nil? (get-in row [:cancellation :observed_exit]))
+            stop))))
+
 (t/deftest acknowledgement-result-is-closed-and-correlated
   (let [runtime {:process-control
                  (fn [_ _]
@@ -141,6 +173,41 @@
                            :stderr-ref "/tmp/stderr"}
                   :exit {:code 0 :signal nil}}
                  row)))
+      (finally
+        (.close server)
+        @response
+        (.delete socket-file)))))
+
+(t/deftest cancellation-wire-json-roundtrips-through-a-unix-socket
+  (let [socket-file (java.io.File/createTempFile "mill-process-" ".sock")
+        _ (.delete socket-file)
+        socket-path (.getAbsolutePath socket-file)
+        server (doto (ServerSocketChannel/open StandardProtocolFamily/UNIX)
+                 (.bind (UnixDomainSocketAddress/of socket-path)))
+        response (future
+                   (with-open [channel (.accept server)
+                               reader (BufferedReader.
+                                       (io/reader (Channels/newInputStream channel)))
+                               writer (io/writer (Channels/newOutputStream channel))]
+                     (let [request (json/read-str (.readLine reader))]
+                       (.write writer
+                               (json/write-str
+                                {"protocol_version" 3
+                                 "request_id" (get request "request_id")
+                                 "ok" true
+                                 "result" (mill-wire-cancelled "forced")}))
+                       (.write writer "\n")
+                       (.flush writer))))]
+    (try
+      (let [row (process/get {:metadata {:nonce "socket-weaver"}
+                              :process-control-socket socket-path}
+                             "process-test")]
+        (t/is (= {:reason "cancelled by owner"
+                  :stop :forced
+                  :observed-exit {:code -1 :signal "killed"}}
+                 (:cancellation row)))
+        (t/is (nil? (:exit row)))
+        (t/is (nil? (get-in row [:cancellation :observed_exit]))))
       (finally
         (.close server)
         @response

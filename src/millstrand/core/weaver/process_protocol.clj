@@ -62,6 +62,16 @@
         (fail! "Mill process custody control channel is unavailable"
                {:code "process/control-unavailable" :file (str file)})))))
 
+(defn- launch-token
+  "Return the launch secret Mill handed this process, if it launched us.
+
+  Mill needs this to admit a Weaver whose config evaluation reaches for its own
+  custody before startup has published any identity Mill can recognise."
+  []
+  (let [token (System/getenv "MILLSTRAND_MILL_LAUNCH_TOKEN")]
+    (when-not (str/blank? token)
+      token)))
+
 (defn- request! [runtime operation arguments]
   (let [weaver-id (or (get-in runtime [:metadata :nonce])
                       (get-in runtime [:metadata :weaver-id]))]
@@ -71,11 +81,13 @@
     (let [socket-path ^String (or (:process-control-socket runtime)
                                   (:socket_path (mill-metadata)))
           request-id (str (java.util.UUID/randomUUID))
-          request {"protocol_version" protocol-version
-                   "request_id" request-id
-                   "weaver_id" weaver-id
-                   "operation" operation
-                   "arguments" arguments}]
+          token (launch-token)
+          request (cond-> {"protocol_version" protocol-version
+                           "request_id" request-id
+                           "weaver_id" weaver-id
+                           "operation" operation
+                           "arguments" arguments}
+                    token (assoc "launch_token" token))]
       (try
         (validate-request! request)
         (with-open [channel (SocketChannel/open StandardProtocolFamily/UNIX)

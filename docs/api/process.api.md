@@ -6,6 +6,8 @@ Explicit-runtime API for Mill-owned native process custody.
 
 This trusted in-process surface launches shell-free argv vectors through the Weaver-to-Mill control channel. Mill owns process trees, output references, terminal facts, and the owner/key reservation for the selected Mill lifetime. The API is not a `strand` op or a public JSON socket operation. Callers pass the runtime explicitly and reconcile terminal facts into their own durable state machines.
 
+Cancellation results are typed process facts: `:stop` is `:graceful`, `:forced`, or `:uncertain`, with the leader's optional `:observed-exit`. During startup, Mill may admit the launching Weaver with an optional private startup token; ready Weavers are admitted by their published identity.
+
 ## <a name="millstrand.api.process.alpha/acknowledge!">`acknowledge!`</a>
 
 ```clojure
@@ -17,7 +19,7 @@ Function.
 Acknowledge one terminal fact owned by `owner` and clean its output.
 
 Mill rejects a handle when the caller does not name its reserving owner.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L91-L102">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L96-L107">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/cancel!">`cancel!`</a>
 
@@ -30,7 +32,7 @@ Function.
 Request idempotent cancellation of `handle` owned by `owner`.
 
 Mill rejects a handle when the caller does not name its reserving owner.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L74-L84">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L79-L89">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/get">`get`</a>
 
@@ -41,7 +43,7 @@ Mill rejects a handle when the caller does not name its reserving owner.
 Function.
 
 Return one Mill-owned process record by opaque handle.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L47-L52">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L52-L57">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/launch!">`launch!`</a>
 
@@ -54,7 +56,7 @@ Function.
 Reserve `[owner key]` and launch one Mill-owned native process tree.
 
 Equal repeats converge on the existing record in its current phase. A different launch specification for an existing key fails loudly.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L26-L40">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L31-L45">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/list-owned">`list-owned`</a>
 
@@ -65,4 +67,4 @@ Equal repeats converge on the existing record in its current phase. A different 
 Function.
 
 Return every unacknowledged process record owned by `owner`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L58-L68">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L63-L73">Source</a></sub></p>

@@ -31,6 +31,16 @@
     (sequential? value) (mapv wire-keys value)
     :else value))
 
+(defn- normalize-cancellation
+  "Keywordize stop and hyphenate observed-exit from the Mill JSON wire shape."
+  [cancellation]
+  (let [observed (or (:observed-exit cancellation)
+                     (:observed_exit cancellation))]
+    (cond-> (-> cancellation
+                (assoc :stop (keyword (:stop cancellation)))
+                (dissoc :observed_exit))
+      observed (assoc :observed-exit observed))))
+
 (defn validate-record!
   "Validate and return one Mill wire process record."
   [record]
@@ -43,7 +53,10 @@
                                                 :stderr-ref (or (:stderr-ref %)
                                                                 (:stderr_ref %)))
                                          (dissoc :stdout_ref :stderr_ref)))
-                    (dissoc :launch_failure))]
+                    (dissoc :launch_failure))
+        decoded (cond-> decoded
+                  (:cancellation decoded)
+                  (update :cancellation normalize-cancellation))]
     (when-not (s/valid? :millstrand.core.specs/process-record decoded)
       (throw (ex-info "Mill returned a malformed process record"
                       {:code "process/malformed-record"
