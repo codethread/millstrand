@@ -768,12 +768,14 @@
   (let [field (inc depth)
         entry (inc field)]
     (concat
-     [(str (indent depth) name (when (seq doc) (str " — " doc)))
-      (str (indent field) "invocation: " (:mode invocation))]
-     ;; classes render only where they exist: invocable leaf nodes
-     ;; (DELTA-Lhc-003.CC1); interior nodes carry null and stay silent.
+     [(str (indent depth) name (when (seq doc) (str " — " doc)))]
+     ;; Classes render only where they exist: invocable leaf nodes
+     ;; (DELTA-Lhc-003.CC1); interior nodes carry null and stay silent. The
+     ;; standard deadline is implied; only non-standard budgets need attention.
      (when hook-class
-       [(str (indent field) "hook-class: " hook-class "   deadline: " deadline-class)])
+       [(str (indent field) "hook-class: " hook-class
+             (when-not (= "standard" deadline-class)
+               (str "   deadline: " deadline-class)))])
      (spaced
       (when (seq (:flags invocation))
         (cons (str (indent field) "flags:")
