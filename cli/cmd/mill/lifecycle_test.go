@@ -356,6 +356,12 @@ func TestWeaverListIncludesSupervisedAndMetadataDiscovered(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
 	writeWeaverMetadata(t, worldA, cmd.Process.Pid, "weaver-a")
 	writeWeaverMetadata(t, worldB, os.Getpid(), "weaver-b")
+	if err := writeRestartRecord(worldB, restartRecord{
+		State: restartStateFailed, TransitionID: "retained-b",
+		Failure: &restartFailure{Stage: "launch", Message: "replacement failed"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	s := server{children: map[string]*weaverChild{worldA.ConfigDir: {cmd: cmd, world: worldA, done: make(chan error, 1)}}}
 	rows, err := s.weaverList()
 	if err != nil {
@@ -370,9 +376,16 @@ func TestWeaverListIncludesSupervisedAndMetadataDiscovered(t *testing.T) {
 	}
 	for _, id := range []string{"weaver-a", "weaver-b"} {
 		row := byID[id]
-		if row == nil || row["state"] != "running" || row["name"] == "" || row["config_dir"] == "" || row["state_dir"] == "" || row["data_dir"] == "" || row["database_path"] == "" || row["socket_path"] == "" || row["nrepl"] == nil || row["started_at"] == "" {
+		wantState := "running"
+		if id == "weaver-b" {
+			wantState = "failed"
+		}
+		if row == nil || row["state"] != wantState || row["name"] == "" || row["config_dir"] == "" || row["state_dir"] == "" || row["data_dir"] == "" || row["database_path"] == "" || row["socket_path"] == "" || row["nrepl"] == nil || row["started_at"] == "" {
 			t.Fatalf("bad list row for %s: %#v", id, row)
 		}
+	}
+	if failure, ok := byID["weaver-b"]["restart_failure"].(restartFailure); !ok || failure.Message != "replacement failed" {
+		t.Fatalf("discovered list row lost retained restart failure: %#v", byID["weaver-b"])
 	}
 }
 

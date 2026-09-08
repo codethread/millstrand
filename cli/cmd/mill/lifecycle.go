@@ -490,13 +490,43 @@ func (s *server) weaverList() ([]map[string]any, error) {
 		if seen[stateDir] {
 			continue
 		}
-		status, err := readStatusFile(path)
+		status, world, err := readStatusFileWithWorld(path)
 		if err != nil {
 			return nil, err
 		}
+		status = s.mergeDiscoveredRestartStatus(world, status)
 		rows = append(rows, status)
 	}
 	return rows, nil
+}
+
+func (s *server) mergeDiscoveredRestartStatus(world config.World, status map[string]any) map[string]any {
+	if status["state"] == "stale" {
+		return status
+	}
+	record, ok, err := s.readRestartRecordSummaryCached(world)
+	if err != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = err.Error()
+		return status
+	}
+	if !ok {
+		return status
+	}
+	if record.State == restartStateRunning {
+		mergeRestartRecordCompactStatus(status, record)
+		return status
+	}
+	compact := record.compactStatus(world)
+	status["state"] = compact["state"]
+	for _, key := range []string{"generation_id", "previous_generation_id", "transition_id", "old_generation_stopped", "restart_failure"} {
+		if value, present := compact[key]; present {
+			status[key] = value
+		} else {
+			delete(status, key)
+		}
+	}
+	return status
 }
 
 func (s *server) weaverStatusForWorld(world config.World) map[string]any {
@@ -714,25 +744,25 @@ func readStatusWithRestartRecord(world config.World, readRestart func(config.Wor
 	return status, false
 }
 
-func readStatusFile(path string) (map[string]any, error) {
+func readStatusFileWithWorld(path string) (map[string]any, config.World, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, config.World{}, err
 	}
 	var m client.Metadata
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("malformed weaver metadata %s: %w", path, err)
+		return nil, config.World{}, fmt.Errorf("malformed weaver metadata %s: %w", path, err)
 	}
 	world := config.World{ConfigDir: m.ConfigDir, StateDir: m.StateDir, DataDir: m.DataDir, DBPath: m.DatabasePathString()}
 	if staleReason := validateMetadata(world, m); staleReason != "" {
 		if strings.HasPrefix(staleReason, "pid ") {
 			st := statusFromMetadata(m, "stale")
 			st["stale_reason"] = staleReason
-			return st, nil
+			return st, world, nil
 		}
-		return nil, fmt.Errorf("malformed weaver metadata %s: %s", path, staleReason)
+		return nil, config.World{}, fmt.Errorf("malformed weaver metadata %s: %s", path, staleReason)
 	}
-	return statusFromMetadata(m, "running"), nil
+	return statusFromMetadata(m, "running"), world, nil
 }
 
 func statusFromMetadata(m client.Metadata, state string) map[string]any {
