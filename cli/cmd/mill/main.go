@@ -52,6 +52,10 @@ type server struct {
 	// controlPeerPID is injectable only for in-process tests. Production reads
 	// the kernel-authenticated PID from each Unix control connection.
 	controlPeerPID func(net.Conn) (int, error)
+	// restartSummaryCache avoids decoding retained probe diagnostics on every
+	// routine status/list poll. Entries are invalidated when the file's size or
+	// modification time changes.
+	restartSummaryCache map[string]restartSummaryCacheEntry
 }
 
 type weaverChild struct {

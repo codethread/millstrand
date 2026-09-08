@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func restartStatusFixture(t testing.TB) (*server, client.MillWorldRequest) {
 		Log: "probe.log", Completed: []string{},
 		Diagnostics: []map[string]any{{
 			"stage": "probe/failure", "status": "failed",
-			"data": map[string]any{"detail": strings.Repeat("x", 3*1024*1024)},
+			"data": map[string]any{"detail": strings.Repeat("x", 5*1024*1024)},
 		}},
 	}
 	if err := writeRestartRecord(world, restartRecord{
@@ -29,20 +30,62 @@ func restartStatusFixture(t testing.TB) (*server, client.MillWorldRequest) {
 	return &server{transitions: map[string]*weaverTransition{}}, client.MillWorldRequest{ConfigDir: world.ConfigDir}
 }
 
-func TestRestartStatusReportsOnlyActivePhaseAndRetainsFullStatus(t *testing.T) {
+func TestRestartStatusCacheInvalidatesAfterLocalRecordChange(t *testing.T) {
+	s, request := restartStatusFixture(t)
+	first, err := s.weaverStatus(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failure := first["restart_failure"].(restartFailure); failure.Message != "retained failure" {
+		t.Fatalf("unexpected initial failure: %#v", first)
+	}
+	world, err := resolveLifecycleWorld(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRestartRecord(world, restartRecord{
+		State: restartStateFailed, TransitionID: "changed-transition",
+		Failure: &restartFailure{Stage: "launch", Message: "changed failure"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.weaverStatus(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure, ok := second["restart_failure"].(restartFailure)
+	if !ok || failure.Message != "changed failure" || second["transition_id"] != "changed-transition" {
+		t.Fatalf("status cache did not observe changed local record: %#v", second)
+	}
+}
+
+func TestRestartStatusUsesCompactProjectionAndDetailedReaderRetainsProbe(t *testing.T) {
 	s, world := restartStatusFixture(t)
 	request := client.MillRequest{
 		ProtocolVersion: client.MillProtocolVersion, RequestID: "progress", World: world,
 		Operation: "weaver-restart-status",
 	}
-	fullBefore, err := s.weaverStatus(world)
-	if err != nil || fullBefore["state"] != "failed" || fullBefore["probe"] == nil {
-		t.Fatalf("missing retained failure: %v, %v", fullBefore["state"], err)
+	compactBefore, err := s.weaverStatus(world)
+	if err != nil || compactBefore["state"] != "failed" || compactBefore["probe"] != nil || compactBefore["diagnostics"] != nil {
+		t.Fatalf("status must omit retained probe diagnostics: %#v, %v", compactBefore, err)
+	}
+	if failure, ok := compactBefore["restart_failure"].(restartFailure); !ok || failure.Message != "retained failure" {
+		t.Fatalf("status must retain the compact failure explanation: %#v", compactBefore)
+	}
+	// The detailed reader is the explicit inspection boundary and retains the
+	// full probe report that routine status intentionally leaves out.
+	actualWorld, err := resolveLifecycleWorld(world)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detailed, present, err := readRestartRecordDetailed(actualWorld)
+	if err != nil || !present || detailed.Probe == nil || len(detailed.Probe.Diagnostics) != 1 {
+		t.Fatalf("detailed restart record lost probe diagnostics: %#v present=%v err=%v", detailed, present, err)
 	}
 	for _, phase := range []string{"idle", "probing", "restarting", "running", "failed"} {
 		t.Run(phase, func(t *testing.T) {
 			if phase != "idle" {
-				s.transitions[world.ConfigDir] = &weaverTransition{stateValue: phase, result: fullBefore}
+				s.transitions[world.ConfigDir] = &weaverTransition{stateValue: phase, result: compactBefore}
 			}
 			response := callMillRequest(t, s, request)
 			if !response.OK {
@@ -55,8 +98,8 @@ func TestRestartStatusReportsOnlyActivePhaseAndRetainsFullStatus(t *testing.T) {
 		})
 	}
 	delete(s.transitions, world.ConfigDir)
-	fullAfter, err := s.weaverStatus(world)
-	if err != nil || !reflect.DeepEqual(fullAfter, fullBefore) {
+	compactAfter, err := s.weaverStatus(world)
+	if err != nil || !reflect.DeepEqual(compactAfter, compactBefore) {
 		t.Fatalf("polling changed retained status: %v", err)
 	}
 }
@@ -83,10 +126,27 @@ func TestRestartStatusRejectsMalformedResponse(t *testing.T) {
 
 func BenchmarkRestartPolling(b *testing.B) {
 	s, world := restartStatusFixture(b)
+	detailedWorld, err := resolveLifecycleWorld(world)
+	if err != nil {
+		b.Fatal(err)
+	}
 	for _, variant := range []struct {
 		name string
 		read func(client.MillWorldRequest) (map[string]any, error)
-	}{{"full-status", s.weaverStatus}, {"progress", s.weaverRestartStatus}} {
+	}{
+		{"compact-status", s.weaverStatus},
+		{"progress", s.weaverRestartStatus},
+		{"detailed-inspection", func(client.MillWorldRequest) (map[string]any, error) {
+			record, present, err := readRestartRecordDetailed(detailedWorld)
+			if err != nil {
+				return nil, err
+			}
+			if !present {
+				return nil, fmt.Errorf("restart record missing")
+			}
+			return record.status(detailedWorld), nil
+		}},
+	} {
 		b.Run(variant.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
