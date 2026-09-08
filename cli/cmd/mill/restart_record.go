@@ -34,6 +34,15 @@ type restartRecord struct {
 	// value, and an explicit false stop flag must not disappear in projections.
 	generationIDPresent         bool `json:"-"`
 	oldGenerationStoppedPresent bool `json:"-"`
+	probePresent                bool `json:"-"`
+	probeSuccess                bool `json:"-"`
+}
+
+type restartSummaryCacheEntry struct {
+	info    os.FileInfo
+	record  restartRecord
+	present bool
+	err     error
 }
 
 type restartRecordValidationMode uint8
@@ -110,6 +119,8 @@ func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) 
 	return record, true, nil
 }
 
+var readRestartRecordDetailedFn = readRestartRecordDetailed
+
 func rawFieldPresent(raw map[string]json.RawMessage, field string) bool {
 	_, present := raw[field]
 	return present
@@ -165,15 +176,66 @@ func (r restartRecord) status(world config.World) map[string]any {
 	return status
 }
 
+func (r restartRecord) compactStatus(world config.World) map[string]any {
+	status := baseStatus(world, r.State)
+	if r.GenerationID != "" {
+		status["generation_id"] = r.GenerationID
+	}
+	if r.PreviousGeneration != "" {
+		status["previous_generation_id"] = r.PreviousGeneration
+	}
+	status["transition_id"] = r.TransitionID
+	if r.OldGenerationStopped || r.oldGenerationStoppedPresent {
+		status["old_generation_stopped"] = r.OldGenerationStopped
+	}
+	if r.Failure != nil {
+		status["restart_failure"] = *r.Failure
+	}
+	return status
+}
+
 func mergeRestartRecordStatus(status map[string]any, record restartRecord) {
+	if record.GenerationID != "" || record.generationIDPresent {
+		status["generation_id"] = record.GenerationID
+	}
+	if record.PreviousGeneration != "" {
+		status["previous_generation_id"] = record.PreviousGeneration
+	}
+	if record.TransitionID != "" {
+		status["transition_id"] = record.TransitionID
+	}
+	if record.OldGenerationStopped || record.oldGenerationStoppedPresent {
+		status["old_generation_stopped"] = record.OldGenerationStopped
+	}
+	if record.Probe != nil {
+		status["probe"] = *record.Probe
+	}
+	if record.Failure != nil {
+		status["restart_failure"] = *record.Failure
+		status["diagnostics"] = []map[string]any{{
+			"stage":  record.Failure.Stage,
+			"status": "failed",
+			"data": map[string]any{
+				"message":  record.Failure.Message,
+				"log_path": record.Failure.LogPath,
+			},
+		}}
+	}
+}
+
+func compactRestartRecord(record restartRecord) restartRecord {
+	record.Probe = nil
+	record.probePresent = false
+	record.probeSuccess = false
+	return record
+}
+
+func mergeRestartRecordCompactStatus(status map[string]any, record restartRecord) {
 	if record.GenerationID != "" {
 		status["generation_id"] = record.GenerationID
 	}
 	if record.TransitionID != "" {
 		status["transition_id"] = record.TransitionID
-	}
-	if record.Probe != nil {
-		status["probe"] = *record.Probe
 	}
 	if record.Failure != nil {
 		status["restart_failure"] = *record.Failure

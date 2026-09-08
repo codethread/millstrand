@@ -176,6 +176,28 @@ func (h *restartProcessHarness) status(t *testing.T, workspace string) map[strin
 	return decodeObject(t, out)
 }
 
+func (h *restartProcessHarness) statusDetails(t *testing.T, workspace string) map[string]any {
+	t.Helper()
+	out, err := h.run("weaver", "status", "--details", "--workspace", workspace)
+	if err != nil {
+		t.Fatalf("weaver status --details: %v\n%s", err, out)
+	}
+	return decodeObject(t, out)
+}
+
+func (h *restartProcessHarness) list(t *testing.T) []map[string]any {
+	t.Helper()
+	out, err := h.run("weaver", "list")
+	if err != nil {
+		t.Fatalf("weaver list: %v\n%s", err, out)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &rows); err != nil {
+		t.Fatalf("expected weaver list JSON array, got %q: %v", out, err)
+	}
+	return rows
+}
+
 func (h *restartProcessHarness) startDuringProbe(t *testing.T, workspace string) map[string]any {
 	t.Helper()
 	return h.runJSON(t, "weaver", "start", "--workspace", workspace)
@@ -336,7 +358,9 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 			t.Fatalf("restart did not perform exactly one generation change: old=%#v final=%#v", old, finalStatus)
 		}
 		h.pids = append(h.pids, requiredPID(t, finalStatus))
-		assertSuccessfulProbeDiagnostics(t, finalStatus)
+		detailed := assertDetailsIdentity(t, h, workspace, requiredPID(t, finalStatus), requiredString(t, finalStatus, "generation_id"), "successful probe")
+		assertSuccessfulProbeDiagnostics(t, detailed)
+		assertCompactPolling(t, h, workspace, requiredPID(t, finalStatus), requiredString(t, finalStatus, "generation_id"), "successful probe")
 		if err := waitProcessExit(oldPID, 10*time.Second); err != nil {
 			t.Fatal(err)
 		}
@@ -357,7 +381,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		if err := validateRestartEnvelopeForAcceptance(status, "restart"); err != nil {
 			t.Fatal(err)
 		}
-		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "source/dependency")
+		assertFailedRestartResult(t, status, "source/dependency")
+		detailed := assertDetailsIdentity(t, h, workspace, oldPID, oldGeneration, "source/dependency")
+		assertRetainedProbeFailure(t, detailed, oldPID, oldGeneration, "source/dependency")
+		assertCompactPolling(t, h, workspace, oldPID, oldGeneration, "source/dependency")
 		human := exec.Command(h.millBin, "weaver", "restart", "--workspace", workspace)
 		human.Dir = h.source
 		humanOut, err := human.Output()
@@ -369,7 +396,9 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 				t.Fatalf("human failed probe missing %q:\n%s", want, humanOut)
 			}
 		}
-		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "human source/dependency")
+		detailed = assertDetailsIdentity(t, h, workspace, oldPID, oldGeneration, "human source/dependency")
+		assertRetainedProbeFailure(t, detailed, oldPID, oldGeneration, "human source/dependency")
+		assertCompactPolling(t, h, workspace, oldPID, oldGeneration, "human source/dependency")
 	})
 
 	t.Run("invalid candidate registry probe retains diagnostics", func(t *testing.T) {
@@ -394,7 +423,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		if err := validateRestartEnvelopeForAcceptance(status, "restart"); err != nil {
 			t.Fatal(err)
 		}
-		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "candidate-registry")
+		assertFailedRestartResult(t, status, "candidate-registry")
+		detailed := assertDetailsIdentity(t, h, workspace, oldPID, oldGeneration, "candidate-registry")
+		assertRetainedProbeFailure(t, detailed, oldPID, oldGeneration, "candidate-registry")
+		assertCompactPolling(t, h, workspace, oldPID, oldGeneration, "candidate-registry")
 	})
 
 	t.Run("replacement startup failure admits no generation", func(t *testing.T) {
@@ -495,6 +527,62 @@ func appendInit(t *testing.T, path, text string) {
 	defer func() { _ = file.Close() }()
 	if _, err := file.WriteString("\n" + text); err != nil {
 		t.Fatalf("append init.clj: %v", err)
+	}
+}
+
+func assertCompactPolling(t *testing.T, h *restartProcessHarness, workspace string, expectedPID int, expectedGeneration, label string) {
+	t.Helper()
+	status := h.status(t, workspace)
+	assertCompactStatus(t, status, label+" status")
+	assertStatusIdentity(t, status, expectedPID, expectedGeneration, label+" status")
+
+	wantWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatalf("resolve workspace %q for list matching: %v", workspace, err)
+	}
+	var row map[string]any
+	rows := h.list(t)
+	for _, candidate := range rows {
+		if candidate["config_dir"] == workspace || candidate["config_dir"] == wantWorkspace {
+			row = candidate
+			break
+		}
+	}
+	if row == nil {
+		t.Fatalf("%s list omitted workspace %q: %#v", label, workspace, rows)
+	}
+	assertCompactStatus(t, row, label+" list")
+	assertStatusIdentity(t, row, expectedPID, expectedGeneration, label+" list")
+}
+
+func assertDetailsIdentity(t *testing.T, h *restartProcessHarness, workspace string, expectedPID int, expectedGeneration, label string) map[string]any {
+	t.Helper()
+	detailed := h.statusDetails(t, workspace)
+	assertStatusIdentity(t, detailed, expectedPID, expectedGeneration, label+" details")
+	return detailed
+}
+
+func assertCompactStatus(t *testing.T, status map[string]any, label string) {
+	t.Helper()
+	for _, key := range []string{"probe", "diagnostics"} {
+		if _, present := status[key]; present {
+			t.Fatalf("%s exposed retained %s diagnostics: %#v", label, key, status)
+		}
+	}
+}
+
+func assertStatusIdentity(t *testing.T, status map[string]any, expectedPID int, expectedGeneration, label string) {
+	t.Helper()
+	if requiredPID(t, status) != expectedPID || requiredString(t, status, "generation_id") != expectedGeneration {
+		t.Fatalf("%s changed admitted identity: want pid=%d generation=%s, got %#v", label, expectedPID, expectedGeneration, status)
+	}
+}
+
+func assertFailedRestartResult(t *testing.T, status map[string]any, label string) {
+	t.Helper()
+	diagnostics, ok := status["diagnostics"].([]any)
+	if !ok || len(diagnostics) == 0 {
+		t.Fatalf("%s restart --json lost failure diagnostics: %#v", label, status)
 	}
 }
 

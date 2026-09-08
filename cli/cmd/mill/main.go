@@ -52,6 +52,10 @@ type server struct {
 	// controlPeerPID is injectable only for in-process tests. Production reads
 	// the kernel-authenticated PID from each Unix control connection.
 	controlPeerPID func(net.Conn) (int, error)
+	// restartSummaryCache avoids decoding retained probe diagnostics on every
+	// routine status/list poll. Entries are invalidated when the file identity,
+	// size, or modification time changes.
+	restartSummaryCache map[string]restartSummaryCacheEntry
 }
 
 type weaverChild struct {
@@ -222,7 +226,7 @@ Environment:
 			return errors.New("--name requires a non-empty value")
 		}
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-start", workspace, name, readyTimeout)
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-start", workspace, name, readyTimeout, false)
 	}}
 	start.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
@@ -233,7 +237,7 @@ Environment:
 		workspace, _ := cmd.Flags().GetString("workspace")
 		readyTimeout, _ := cmd.Flags().GetString("ready-timeout")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-restart", workspace, "", readyTimeout)
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-restart", workspace, "", readyTimeout, false)
 	}}
 	restart.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	restart.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
@@ -242,15 +246,17 @@ Environment:
 	status := &cobra.Command{Use: "status", Short: "Show selected workspace weaver status through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-status", workspace, "", "")
+		details, _ := cmd.Flags().GetBool("details")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-status", workspace, "", "", details)
 	}}
 	status.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	status.Flags().Bool("json", false, "print the full result as JSON without progress messages")
+	status.Flags().Bool("details", false, "include retained restart probe diagnostics (read-only)")
 	weaver.AddCommand(status)
 	stop := &cobra.Command{Use: "stop", Short: "Stop the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-stop", workspace, "", "")
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-stop", workspace, "", "", false)
 	}}
 	stop.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	stop.Flags().Bool("json", false, "print the full result as JSON without progress messages")
@@ -520,7 +526,7 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		if projection := millStatusProjection(result); projection != nil {
-			if err := validateMillStatusProjection(projection); err != nil {
+			if err := validateMillStatusProjection(projection, req.World.Details); err != nil {
 				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-status-invalid-result", "weaver status returned an invalid projection", err.Error()))
 				return
 			}

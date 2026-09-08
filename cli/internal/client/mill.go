@@ -58,6 +58,7 @@ type MillWorldRequest struct {
 	AutoStart      bool   `json:"auto_start,omitempty"`
 	ReadyTimeoutMs int64  `json:"ready_timeout_ms,omitempty"`
 	Stealth        bool   `json:"stealth,omitempty"`
+	Details        bool   `json:"details,omitempty"`
 }
 
 type MillResponse struct {

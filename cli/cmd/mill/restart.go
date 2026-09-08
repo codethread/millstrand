@@ -23,8 +23,19 @@ const (
 )
 
 func transitionResultStatus(t *weaverTransition) map[string]any {
+	status := transitionResultStatusDetailed(t)
+	if failure, ok := status["failure"]; ok {
+		status["restart_failure"] = failure
+		delete(status, "failure")
+	}
+	delete(status, "probe")
+	delete(status, "diagnostics")
+	return status
+}
+
+func transitionResultStatusDetailed(t *weaverTransition) map[string]any {
 	if t.result != nil {
-		return restartBoundaryStatus(t.world, t.result)
+		return restartBoundaryStatus(t.world, cloneStatus(t.result))
 	}
 	status := baseStatus(t.world, t.state())
 	status["transition_id"] = t.transitionID
@@ -59,10 +70,10 @@ func restartResultProjection(status map[string]any) map[string]any {
 }
 
 func validateRestartResult(status map[string]any) error {
-	return validateRestartProjection(status, true)
+	return validateRestartProjection(status, true, false)
 }
 
-func validateRestartProjection(status map[string]any, withOperation bool) error {
+func validateRestartProjection(status map[string]any, withOperation, allowRunningDiagnostics bool) error {
 	if status == nil {
 		return errors.New("restart projection must be an object")
 	}
@@ -132,7 +143,7 @@ func validateRestartProjection(status map[string]any, withOperation bool) error 
 		if _, ok := status["generation_id"]; !ok {
 			return errors.New("running restart projection missing generation_id")
 		}
-		if _, ok := status["diagnostics"]; ok {
+		if _, ok := status["diagnostics"]; ok && !allowRunningDiagnostics {
 			return errors.New("running restart projection must not contain diagnostics")
 		}
 	case restartStateFailed:
@@ -185,8 +196,8 @@ func validateRestartDiagnostic(row map[string]any) error {
 	return nil
 }
 
-func validateMillStatusProjection(status map[string]any) error {
-	return validateRestartProjection(status, false)
+func validateMillStatusProjection(status map[string]any, details bool) error {
+	return validateRestartProjection(status, false, details)
 }
 
 func millStatusProjection(status map[string]any) map[string]any {

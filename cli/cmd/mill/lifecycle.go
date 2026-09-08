@@ -413,7 +413,41 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	if req.Details {
+		return s.weaverStatusDetailedForWorld(world), nil
+	}
 	return s.weaverStatusForWorld(world), nil
+}
+
+func (s *server) weaverStatusDetailedForWorld(world config.World) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		if transition.state() == restartStateFailed {
+			return transitionResultStatusDetailed(transition)
+		}
+	}
+	record, ok, recordErr := readRestartRecordDetailed(world)
+	if recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
+		return status
+	}
+	if ok && (record.State == restartStateProbing || record.State == restartStateRestarting || record.State == restartStateFailed) {
+		return record.status(world)
+	}
+	readRecord := func(config.World) (restartRecord, bool, error) { return record, ok, nil }
+	if status, stale := readStatusWithRestartRecord(world, readRecord); status != nil {
+		if stale {
+			status["state"] = "stale"
+			return status
+		}
+		if ok && record.State == restartStateRunning {
+			mergeRestartRecordStatus(status, record)
+		}
+		return status
+	}
+	return baseStatus(world, "none")
 }
 
 func (s *server) weaverReplContext(req client.MillWorldRequest) (map[string]any, error) {
@@ -456,13 +490,43 @@ func (s *server) weaverList() ([]map[string]any, error) {
 		if seen[stateDir] {
 			continue
 		}
-		status, err := readStatusFile(path)
+		status, world, err := readStatusFileWithWorld(path)
 		if err != nil {
 			return nil, err
 		}
+		status = s.mergeDiscoveredRestartStatus(world, status)
 		rows = append(rows, status)
 	}
 	return rows, nil
+}
+
+func (s *server) mergeDiscoveredRestartStatus(world config.World, status map[string]any) map[string]any {
+	if status["state"] == "stale" {
+		return status
+	}
+	record, ok, err := s.readRestartRecordSummaryCached(world)
+	if err != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = err.Error()
+		return status
+	}
+	if !ok {
+		return status
+	}
+	if record.State == restartStateRunning {
+		mergeRestartRecordCompactStatus(status, record)
+		return status
+	}
+	compact := record.compactStatus(world)
+	status["state"] = compact["state"]
+	for _, key := range []string{"generation_id", "previous_generation_id", "transition_id", "old_generation_stopped", "restart_failure"} {
+		if value, present := compact[key]; present {
+			status[key] = value
+		} else {
+			delete(status, key)
+		}
+	}
+	return status
 }
 
 func (s *server) weaverStatusForWorld(world config.World) map[string]any {
@@ -484,14 +548,14 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 			return transitionResultStatus(transition)
 		}
 	}
-	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+	if record, ok, recordErr := s.readRestartRecordSummaryCached(world); recordErr != nil {
 		status := baseStatus(world, "stale")
 		status["stale_reason"] = recordErr.Error()
 		return status
-	} else if ok && record.State == restartStateFailed {
-		return record.status(world)
+	} else if ok && (record.State == restartStateProbing || record.State == restartStateRestarting || record.State == restartStateFailed) {
+		return record.compactStatus(world)
 	}
-	if status, stale := readStatus(world); status != nil {
+	if status, stale := s.readStatusCached(world); status != nil {
 		if stale {
 			status["state"] = "stale"
 		}
@@ -508,6 +572,36 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 		return status
 	}
 	return baseStatus(world, "none")
+}
+
+func (s *server) readStatusCached(world config.World) (map[string]any, bool) {
+	if s.restartSummaryCache == nil {
+		s.restartSummaryCache = map[string]restartSummaryCacheEntry{}
+	}
+	return readStatusWithRestartRecord(world, s.readRestartRecordSummaryCached)
+}
+
+func (s *server) readRestartRecordSummaryCached(world config.World) (restartRecord, bool, error) {
+	if s.restartSummaryCache == nil {
+		s.restartSummaryCache = map[string]restartSummaryCacheEntry{}
+	}
+	path := restartRecordPath(world)
+	info, err := os.Stat(path)
+	if err != nil {
+		delete(s.restartSummaryCache, path)
+		if os.IsNotExist(err) {
+			return restartRecord{}, false, nil
+		}
+		return restartRecord{}, false, fmt.Errorf("stat restart record %s: %w", path, err)
+	}
+	cached, ok := s.restartSummaryCache[path]
+	if ok && os.SameFile(cached.info, info) && cached.info.Size() == info.Size() && cached.info.ModTime().Equal(info.ModTime()) {
+		return cached.record, cached.present, cached.err
+	}
+	record, present, readErr := readRestartRecordDetailedFn(world)
+	compact := compactRestartRecord(record)
+	s.restartSummaryCache[path] = restartSummaryCacheEntry{info: info, record: compact, present: present, err: readErr}
+	return compact, present, readErr
 }
 
 func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error) {
@@ -619,6 +713,10 @@ func (s *server) stopAll() error {
 }
 
 func readStatus(world config.World) (map[string]any, bool) {
+	return readStatusWithRestartRecord(world, readRestartRecordDetailed)
+}
+
+func readStatusWithRestartRecord(world config.World, readRestart func(config.World) (restartRecord, bool, error)) (map[string]any, bool) {
 	metadataPath := filepath.Join(world.StateDir, "weaver.json")
 	b, err := os.ReadFile(metadataPath)
 	if err != nil {
@@ -636,35 +734,35 @@ func readStatus(world config.World) (map[string]any, bool) {
 		return st, true
 	}
 	status := statusFromMetadata(m, "running")
-	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+	if record, ok, recordErr := readRestart(world); recordErr != nil {
 		status["state"] = "stale"
 		status["stale_reason"] = recordErr.Error()
 		return status, true
 	} else if ok && record.State == restartStateRunning {
-		mergeRestartRecordStatus(status, record)
+		mergeRestartRecordCompactStatus(status, record)
 	}
 	return status, false
 }
 
-func readStatusFile(path string) (map[string]any, error) {
+func readStatusFileWithWorld(path string) (map[string]any, config.World, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, config.World{}, err
 	}
 	var m client.Metadata
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("malformed weaver metadata %s: %w", path, err)
+		return nil, config.World{}, fmt.Errorf("malformed weaver metadata %s: %w", path, err)
 	}
 	world := config.World{ConfigDir: m.ConfigDir, StateDir: m.StateDir, DataDir: m.DataDir, DBPath: m.DatabasePathString()}
 	if staleReason := validateMetadata(world, m); staleReason != "" {
 		if strings.HasPrefix(staleReason, "pid ") {
 			st := statusFromMetadata(m, "stale")
 			st["stale_reason"] = staleReason
-			return st, nil
+			return st, world, nil
 		}
-		return nil, fmt.Errorf("malformed weaver metadata %s: %s", path, staleReason)
+		return nil, config.World{}, fmt.Errorf("malformed weaver metadata %s: %s", path, staleReason)
 	}
-	return statusFromMetadata(m, "running"), nil
+	return statusFromMetadata(m, "running"), world, nil
 }
 
 func statusFromMetadata(m client.Metadata, state string) map[string]any {
