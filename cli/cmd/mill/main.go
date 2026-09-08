@@ -526,7 +526,7 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		if projection := millStatusProjection(result); projection != nil {
-			if err := validateMillStatusProjection(projection); err != nil {
+			if err := validateMillStatusProjection(projection, req.World.Details); err != nil {
 				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-status-invalid-result", "weaver status returned an invalid projection", err.Error()))
 				return
 			}
