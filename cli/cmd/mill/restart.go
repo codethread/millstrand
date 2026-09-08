@@ -23,8 +23,19 @@ const (
 )
 
 func transitionResultStatus(t *weaverTransition) map[string]any {
+	status := transitionResultStatusDetailed(t)
+	if failure, ok := status["failure"]; ok {
+		status["restart_failure"] = failure
+		delete(status, "failure")
+	}
+	delete(status, "probe")
+	delete(status, "diagnostics")
+	return status
+}
+
+func transitionResultStatusDetailed(t *weaverTransition) map[string]any {
 	if t.result != nil {
-		return restartBoundaryStatus(t.world, t.result)
+		return restartBoundaryStatus(t.world, cloneStatus(t.result))
 	}
 	status := baseStatus(t.world, t.state())
 	status["transition_id"] = t.transitionID

@@ -413,7 +413,41 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	if req.Details {
+		return s.weaverStatusDetailedForWorld(world), nil
+	}
 	return s.weaverStatusForWorld(world), nil
+}
+
+func (s *server) weaverStatusDetailedForWorld(world config.World) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		if transition.state() == restartStateFailed {
+			return transitionResultStatusDetailed(transition)
+		}
+	}
+	record, ok, recordErr := readRestartRecordDetailed(world)
+	if recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
+		return status
+	}
+	if ok && (record.State == restartStateProbing || record.State == restartStateRestarting || record.State == restartStateFailed) {
+		return record.status(world)
+	}
+	readRecord := func(config.World) (restartRecord, bool, error) { return record, ok, nil }
+	if status, stale := readStatusWithRestartRecord(world, readRecord); status != nil {
+		if stale {
+			status["state"] = "stale"
+			return status
+		}
+		if ok && record.State == restartStateRunning {
+			mergeRestartRecordStatus(status, record)
+		}
+		return status
+	}
+	return baseStatus(world, "none")
 }
 
 func (s *server) weaverReplContext(req client.MillWorldRequest) (map[string]any, error) {
@@ -531,12 +565,13 @@ func (s *server) readRestartRecordSummaryCached(world config.World) (restartReco
 		return restartRecord{}, false, fmt.Errorf("stat restart record %s: %w", path, err)
 	}
 	cached, ok := s.restartSummaryCache[path]
-	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+	if ok && os.SameFile(cached.info, info) && cached.info.Size() == info.Size() && cached.info.ModTime().Equal(info.ModTime()) {
 		return cached.record, cached.present, cached.err
 	}
-	record, present, readErr := readRestartRecordSummary(world)
-	s.restartSummaryCache[path] = restartSummaryCacheEntry{size: info.Size(), modTime: info.ModTime(), record: record, present: present, err: readErr}
-	return record, present, readErr
+	record, present, readErr := readRestartRecordDetailedFn(world)
+	compact := compactRestartRecord(record)
+	s.restartSummaryCache[path] = restartSummaryCacheEntry{info: info, record: compact, present: present, err: readErr}
+	return compact, present, readErr
 }
 
 func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error) {
@@ -648,7 +683,7 @@ func (s *server) stopAll() error {
 }
 
 func readStatus(world config.World) (map[string]any, bool) {
-	return readStatusWithRestartRecord(world, readRestartRecordSummary)
+	return readStatusWithRestartRecord(world, readRestartRecordDetailed)
 }
 
 func readStatusWithRestartRecord(world config.World, readRestart func(config.World) (restartRecord, bool, error)) (map[string]any, bool) {

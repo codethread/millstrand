@@ -62,7 +62,7 @@ func runInit(workspace string, stealth, autoStart bool) error {
 	return emitJSON(result)
 }
 
-func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, name, readyTimeout string) error {
+func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, name, readyTimeout string, details bool) error {
 	world, err := worldRequest(workspace, name)
 	if err != nil {
 		return err
@@ -72,6 +72,7 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 		return err
 	}
 	world.ReadyTimeoutMs = ms
+	world.Details = details
 	if jsonOutput || operation == "weaver-status" {
 		result, err := client.MillCall(operation, world)
 		if err != nil {

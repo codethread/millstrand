@@ -24,7 +24,8 @@ mill init [--workspace <dir>] [--auto-start]
 mill init --stealth [--auto-start]
 mill weaver start [--workspace <dir>] [--name <name>] [--ready-timeout <dur>] [--json]
 mill weaver restart [--workspace <dir>] [--ready-timeout <dur>] [--json]
-mill weaver status|stop [--workspace <dir>] [--json]
+mill weaver status [--workspace <dir>] [--json] [--details]
+mill weaver stop [--workspace <dir>] [--json]
 mill weaver repl [--stdin] [--workspace <dir>]
 mill prime millstrand
 mill bin list
