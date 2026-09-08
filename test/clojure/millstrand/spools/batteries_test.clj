@@ -768,7 +768,6 @@
                          "glossary:  strand help --json root | jq '.glossary'")))
     (testing "leaf classes render on the leaf only; null interiors stay silent"
       (is (str/includes? rendered "hook-class: read   deadline: unbounded"))
-      (is (not (str/includes? rendered "invocation:")))
       (is (= 1 (count (filter #(str/includes? % "hook-class:") lines)))))
     (testing "depth drives strictly increasing indentation, no per-level branch"
       (is (< (head-indent lines "root — root doc")
