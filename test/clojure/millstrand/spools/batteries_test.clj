@@ -727,7 +727,7 @@
                                   :doc "flag at depth three"}]
                          :positionals []}
                         :hook-class "read"
-                        :deadline-class "standard"
+                        :deadline-class "unbounded"
                         :returns {:type "string"}
                         :failure-modes ["synthetic/leaf-outcome"]))
         mid (synthetic-node "mid" "middle doc" [leaf])
@@ -767,7 +767,8 @@
       (is (str/includes? rendered
                          "glossary:  strand help --json root | jq '.glossary'")))
     (testing "leaf classes render on the leaf only; null interiors stay silent"
-      (is (str/includes? rendered "hook-class: read   deadline: standard"))
+      (is (str/includes? rendered "hook-class: read   deadline: unbounded"))
+      (is (not (str/includes? rendered "invocation:")))
       (is (= 1 (count (filter #(str/includes? % "hook-class:") lines)))))
     (testing "depth drives strictly increasing indentation, no per-level branch"
       (is (< (head-indent lines "root — root doc")
@@ -818,7 +819,10 @@
       (is (str/includes? rendered "template:"))
       (is (str/includes? rendered "reason: <reason text>"))
       (is (str/includes? rendered "<approved | abort>"))
-      (is (< (head-indent lines "--input") (head-indent lines "template:"))))))
+      (is (< (head-indent lines "--input") (head-indent lines "template:"))))
+    (testing "standard deadline metadata stays out of friendly help"
+      (is (str/includes? rendered "hook-class: mutating"))
+      (is (not (str/includes? rendered "deadline: standard"))))))
 
 (deftest batteries-adopts-discovery-tier-pattern
   (with-batteries
