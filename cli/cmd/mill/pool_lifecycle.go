@@ -170,7 +170,7 @@ func (s *server) startPooledWeaver(req client.MillWorldRequest, world config.Wor
 			return nil, identityErr
 		}
 		host.Members[i].Identity = identity
-		host.Members[i].MemberBasis, _ = memberStatus["basis_fingerprint"].(string)
+		host.Members[i].MemberBasis, _ = memberStatus["member_basis_fingerprint"].(string)
 		s.poolMembers[host.Members[i].World.ConfigDir] = host
 	}
 	s.mu.Unlock()
@@ -400,7 +400,8 @@ func (s *server) discoverPoolHost(pool string) (*weaverHost, error) {
 		if identityErr != nil {
 			return nil, identityErr
 		}
-		member := poolMember{World: world, SourceCWD: expected.SourceCWD, Name: expected.Name, WeaverID: expected.WeaverID, GenerationID: expected.GenerationID, Identity: identity}
+		memberBasis, _ := status["member_basis_fingerprint"].(string)
+		member := poolMember{World: world, SourceCWD: expected.SourceCWD, Name: expected.Name, WeaverID: expected.WeaverID, GenerationID: expected.GenerationID, Identity: identity, MemberBasis: memberBasis}
 		host.Members = append(host.Members, member)
 		host.Allowances[expected.WeaverID] = world
 		statuses[expected.ConfigDir] = status
