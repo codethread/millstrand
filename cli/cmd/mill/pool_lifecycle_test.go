@@ -48,7 +48,6 @@ func startPoolOwnedBlockingProcess(t *testing.T) *exec.Cmd {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	waitForPoolTestFile(t, readyPath)
 	t.Cleanup(func() {
 		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
 			_, _ = stdin.Write([]byte("release\n"))
@@ -58,6 +57,7 @@ func startPoolOwnedBlockingProcess(t *testing.T) *exec.Cmd {
 			_ = cmd.Wait()
 		}
 	})
+	waitForPoolTestFile(t, readyPath)
 	return cmd
 }
 

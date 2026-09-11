@@ -7,7 +7,7 @@
 **Root specs:** [CLI](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md)
 **Feature specs:** [CLI delta](./specs/cli.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [REPL API delta](./specs/repl-api.delta.md)
 **Implementation contract:** [implementation-contract.md](./implementation-contract.md)
-**Status:** Active
+**Status:** Implemented
 **Last Updated:** 2026-09-11
 
 ## PLAN-Jvp-001.P1 Goal and scope
@@ -71,14 +71,14 @@ Owner boundary: init command, Mill request wiring, status projection, and automa
 
 ### PLAN-Jvp-001.PH7 Process acceptance and promotion
 
-Owner boundary: tagged public-binary acceptance and feature-local documentation. Outcome: the implementation and focused tests cover the pooled host/member boundary, pending admission, collective lifecycle, refresh preflight, and isolated compatibility. The staged CLI, Weaver runtime, and REPL API deltas are promoted to the root specs. Public CLI acceptance remains in progress, so this plan stays Active and does not claim a release or measured memory savings.
+Owner boundary: tagged public-binary acceptance and feature-local documentation. Outcome: the implementation and focused tests cover the pooled host/member boundary, pending admission, collective lifecycle, refresh preflight, and isolated compatibility. The staged CLI, Weaver runtime, and REPL API deltas are promoted to the root specs. Public CLI lifecycle and failure-path acceptance have passed, including pending-member admission, endpoint targeting, custody continuity, failed probes, and post-cutover recovery. Registered landing is tracked by `land-jvm-pools-20260911` on coordinator task `9fg30`. Memory savings have not been measured.
 
 ## PLAN-Jvp-001.P6 Validation strategy
 
 - **PLAN-Jvp-001.V1:** Run focused Go config, membership, lifecycle, status, and custody tests with `t.TempDir()` and a separate temporary `XDG_STATE_HOME`; keep pure registration assertions separate from process assertions. Cover omitted and JSON-null init-wire `jvm_pool` as no override, and reject a supplied blank string.
 - **PLAN-Jvp-001.V2:** Run focused Clojure basis, startup, module-refresh, declaration-scope, and runtime-binding tests with disposable generated worlds. Do not use the shared `.millstrand` coordination world.
 - **PLAN-Jvp-001.V3:** Run the tagged `cli_test` process acceptance only with built `bin/mill` and `bin/strand`, dependency-free short-lived fixtures, exact recorded PIDs, and cleanup by exact PID. Verify host facts with `ps -p`, not process-name matching. Memory observations are supplementary and never a gate.
-- **PLAN-Jvp-001.V4:** Eventual landing validation follows the [validation plan](./validation-plan.md): focused Clojure and Go slices, `make build`, restart and E2E acceptance, formatting/lint/reflection/identity/docs checks, and `git diff --check`. This planning run does not run the full suite or restart a process.
+- **PLAN-Jvp-001.V4:** Eventual landing validation follows the [validation plan](./validation-plan.md): focused Clojure and Go slices, `make build`, restart and E2E acceptance, formatting/lint/reflection/identity/docs checks, and `git diff --check`. The first registered full quality gate passed at `e976cd40`; review corrections have independent focused verification, and the land workflow runs its final quality gate against the pushed branch before sign-off.
 
 ## PLAN-Jvp-001.P7 Risks and open questions
 

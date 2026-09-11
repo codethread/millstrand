@@ -6,9 +6,9 @@ The process claims below require the process/repository E2E tier. An embedded we
 
 ## Current validation record
 
-This commit records implementation evidence, not a landing result. The full Clojure suite passed before bootstrap with 759 tests and 4,711 assertions. Focused post-bootstrap checks passed with 72 tests and 383 assertions. One real two-member serving host and one positive probe have been verified. The coordinator's public `TestJVMPoolLifecycleAcceptance` at `683d5243` passed in 18.28 seconds; its output is recorded in `/tmp/jvm-pool-fixture-correction-verification.log`. It covered A and B in one pool, isolated C, pending D and its admission during collective replacement, endpoint and REPL runtime targeting, native child custody across Weaver replacement, cancel/ack before Mill shutdown, collective stop/start, and durable membership through Mill restart.
+The first registered full quality gate passed at `e976cd40`, including 759 Clojure tests with 4,711 assertions, Go suites, restart acceptance, repository E2E, formatting, lint, reflection, identity, documentation, and shell acceptance. Public acceptance proves A and B in one pool, isolated C, pending D and collective admission, endpoint and REPL runtime targeting, child custody across Weaver replacement within the same Mill, collective stop/start, and durable membership through Mill restart. Failure-path acceptance proves old-host continuity after a rejected probe and no partial admission after failed cutover, followed by successful retry.
 
-Failure-path acceptance and final landing results are recorded on task `05ryv` and coordinator root `9fg30`. The evidence above covers the lifecycle check; it does not establish failure-path acceptance or final landing. The root plan remains Active. Memory savings have not been measured.
+Review corrections have independent focused verification. At `3a4a37aa`, both real pooled acceptance tests passed in 38.335 seconds after the lifecycle error and fixture changes. At `30bfb775`, startup boundary checks passed with 71 tests and 398 assertions. Coordinator task `9fg30` records these results and the final registered landing gates; `05ryv` records the process acceptance work. The implementation plan is complete, and landing is tracked separately in `land-jvm-pools-20260911`. Memory savings have not been measured.
 
 ## Smallest test set
 
