@@ -407,10 +407,11 @@
           (assoc manifest :unexpected true))))))
 
 (deftest probe-private-paths-cannot-escape-before-basis-resolution
-  (let [root (workspace! {} nil)
-        original (workspace! {} nil)
-        private-config (workspace! {} nil)
-        probe-root (.getParentFile private-config)
+  (let [fixture-root (fixture-root!)
+        root (workspace! fixture-root {} nil)
+        original (workspace! fixture-root {} nil)
+        probe-root (doto (io/file fixture-root "probe") (.mkdirs))
+        private-config (workspace! probe-root {} nil)
         sentinel (io/file probe-root "sentinel")
         member {:original-config-dir (.getCanonicalPath original)
                 :original-source-cwd (.getCanonicalPath original)
@@ -436,7 +437,7 @@
                   :members [member]}
         escaped (.getCanonicalPath (io/file probe-root ".." "escaped.json"))
         sibling (str (.getCanonicalPath probe-root) "-sibling" "/result.json")
-        original-state (.getCanonicalPath (io/file "/" "original-state"))]
+        original-state (.getCanonicalPath (io/file original "state"))]
     (spit sentinel "untouched")
     (doseq [[label candidate] [["escaped-result" (assoc manifest :result escaped)]
                                ["sibling-diagnostic"
@@ -453,9 +454,11 @@
     (is (= "untouched" (slurp sentinel)))))
 
 (deftest probe-basis-uses-private-config-and-original-config-authority
-  (let [source (workspace! {} nil)
-        original-root (workspace! {} nil)
-        probe-root (workspace! {:deps {'demo/local {:local/root "original-lib"}}}
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
+        original-root (workspace! fixture-root {} nil)
+        probe-root (workspace! fixture-root
+                               {:deps {'demo/local {:local/root "original-lib"}}}
                                nil)
         _ (do
             (.mkdirs (io/file probe-root "config"))
@@ -467,7 +470,7 @@
                   :probe-id "probe-1"
                   :candidate-host-id "probe-host-1"
                   :candidate-host-generation-id "probe-generation-1"
-                  :probe-root (.getCanonicalPath (.getParentFile probe-root))
+                  :probe-root (.getCanonicalPath probe-root)
                   :millstrand-source (.getCanonicalPath source)
                   :result (.getCanonicalPath (io/file probe-root "result.json"))
                   :collective-diagnostic
@@ -559,7 +562,8 @@
                                    "local-lib"
                                    "demo.parent-lib")
         nested-lib (local-library! original "local-lib" "demo.nested-lib")
-        copied (workspace! fixture-root project extra)
+        probe-root (doto (io/file fixture-root "probe") (.mkdirs))
+        copied (workspace! probe-root project extra)
         _ (doseq [path ["member-src" "extra-src" "weaver-src" "local-src"]]
             (.mkdirs (io/file copied path)))
         runtime-coordinate {:local/root (.getCanonicalPath (io/file "."))}
@@ -571,7 +575,7 @@
                         :probe-id "probe-real"
                         :candidate-host-id "probe-host-real"
                         :candidate-host-generation-id "probe-generation-real"
-                        :probe-root (.getCanonicalPath (.getParentFile copied))
+                        :probe-root (.getCanonicalPath probe-root)
                         :millstrand-source (.getCanonicalPath source)
                         :result (.getCanonicalPath (io/file copied "result.json"))
                         :collective-diagnostic
