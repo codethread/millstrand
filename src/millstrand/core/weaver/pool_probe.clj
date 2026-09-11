@@ -19,6 +19,18 @@
   (.mkdirs (.getParentFile (io/file file)))
   (spit file (str (pr-str entry) "\n") :append true))
 
+(defn- failure-context
+  "Return structured primary and suppressed failure details for probe output."
+  [^Throwable throwable]
+  {:message (ex-message throwable)
+   :class (str (class throwable))
+   :data (when (instance? clojure.lang.ExceptionInfo throwable)
+           (ex-data throwable))
+   :suppressed (->> (iterate ex-cause throwable)
+                    (take-while some?)
+                    (mapcat #(.getSuppressed ^Throwable %))
+                    (mapv failure-context))})
+
 (defn- baseline-kind [member]
   (if (:old-member-baseline member) :live :newcomer))
 
@@ -58,7 +70,16 @@
      :member-diagnostic (canonical diagnostic)}))
 
 (defn- failed-member-result [member diagnostic]
-  (member-result member nil :failed diagnostic))
+  {:original-config-dir (:original-config-dir member)
+   :probe-config-dir (:probe-config-dir member)
+   :candidate-weaver-id (:candidate-weaver-id member)
+   :candidate-generation-id (:candidate-generation-id member)
+   :baseline-kind (baseline-kind member)
+   :status :failed
+   :registry-projection {}
+   :registry-diff (when (= :live (baseline-kind member))
+                    {:added {} :removed {} :changed {}})
+   :member-diagnostic (canonical diagnostic)})
 
 (defn- result-envelope
   [manifest success? stage completed members collective-diagnostic log]
@@ -168,11 +189,24 @@
                                                     (:member-diagnostic member))))
                result (result-envelope manifest false "probe/failure"
                                        (conj @completed "probe/failure")
-                                       failed collective-diagnostic log)]
-           (diagnostic-file! collective-diagnostic
-                             {:stage "probe/failure"
-                              :message (or (ex-message throwable)
-                                           (str throwable))})
+                                       failed collective-diagnostic log)
+               failure-entry {:stage "probe/failure"
+                              :status :failed
+                              :data (failure-context throwable)}
+               diagnostic! (fn [file entry]
+                             (try
+                               (diagnostic-file! file entry)
+                               (catch Throwable diagnostic-failure
+                                 (.addSuppressed ^Throwable throwable
+                                                 diagnostic-failure))))]
+           (diagnostic! collective-diagnostic failure-entry)
+           (doseq [member (:members manifest)
+                   :when (not-any? #(= (:original-config-dir %)
+                                       (:original-config-dir member))
+                                   @members)]
+             (diagnostic! (:member-diagnostic member)
+                          (assoc failure-entry
+                                 :member (:original-config-dir member))))
            (pool-basis/validate-probe-result result)
            (wire/write-json! (:result manifest) (wire/probe-result-wire result))
            result))))))

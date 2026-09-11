@@ -325,6 +325,75 @@
           (delete-tree! root)))
       (is (not (.exists (io/file (pool/ready-file manifest))))))))
 
+(deftest runtime-and-pooled-host-handles-have-bounded-printing
+  (let [world (temp-world)
+        runtime (start-runtime! nil {:world world :publish? false})]
+    (try
+      (is (string? (pr-str runtime)))
+      (finally
+        (weaver-runtime/stop! runtime)
+        (delete-tree! (io/file (:config-dir world) "..")))))
+  (let [root (io/file "/tmp" (str "pool-print-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)]
+      (try
+        (is (string? (pr-str host)))
+        (is (string? (pr-str (:host-context host))))
+        (is (every? #(string? (pr-str %)) (:runtimes host)))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root))))))
+
+(deftest pooled-probe-preserves-first-and-later-startup-failures
+  (doseq [failure-index [1 2]]
+    (let [root (io/file "/tmp" (str "pool-probe-startup-failure-"
+                                    failure-index "-"
+                                    (java.util.UUID/randomUUID)))]
+      (.mkdirs root)
+      (let [manifest (pooled-probe-manifest root)
+            original-start! weaver-runtime/start!
+            calls (atom 0)]
+        (try
+          (let [result
+                (with-redefs [weaver-runtime/start!
+                              (fn [db-file opts]
+                                (if (= failure-index (swap! calls inc))
+                                  (throw (doto (ex-info "candidate startup failed"
+                                                        {:member (:name opts)})
+                                           (.addSuppressed
+                                            (ex-info "candidate cleanup failed" {}))))
+                                  (original-start! db-file opts)))]
+                  (pool/probe! manifest))
+                decoded (pool-wire/read-probe-result (:result manifest))]
+            (is (false? (:success result)))
+            (is (= "probe/failure" (:stage result)))
+            (is (false? (:success decoded)))
+            (is (= "probe/failure" (:stage decoded)))
+            (is (.isFile (io/file (:result manifest))))
+            (let [diagnostics
+                  (with-open [reader (io/reader (:collective-diagnostic manifest))]
+                    (doall (map edn/read-string (line-seq reader))))]
+              (is (some #(= "candidate startup failed"
+                            (get-in % [:data :message]))
+                        diagnostics))
+              (is (some #(= "candidate cleanup failed"
+                            (get-in % [:data :suppressed 0 :message]))
+                        diagnostics)))
+            (is (= (if (= 1 failure-index)
+                     [:failed :failed]
+                     [:validated :failed])
+                   (mapv :status (:members decoded))))
+            (is (nil? @weaver-runtime/current-runtime))
+            (is (every? #(not (.exists (metadata/json-metadata-file
+                                        {:state-dir (:probe-state-dir %)})))
+                        (:members manifest)))
+            (is (every? #(not (.exists (metadata/socket-file
+                                        {:state-dir (:probe-state-dir %)})))
+                        (:members manifest))))
+          (finally
+            (delete-tree! root)))))))
+
 (deftest pooled-host-failure-removes-all-unready-artifacts
   (let [root (io/file "/tmp" (str "pool-failure-" (java.util.UUID/randomUUID)))]
     (.delete root)

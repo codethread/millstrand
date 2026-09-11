@@ -34,6 +34,19 @@
   "Optional test seam called with a generation's metadata after publication."
   nil)
 
+(deftype RuntimeState [state]
+  clojure.lang.IDeref
+  (deref [_] @state))
+
+(defmethod print-method RuntimeState [_ writer]
+  (.write writer "#<millstrand.runtime-state>"))
+
+(defn- state-holder []
+  (RuntimeState. (atom nil)))
+
+(defn- reset-state! [^RuntimeState holder value]
+  (reset! (.-state holder) value))
+
 (defonce ^:private nrepl-port-runtimes
   (atom {}))
 
@@ -610,7 +623,7 @@
       (let [storage (storage-for storage db-file world)
             ds (:connectable storage)
             _ (db/init! ds)
-            runtime-state (atom nil)
+            runtime-state (state-holder)
             server (when-not probe?
                      (nrepl/start-server :bind loopback-host :port 0
                                          :handler (runtime-nrepl-handler runtime-state)))
@@ -671,12 +684,12 @@
                           :pre-publication-claim pre-publication-claim
                           :runtime-state runtime-state}
             runtime-base (start-event-system! runtime-base (not probe?))
-            _ (reset! runtime-state runtime-base)]
+            _ (reset-state! runtime-state runtime-base)]
         (try
           (let [socket-runtime (when-not probe?
                                  (socket/start! runtime-state (:socket-path meta)))
                 runtime (assoc runtime-base :socket-runtime socket-runtime)]
-            (reset! runtime-state runtime)
+            (reset-state! runtime-state runtime)
             (when port
               (swap! nrepl-port-runtimes assoc port runtime))
             (when (and (publishes-ambient-runtime? publish? probe?)
@@ -714,7 +727,7 @@
                                           (when *after-metadata-publish!*
                                             (*after-metadata-publish!* meta))
                                           (assoc runtime :metadata-file metadata-file)))]
-                (reset! runtime-state published-runtime)
+                (reset-state! runtime-state published-runtime)
                 (when port
                   (swap! nrepl-port-runtimes assoc port published-runtime))
                 (when (publishes-ambient-runtime? publish? probe?)
@@ -1006,7 +1019,7 @@
                                  :pre-publication-claim nil)]
     (metadata/release-pre-publication-artifacts!
      world (:pre-publication-claim runtime))
-    (reset! (:runtime-state runtime) published-runtime)
+    (reset-state! (:runtime-state runtime) published-runtime)
     (when-let [port (get-in published-runtime [:metadata :endpoint :port])]
       (swap! nrepl-port-runtimes assoc port published-runtime))
     published-runtime))

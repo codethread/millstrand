@@ -25,6 +25,22 @@
                         (.getBytes value StandardCharsets/UTF_8))]
     (str/join (map #(format "%02x" (bit-and 0xff %)) digest))))
 
+(deftype HostContext [state]
+  clojure.lang.IDeref
+  (deref [_] @state))
+
+(defmethod print-method HostContext [_ writer]
+  (.write writer "#<millstrand.jvm-pool-host>"))
+
+(defn- host-context-holder [value]
+  (HostContext. (atom value)))
+
+(defn- reset-host-context! [^HostContext holder value]
+  (reset! (.-state holder) value))
+
+(defn- update-host-context! [^HostContext holder f & args]
+  (apply swap! (.-state holder) f args))
+
 (defn pool-hash
   "Return the host directory hash for `jvm-pool`."
   [jvm-pool]
@@ -138,14 +154,14 @@
          pool-basis (pool-basis/create-pool-basis manifest runtime-coordinate)
          runtimes (atom [])
          ready-path (ready-file manifest)
-         host-context (atom {:manifest manifest
-                             :pool-basis pool-basis
-                             :runtimes []
-                             :runtimes-by-config {}
-                             :refresh-lock (Object.)
-                             :ready-file ready-path
-                             :ready-marker nil
-                             :running? (atom true)})]
+         host-context (host-context-holder {:manifest manifest
+                                            :pool-basis pool-basis
+                                            :runtimes []
+                                            :runtimes-by-config {}
+                                            :refresh-lock (Object.)
+                                            :ready-file ready-path
+                                            :ready-marker nil
+                                            :running? (atom true)})]
      (try
        (doseq [[member pool-member]
                (map vector (:members manifest) (:members pool-basis))]
@@ -154,21 +170,21 @@
                       expected-version (assoc :expected-version expected-version))
                member-runtime (runtime/start! nil (assoc opts :pool-host host-context))]
            (swap! runtimes conj member-runtime)
-           (swap! host-context assoc
-                  :runtimes @runtimes
-                  :runtimes-by-config
-                  (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                      identity)
-                                @runtimes)))))
+           (update-host-context! host-context assoc
+                                 :runtimes @runtimes
+                                 :runtimes-by-config
+                                 (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                                     identity)
+                                               @runtimes)))))
        (doseq [index (range (count @runtimes))]
          (let [published-runtime (runtime/publish-deferred! (nth @runtimes index))]
            (swap! runtimes assoc index published-runtime)
-           (swap! host-context assoc
-                  :runtimes @runtimes
-                  :runtimes-by-config
-                  (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                      identity)
-                                @runtimes)))))
+           (update-host-context! host-context assoc
+                                 :runtimes @runtimes
+                                 :runtimes-by-config
+                                 (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                                     identity)
+                                               @runtimes)))))
        (let [published @runtimes
              marker (ready-marker manifest pool-basis published)]
          (when-not (s/valid? :millstrand.jvm-pool/ready-marker marker)
@@ -177,11 +193,11 @@
                             :explain (s/explain-data
                                       :millstrand.jvm-pool/ready-marker marker)})))
          (atomic-json-write! ready-path (wire/ready-marker-wire marker))
-         (swap! host-context assoc :ready-marker marker)
+         (update-host-context! host-context assoc :ready-marker marker)
          (let [host-value (assoc @host-context
                                  :host-context host-context
                                  :pool-host host-context)]
-           (reset! host-context host-value)
+           (reset-host-context! host-context host-value)
            host-value))
        (catch Throwable throwable
          (try
