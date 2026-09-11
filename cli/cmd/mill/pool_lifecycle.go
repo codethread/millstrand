@@ -136,6 +136,7 @@ func (s *server) startPooledWeaver(req client.MillWorldRequest, world config.Wor
 	cmd, err := launchWeaver(source, poolWeaverArgs(host.ManifestPath, source), launchTokenEnv(host.LaunchToken), register, logFile, logFile)
 	if err != nil {
 		_ = logFile.Close()
+		s.removePoolHost(host)
 		return nil, err
 	}
 	s.mu.Lock()
@@ -248,6 +249,11 @@ func waitForPoolReady(host *weaverHost, done <-chan error, waitDone <-chan struc
 		}
 	}
 }
+
+// poolAdmissionStatus is the endpoint-backed identity proof used before a
+// host becomes jointly routable.  Keep it injectable for deterministic
+// lifecycle tests; production uses the real Unix-socket status request.
+var poolAdmissionStatus = runtimeStatus
 
 func poolHostHasMember(host *weaverHost, configDir string) bool {
 	for _, member := range host.Members {

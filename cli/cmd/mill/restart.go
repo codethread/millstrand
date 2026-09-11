@@ -455,12 +455,32 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	}
 	if pool, poolErr := configuredPool(world); poolErr != nil {
 		return nil, poolErr
-	} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
+	} else if pool != "" {
 		return s.restartPooledWeaver(req, world, pool)
+	}
+	if s.poolMemberRecorded(world.ConfigDir) {
+		s.mu.Lock()
+		host := poolHostForConfigLocked(s, world.ConfigDir)
+		s.mu.Unlock()
+		return nil, poolStopRequiredError(world.ConfigDir, host.Pool, host.HostID)
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		waitForStartClaim(claim)
 		return s.restartWeaver(req)
+	}
+	if recordedPool, recorded, recordedErr := s.registeredPoolForConfig(world.ConfigDir); recordedErr != nil {
+		return nil, recordedErr
+	} else if recorded {
+		// A desired config edit to isolated cannot silently turn a live pooled
+		// owner into an isolated restart. Stop the recorded host first; stop is
+		// the operation that deliberately reconciles the old ownership away.
+		host, discoverErr := s.discoverPoolHost(recordedPool)
+		if discoverErr != nil {
+			return nil, discoverErr
+		}
+		if host != nil && host.Live && poolHostHasMember(host, world.ConfigDir) {
+			return nil, poolStopRequiredError(world.ConfigDir, recordedPool, host.HostID)
+		}
 	}
 	s.mu.Lock()
 	if s.transitions == nil {

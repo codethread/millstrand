@@ -273,12 +273,15 @@ func poolProbeManifestForHost(host *weaverHost, snapshot jvmpool.PoolSnapshot, s
 			if member.World.ConfigDir != registered.ConfigDir {
 				continue
 			}
-			baseline = map[string]any{"status": "admitted", "projection": map[string]any{}}
-			if status, err := runtimeStatusWithRegistryProjection(member.Identity); err == nil {
-				if projection, ok := status["registry_projection"].(map[string]any); ok {
-					baseline["projection"] = projection
-				}
+			status, err := poolProbeBaselineStatus(member.Identity)
+			if err != nil {
+				return poolProbeManifest{}, fmt.Errorf("JVM pool member %s baseline status failed: %w", registered.ConfigDir, err)
 			}
+			projection, ok := status["registry_projection"].(map[string]any)
+			if !ok || !validRegistryProjection(projection) {
+				return poolProbeManifest{}, fmt.Errorf("JVM pool member %s baseline status omitted a valid registry_projection", registered.ConfigDir)
+			}
+			baseline = map[string]any{"status": "admitted", "projection": projection}
 		}
 		world, err := config.RuntimeWorld(registered.ConfigDir)
 		if err != nil {
@@ -292,6 +295,11 @@ func poolProbeManifestForHost(host *weaverHost, snapshot jvmpool.PoolSnapshot, s
 	}
 	return manifest, validatePoolProbeManifest(manifest)
 }
+
+// poolProbeBaselineStatus is the endpoint-backed semantic baseline fetch.
+// Missing or malformed projections are probe failures, never an empty
+// substitute. The seam keeps the failure path deterministic in unit tests.
+var poolProbeBaselineStatus = runtimeStatusWithRegistryProjection
 
 var poolProbeRuntime = runPooledProbeProcess
 

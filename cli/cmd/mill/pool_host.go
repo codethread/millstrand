@@ -278,6 +278,9 @@ func validatePoolAdmission(host *weaverHost, marker poolReadyMarker, statuses ma
 		if actual.SocketPath != identity.Socket {
 			return fmt.Errorf("JVM pool member %s socket identity mismatch", expected.World.ConfigDir)
 		}
+		if _, err := poolAdmissionStatus(identity); err != nil {
+			return fmt.Errorf("JVM pool member %s endpoint status proof failed: %w", expected.World.ConfigDir, err)
+		}
 	}
 	return nil
 }

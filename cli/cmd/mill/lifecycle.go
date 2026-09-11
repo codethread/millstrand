@@ -639,6 +639,10 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 		return nil, poolErr
 	} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
 		return s.stopPooledWeaver(world)
+	} else if recorded, recordErr := s.poolMembershipRecorded(world.ConfigDir); recordErr != nil {
+		return nil, recordErr
+	} else if recorded {
+		return s.stopPooledWeaver(world)
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		waitForStartClaim(claim)

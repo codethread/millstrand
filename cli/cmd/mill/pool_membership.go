@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/jvmpool"
 )
@@ -81,6 +82,20 @@ func (s *server) registeredPoolForConfig(configDir string) (string, bool, error)
 		}
 	}
 	return "", false, nil
+}
+
+func (s *server) poolMembershipRecorded(configDir string) (bool, error) {
+	_, present, err := s.registeredPoolForConfig(configDir)
+	return present, err
+}
+
+func poolStopRequiredError(configDir, pool, hostID string) error {
+	return &client.ResponseError{
+		Type:    "domain",
+		Code:    "mill/jvm-pool-stop-required",
+		Message: "stop the live JVM pool before restarting with isolated configuration",
+		Details: map[string]any{"config_dir": configDir, "jvm_pool": pool, "host_id": hostID},
+	}
 }
 
 func (s *server) poolMemberRecorded(configDir string) bool {
