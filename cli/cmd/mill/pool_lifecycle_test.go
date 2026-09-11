@@ -20,6 +20,75 @@ import (
 
 const poolTestBasis = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+func TestPooledRestartResultUsesClosedRouteEnvelope(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
+	status := map[string]any{
+		"state":              "running",
+		"config_dir":         world.ConfigDir,
+		"generation_id":      "generation-new",
+		"jvm_pool":           "backend",
+		"live_members":       []string{world.ConfigDir},
+		"pending_members":    []string{},
+		"restart_required":   false,
+		"host_generation_id": "host-generation-new",
+	}
+	s := &server{
+		meta: client.MillMetadata{ProtocolVersion: client.MillProtocolVersion, MillID: "mill-test"},
+		restartFn: func(client.MillWorldRequest) (map[string]any, error) {
+			return pooledRestartResult(world, status), nil
+		},
+	}
+	response := callMillRequest(t, s, client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "restart-request",
+		MillID:          "mill-test",
+		Operation:       "weaver-restart",
+		World:           client.MillWorldRequest{ConfigDir: world.ConfigDir},
+		Payload:         map[string]any{},
+	})
+	if !response.OK {
+		t.Fatalf("pooled restart route rejected valid result: %#v", response.Error)
+	}
+	projection, ok := response.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("restart route returned %T, want object", response.Result)
+	}
+	if err := validateRestartResult(projection); err != nil {
+		t.Fatalf("pooled restart route returned invalid projection: %#v: %v", projection, err)
+	}
+	if projection["workspace"] != world.ConfigDir || projection["generation_id"] != "generation-new" {
+		t.Fatalf("pooled restart route lost selected workspace or generation: %#v", projection)
+	}
+	for _, key := range []string{"jvm_pool", "live_members", "pending_members"} {
+		if _, present := projection[key]; present {
+			t.Fatalf("closed restart projection leaked pool field %q: %#v", key, projection)
+		}
+	}
+}
+
+func TestPooledStartDoesNotRediscoverMembershipAfterProbe(t *testing.T) {
+	source := tempSource(t)
+	cfgA := tempConfig(t, source)
+	cfgB := tempConfig(t, source)
+	worldA, err := config.RuntimeWorld(cfgA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worldB, err := config.RuntimeWorld(cfgB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := jvmpool.PoolSnapshot{
+		Pool:     "backend",
+		Revision: "membership-before-probe",
+		Members:  []jvmpool.Member{{ConfigDir: worldA.ConfigDir, SourceCWD: source, JVMPool: "backend"}},
+	}
+	_, err = (&server{}).startPooledWeaverFromSnapshot(client.MillWorldRequest{CWD: source, ConfigDir: worldB.ConfigDir}, worldB, "backend", nil, snapshot)
+	if err == nil || !strings.Contains(err.Error(), "not registered in JVM pool") {
+		t.Fatalf("replacement startup rediscovered an unprobed member: %v", err)
+	}
+}
+
 func poolAdmissionFixture(t *testing.T, members int) (*weaverHost, poolReadyMarker, map[string]map[string]any) {
 	t.Helper()
 	host := &weaverHost{Pool: "backend", HostID: "host-1", HostGenerationID: "generation-1", MembershipRev: "membership-1", PID: os.Getpid()}

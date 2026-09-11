@@ -64,6 +64,10 @@ type server struct {
 	// routine status/list poll. Entries are invalidated when the file identity,
 	// size, or modification time changes.
 	restartSummaryCache map[string]restartSummaryCacheEntry
+	// restartFn is nil in production. Tests may inject the lifecycle boundary
+	// to exercise the mill route and its closed result validation without
+	// starting a Weaver process.
+	restartFn func(client.MillWorldRequest) (map[string]any, error)
 }
 
 type weaverChild struct {
@@ -546,7 +550,11 @@ func (s *server) handle(conn net.Conn) {
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-restart":
-		result, err := s.restartWeaver(req.World)
+		restart := s.restartWeaver
+		if s.restartFn != nil {
+			restart = s.restartFn
+		}
+		result, err := restart(req.World)
 		if err != nil {
 			var responseErr *client.ResponseError
 			if errors.As(err, &responseErr) {

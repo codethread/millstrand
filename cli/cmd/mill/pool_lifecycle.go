@@ -67,6 +67,14 @@ func (s *server) startPooledWeaver(req client.MillWorldRequest, world config.Wor
 	if err != nil {
 		return nil, err
 	}
+	return s.startPooledWeaverFromSnapshot(req, world, pool, shutdown, snapshot)
+}
+
+// startPooledWeaverFromSnapshot launches exactly the registered member set
+// supplied by its caller. In particular, a replacement must not rediscover
+// membership after its probe: a registration made during the probe remains
+// pending for a later explicit restart.
+func (s *server) startPooledWeaverFromSnapshot(req client.MillWorldRequest, world config.World, pool string, shutdown <-chan struct{}, snapshot jvmpool.PoolSnapshot) (map[string]any, error) {
 	selected, ok := memberForPool(snapshot, world.ConfigDir)
 	if !ok {
 		return nil, fmt.Errorf("workspace %s is not registered in JVM pool %q", world.ConfigDir, pool)
@@ -457,7 +465,15 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 		if pool == "" {
 			return nil, errors.New("no running JVM pool host")
 		}
-		return s.startPooledWeaver(req, world, pool, nil)
+		snapshot, snapshotErr := s.poolSnapshot(pool)
+		if snapshotErr != nil {
+			return nil, snapshotErr
+		}
+		status, startErr := s.startPooledWeaverFromSnapshot(req, world, pool, nil, snapshot)
+		if startErr != nil {
+			return status, startErr
+		}
+		return pooledRestartResult(world, status), nil
 	}
 	if pool == "" {
 		pool = host.Pool
@@ -511,11 +527,25 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 	}
 	_ = os.Remove(host.ReadyPath)
 	s.removePoolHost(host)
-	replacement, err := s.startPooledWeaver(req, world, pool, nil)
+	replacement, err := s.startPooledWeaverFromSnapshot(req, world, pool, nil, snapshot)
 	if err != nil {
 		return replacement, err
 	}
-	return replacement, nil
+	return pooledRestartResult(world, replacement), nil
+}
+
+// pooledRestartResult adapts ordinary pool status to the closed restart
+// lifecycle boundary. Pool-specific fields remain available to status/list;
+// the mill restart handler projects this map to the standard restart wire
+// envelope before validation.
+func pooledRestartResult(world config.World, status map[string]any) map[string]any {
+	if status == nil {
+		return nil
+	}
+	result := cloneStatus(status)
+	result["operation"] = "restart"
+	result["workspace"] = world.ConfigDir
+	return result
 }
 
 func poolConfigDirs(members []poolMember) []string {
