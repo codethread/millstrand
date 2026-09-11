@@ -153,7 +153,7 @@ Set a pool for one workspace with a machine-local override:
 mill init --jvm-pool backend
 ```
 
-This registers the workspace durably but does not start a host. Add `--auto-start` only when a running Mill should register and start the stopped pool during the same command:
+This requires a running Mill and registers the workspace durably without starting a host. Add `--auto-start` to register and start the stopped pool during the same command:
 
 ```sh
 mill init --jvm-pool backend --auto-start

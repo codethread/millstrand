@@ -63,7 +63,7 @@ To opt this workspace into a named JVM pool, use a non-blank pool name:
 mill init --jvm-pool backend
 ```
 
-This writes `"JVMPool":"backend"` only to the machine-local `config.local.json` and durably registers the workspace. It does not start a host. Add `--auto-start` when a running Mill should register and start the stopped pool during init:
+This requires a running Mill, writes `"JVMPool":"backend"` only to the machine-local `config.local.json`, and durably registers the workspace. It does not start a host. Add `--auto-start` to register and start the stopped pool during init:
 
 ```sh
 mill init --jvm-pool backend --auto-start

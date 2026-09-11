@@ -168,7 +168,7 @@ Register a workspace without starting its host:
 mill init --jvm-pool backend
 ```
 
-The command writes the pool name only to `config.local.json` and records the canonical workspace in Mill's durable pool membership registry. With a running Mill, `--auto-start` composes registration with starting a stopped pool:
+The command requires a running Mill, writes the pool name only to `config.local.json`, and records the canonical workspace in Mill's durable pool membership registry. Adding `--auto-start` composes registration with starting a stopped pool:
 
 ```sh
 mill init --jvm-pool backend --auto-start
@@ -197,7 +197,9 @@ mill weaver start --workspace "${workspace_a:?}"
 mill weaver restart --workspace "${workspace_a:?}"
 ```
 
-A workspace registered while the host is live is pending. Starting it returns `mill/jvm-pool-restart-required` and leaves the admitted members serving. Restart explicitly to probe and admit the complete registered set. A membership, pool setting, selected alias, dependency, or shared-classpath change also needs restart. A full managed refresh coordinates every member and returns one outcome per member. A pooled targeted refresh with `{:only [...]}` fails with `:pool/targeted-refresh-unsupported` before source evaluation. The advanced `runtime/reload-code!` path still changes the shared JVM code environment; it does not make namespaces private to a member.
+A workspace registered while the host is live is pending. Starting it returns `mill/jvm-pool-restart-required` and leaves the admitted members serving. Restart explicitly to probe and admit the complete registered set. A membership, selected alias, dependency, or shared-classpath change also needs restart. A full managed refresh coordinates every member and returns one outcome per member. A pooled targeted refresh with `{:only [...]}` fails with `:pool/targeted-refresh-unsupported` before source evaluation. The advanced `runtime/reload-code!` path still changes the shared JVM code environment; it does not make namespaces private to a member.
+
+To change a workspace's pool assignment or opt out with `null`, stop its current weaver first. For a pooled member this stops the whole host. Then update the configuration and run `mill init` to register the new assignment before starting it. A live placement change is rejected with `mill/jvm-pool-stop-required`.
 
 One pooled JVM shares classes, namespaces, Vars, Java static state, and system properties. Pool owners are responsible for dependency and namespace compatibility. Each member still owns its runtime, database, registries, workflow state, request and nREPL endpoints, and native-process custody. Millstrand does not reconcile dependencies, isolate namespaces, admit hot classpath changes, or provide member-only stop.
 
