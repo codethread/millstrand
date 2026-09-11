@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 	"millstrand-strand-cli/internal/jvmpool"
 )
 
-func TestRunPooledProbeProcessActualClojureChild(t *testing.T) {
+func TestRunPooledProbeProcessActualClojureChildMissingDeps(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	workingRoot, err := canonicalProbePath(t.TempDir())
 	if err != nil {
@@ -38,6 +39,7 @@ func TestRunPooledProbeProcessActualClojureChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	probeRoot := filepath.Join(workingRoot, "probe")
+	t.Cleanup(func() { _ = os.RemoveAll(probeRoot) })
 	manifest := poolProbeManifest{
 		Format:               poolProbeFormat,
 		JVMPool:              "backend",
@@ -75,6 +77,179 @@ func TestRunPooledProbeProcessActualClojureChild(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(manifest.Members[0].ProbeConfigDir, config.ConfigFileName)); err != nil {
 		t.Fatalf("child boundary did not receive copied config: %v", err)
+	}
+}
+
+func TestRunPooledProbeProcessActualClojureChildSuccess(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	workingRoot, err := canonicalProbePath(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err = canonicalProbePath(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probeRoot := filepath.Join(workingRoot, "probe")
+	t.Cleanup(func() { _ = os.RemoveAll(probeRoot) })
+	manifest := poolProbeManifest{
+		Format:               poolProbeFormat,
+		JVMPool:              "backend",
+		ProbeID:              "probe-child-success",
+		CandidateHostID:      "probe-host-child-success",
+		CandidateGeneration:  "probe-generation-child-success",
+		ProbeRoot:            probeRoot,
+		MillstrandSource:     source,
+		Result:               filepath.Join(probeRoot, "result.json"),
+		CollectiveDiagnostic: filepath.Join(probeRoot, "collective.jsonl"),
+	}
+
+	fixtureFiles := func(value string) map[string][]byte {
+		return map[string][]byte{
+			config.ConfigFileName: []byte(`{"configFormat":"alpha","name":"` + value + `"}`),
+			"deps.edn":            []byte("{:paths [\".\"] :deps {}}\n"),
+			"init.clj": []byte(`(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
+
+(def runtime (current/runtime))
+(spit (str *file* ".started") "` + value + `")
+(runtime/module! runtime :pool-probe-sentinel
+                 {:file "sentinel.clj"
+                  :required? true})
+`),
+			"sentinel.clj": []byte(`(ns pool-probe-sentinel
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
+
+(def ^:private sentinel-arg-spec
+  {:op "pool-probe-sentinel"
+   :doc "` + value + `"
+   :hook-class :read
+   :deadline-class :standard})
+
+(millstrand/defop! pool-probe-sentinel
+  "` + value + `"
+  {:arg-spec sentinel-arg-spec}
+  [_]
+  {:sentinel "` + value + `"})
+`),
+		}
+	}
+	originalContents := map[string]map[string][]byte{}
+	for _, fixture := range []struct {
+		name  string
+		value string
+	}{
+		{name: "A", value: "probe-sentinel-A"},
+		{name: "B", value: "probe-sentinel-B"},
+	} {
+		originalConfig := filepath.Join(workingRoot, fixture.name, config.DefaultWorkspace)
+		if err := os.MkdirAll(originalConfig, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		files := fixtureFiles(fixture.value)
+		originalContents[originalConfig] = files
+		for name, contents := range files {
+			if err := os.WriteFile(filepath.Join(originalConfig, name), contents, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		canonicalConfig, err := canonicalProbePath(originalConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest.Members = append(manifest.Members, poolProbeMember{
+			OriginalConfigDir:     canonicalConfig,
+			OriginalSourceCWD:     workingRoot,
+			ProbeConfigDir:        filepath.Join(probeRoot, "members", fixture.name, "config"),
+			ProbeStateDir:         filepath.Join(probeRoot, "members", fixture.name, "state"),
+			ProbeDataDir:          filepath.Join(probeRoot, "members", fixture.name, "data"),
+			MemberDiagnostic:      filepath.Join(probeRoot, "members", fixture.name, "diagnostic.jsonl"),
+			Name:                  fixture.name,
+			CandidateWeaverID:     "probe-weaver-" + fixture.name,
+			CandidateGenerationID: "probe-generation-" + fixture.name,
+		})
+	}
+	if err := validatePoolProbeManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	result, err := runPooledProbeProcess(manifest)
+	if err != nil {
+		diagnostic, _ := os.ReadFile(manifest.CollectiveDiagnostic)
+		t.Fatalf("actual child success probe failed: %v\n%s", err, diagnostic)
+	}
+	if !result.Success || result.Stage != "probe/complete" {
+		t.Fatalf("actual child returned invalid success result: %+v", result)
+	}
+	if len(result.Members) != 2 || len(result.Completed) != 4 {
+		t.Fatalf("actual child did not complete the basis and both members: %#v", result)
+	}
+	if result.Completed[1] != "member/"+manifest.Members[0].OriginalConfigDir || result.Completed[2] != "member/"+manifest.Members[1].OriginalConfigDir {
+		t.Fatalf("actual child completion order does not cover both members: %#v", result.Completed)
+	}
+	seenValues := map[string]bool{}
+	for i, member := range result.Members {
+		if member.Status != "validated" || member.BaselineKind != "newcomer" {
+			t.Fatalf("member %d was not validated as a newcomer: %#v", i, member)
+		}
+		ops, ok := member.RegistryProjection["ops"].(map[string]any)
+		if !ok {
+			t.Fatalf("member %d has no ops registry projection: %#v", i, member.RegistryProjection)
+		}
+		effective, ok := ops["effective"].(map[string]any)
+		if !ok {
+			t.Fatalf("member %d has no effective ops projection: %#v", i, ops)
+		}
+		effectiveEntries, ok := effective["ops"].(map[string]any)
+		if !ok {
+			t.Fatalf("member %d has no effective ops entries: %#v", i, effective)
+		}
+		sentinel, ok := effectiveEntries["pool-probe-sentinel"].(map[string]any)
+		if !ok {
+			t.Fatalf("member %d has no sentinel registration: %#v", i, effectiveEntries)
+		}
+		value, ok := sentinel["value"].(map[string]any)
+		if !ok || value["doc"] == nil {
+			t.Fatalf("member %d sentinel projection has no value: %#v", i, sentinel)
+		}
+		seenValues[fmt.Sprint(value["doc"])] = true
+		if member.ProbeConfigDir != manifest.Members[i].ProbeConfigDir || member.CandidateWeaverID != manifest.Members[i].CandidateWeaverID || member.CandidateGenerationID != manifest.Members[i].CandidateGenerationID {
+			t.Fatalf("member %d result identity does not match manifest: %#v", i, member)
+		}
+		if _, err := os.Stat(filepath.Join(member.ProbeConfigDir, "init.clj.started")); err != nil {
+			t.Fatalf("member %d startup effect did not stay in private config: %v", i, err)
+		}
+		for _, artifact := range []string{
+			filepath.Join(manifest.Members[i].ProbeStateDir, "weaver.json"),
+			filepath.Join(manifest.Members[i].ProbeStateDir, "weaver.sock"),
+			filepath.Join(manifest.Members[i].ProbeDataDir, "millstrand.sqlite"),
+		} {
+			if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+				t.Fatalf("member %d probe left serving artifact %s: %v", i, artifact, err)
+			}
+		}
+	}
+	if len(seenValues) != 2 || !seenValues["probe-sentinel-A"] || !seenValues["probe-sentinel-B"] {
+		t.Fatalf("sentinel registrations did not retain distinct per-member values: %#v", seenValues)
+	}
+	for originalConfig, files := range originalContents {
+		for name, want := range files {
+			got, err := os.ReadFile(filepath.Join(originalConfig, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(want) {
+				t.Fatalf("source config %s changed", filepath.Join(originalConfig, name))
+			}
+		}
+		for _, artifact := range []string{"weaver.json", "weaver.sock"} {
+			if _, err := os.Stat(filepath.Join(originalConfig, artifact)); !os.IsNotExist(err) {
+				t.Fatalf("source config has serving artifact %s: %v", artifact, err)
+			}
+		}
 	}
 }
 

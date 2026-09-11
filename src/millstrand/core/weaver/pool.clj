@@ -201,7 +201,7 @@
        (not (str/blank? value))
        (let [path (.toPath (io/file value))]
          (and (.isAbsolute path)
-              (= value (.toString (.normalize path)))))))
+              (= value (str (.normalize path)))))))
 
 (defn- valid-membership-member?
   [member]
@@ -573,17 +573,15 @@
                                 (conj completed [config-dir (:result step)]))))
                      completed))]
              (finish-result
-              {:status (cond
-                         (some #(= :restart-required (get-in % [1 :status]))
-                               member-results)
+              {:status (condp some member-results
+                         #(= :restart-required (get-in % [1 :status]))
                          :restart-required
-                         (some #(= :partial (get-in % [1 :status])) member-results)
+                         #(#{:partial :failed :skipped}
+                           (get-in % [1 :status]))
                          :partial
-                         (some #(#{:failed :skipped} (:status (second %)))
-                               member-results) :partial
-                         (some #(= :applied (get-in % [1 :status])) member-results)
+                         #(= :applied (get-in % [1 :status]))
                          :applied
-                         :else :unchanged)
+                         :unchanged)
                :jvm-pool (:jvm-pool manifest)
                :host-generation-id (:host-generation-id manifest)
                :members (into (sorted-map) member-results)}))))))))
