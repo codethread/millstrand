@@ -9,7 +9,8 @@
             [me.workflows.explore :as explore]
             [me.workflows.fix :as fix]
             [me.workflows.land :as land]
-            [me.workflows.land-policy :as land-policy]
+            [me.workflows.land-actions]
+            [me.workflows.merge-queue :as merge-queue]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
             [millhouse.spools.chime :as chime]
@@ -33,6 +34,7 @@
 
 (workflow/use-workflow! land/land-abort)
 (workflow/use-workflow! land/land-merge)
+(workflow/use-workflow! land/land-review)
 (workflow/use-workflow! land/land)
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
@@ -47,5 +49,7 @@
 (chime/use-rule! attention/parked-run-rule)
 (cron/use-job! nvd-scan/nvd-scan)
 
-(millstrand/use-hook! land-policy/require-merge-lock-at-signoff-approval)
-(millstrand/use-op! land-policy/land)
+(workflow/use-executor! merge-queue/merge-turn-stalled?)
+(workflow/use-executor! merge-queue/merge-release-stalled?)
+(lifecycle/use-resource! merge-queue/queue-handler)
+(millstrand/use-op! merge-queue/merge-queue)

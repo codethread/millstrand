@@ -19,7 +19,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 
 - Always work via a registered workflow — `strand workflow list`, then `strand workflow show <name>`.
 - Always track work through a kanban card, in a worktree — `strand prime kanban`.
-- PRs go through the `land` workflow (`strand workflow show land`). Policy verbs live on the `land` op — load `strand prime land` / `strand help land` (not bare `workflow choose`/`complete` at those boundaries).
+- PRs go through the `land` workflow (`strand workflow show land`). Use ordinary `workflow choose` / `complete` / `await` verbs. Sign-off queues automatic landing; `strand prime merge-queue` explains FIFO status and explicit withdrawal.
 
 ## Rules
 
