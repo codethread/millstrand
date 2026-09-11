@@ -260,8 +260,7 @@ Validation ownership is explicit. `millstrand.core.specs` owns `:millstrand.core
 
 ## SPEC-004.P10f JVM pool host
 
-The following amendments promote `DELTA-Jvp-002` from the feature folder. The
-existing clause IDs remain the stable contract addresses.
+The following amendments promote `DELTA-Jvp-002` from the feature folder. The existing clause IDs remain the stable contract addresses.
 
 - **SPEC-004.C1/C8/C8a (host and member boundary):** A pooled host owns one JVM, process-global Clojure code environment, shared classloader, host refresh lock, frozen member set, collective readiness, and shutdown. Each member owns an independent runtime, storage handle, registries, spool state, lifecycle resources, request socket, nREPL endpoint, and runtime binding. `host_generation_id` identifies the host generation; each member's `generation_id` remains distinct. A pooled host never publishes an ambient runtime. A workspace without `JVMPool`, or with effective `null`, retains one isolated Weaver and the existing lifecycle, refresh, endpoint, and custody behavior.
 - **SPEC-004.C4–C6/C43–C45 (serving manifest and basis):** A pooled launch uses one closed `millstrand.jvm-pool-launch/v1` manifest with absolute canonical member paths, host/member identities, membership revision, source, version, and dependency diagnostics. Each member basis is resolved against its own workspace before the host composes ordered absolute classpath roots, dropping only later byte-identical roots. The host creates one shared basis fingerprint and classloader; it does not merge library versions or diagnose compatibility. The frozen member set and every member basis contribute to the host generation identity.

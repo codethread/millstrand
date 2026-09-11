@@ -43,8 +43,4 @@ This delta adds a host boundary around several independent Weaver runtimes. It d
 
 ## DELTA-Jvp-002.P5 Promotion record
 
-The implemented clauses were promoted to the Weaver runtime root spec under
-`SPEC-004.P10f`. Stable clause addresses remain `SPEC-004.C1`, `C4`–`C14`,
-`C43`–`C45`, `C50`, `C57`, `C91`, `C96`, and `C113`–`C122`. The feature remains
-Active pending coordinator landing; this delta does not claim release or full
-public acceptance.
+The implemented clauses were promoted to the Weaver runtime root spec under `SPEC-004.P10f`. Stable clause addresses remain `SPEC-004.C1`, `C4`–`C14`, `C43`–`C45`, `C50`, `C57`, `C91`, `C96`, and `C113`–`C122`. The feature remains Active pending coordinator landing; this delta does not claim release or full public acceptance.

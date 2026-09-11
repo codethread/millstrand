@@ -129,8 +129,7 @@ The public CLI is limited to Mill bootstrap, supervision, trusted REPL attach, c
 
 ## SPEC-002.P4a JVM pools
 
-The following amendments promote `DELTA-Jvp-001` from the feature folder. The
-clause IDs above remain the stable contract addresses.
+The following amendments promote `DELTA-Jvp-001` from the feature folder. The clause IDs above remain the stable contract addresses.
 
 - **SPEC-002.C2/C2a (JVM pool configuration):** `JVMPool` is an optional JSON string whose trimmed value must be non-blank, or JSON `null`. Mill preserves a valid string exactly without trimming or case folding. The local overlay wins over the base config, including an explicit local `null`; omission or effective `null` selects the isolated Weaver path. `JVMPool` is known in both config layers.
 - **SPEC-002.C14a (pooled init):** `mill init --jvm-pool NAME` validates one non-blank name, writes only `"JVMPool":"NAME"` to `config.local.json` with an atomic read-modify-write, and durably registers the selected canonical workspace. Without `--auto-start`, it does not contact a Weaver or start a host. With `--auto-start`, it uses the existing Mill startup path and may start a stopped pool, but never replaces a live host to admit a newcomer. Plain `mill init` honors the effective configured pool without moving it to the base config.

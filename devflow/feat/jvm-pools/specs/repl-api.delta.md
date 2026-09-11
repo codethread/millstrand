@@ -39,7 +39,4 @@ This delta records the runtime-facing consequences of shared JVM code: declarati
 
 ## DELTA-Jvp-003.P5 Promotion record
 
-The implemented clauses were promoted to the REPL API root spec under
-`SPEC-003.P11`. Stable clause addresses remain `SPEC-003.C17`, `C18`, `C25b`,
-`C25c`, `C26`–`C27`. The feature remains Active pending coordinator landing;
-this delta does not claim release or full public acceptance.
+The implemented clauses were promoted to the REPL API root spec under `SPEC-003.P11`. Stable clause addresses remain `SPEC-003.C17`, `C18`, `C25b`, `C25c`, `C26`–`C27`. The feature remains Active pending coordinator landing; this delta does not claim release or full public acceptance.

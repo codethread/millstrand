@@ -193,8 +193,7 @@ This API exposes the namespaces and functions defined by its retained clauses. P
 
 ## SPEC-003.P11 JVM pool refresh
 
-The following amendments promote `DELTA-Jvp-003` from the feature folder. The
-existing clause IDs remain the stable contract addresses.
+The following amendments promote `DELTA-Jvp-003` from the feature folder. The existing clause IDs remain the stable contract addresses.
 
 - **SPEC-003.C17/C18 (explicit runtime targeting):** A pooled endpoint and nREPL session bind the selected member runtime explicitly. `current/runtime` succeeds only inside that binding because a pooled host publishes no ambient runtime. Trusted code and background work carry the runtime they target; a namespace name or the last REPL connection never selects another member.
 - **SPEC-003.C25b/C25c (scoped declarations and full refresh):** In a pooled host, module declaration records are scoped by `[:host-generation host-generation-id config-dir]`; isolated records remain scoped by `[:generation generation-id config-dir]`. A managed full refresh takes the host refresh lock, evaluates and reconciles all members, and reports one member outcome per attempted or skipped member. Equal namespace symbols do not replace another member's declarations. Shared JVM effects after evaluation begins are not rolled back by a partial result.
