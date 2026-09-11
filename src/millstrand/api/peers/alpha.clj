@@ -17,13 +17,15 @@
          ensure-peer-protocol! operation-name validate-args! call-frame request-envelope
          socket-roundtrip! planned-restart? reject-stream-response! verify-response! unwrap-result!
          canonical-path peer-identity validate-peer-row! validate-restart-record!
-         read-restart-record)
+         read-restart-record read-pool-restart-record validate-pool-restart-record!)
 
 (defn peers
   "Return data-first rows for weaver metadata under the mill state root.
 
-  Stale rows are included with `:running? false`. Present malformed metadata
-  throws with `:code :peer/malformed-metadata` rather than being skipped."
+  Stale rows are included with `:running? false`. Pooled rows also carry
+  `:jvm-pool`, `:host-id`, `:host-generation-id`, and `:pool-restart-path`.
+  Those fields are all-or-none. Present malformed or partial metadata throws
+  with `:code :peer/malformed-metadata` rather than being skipped."
   []
   (->> (weaver-metadata-files (state-root))
        (sort-by #(.getPath ^File %))
@@ -45,8 +47,11 @@
   `call!`). Transport failures are loud and include peer identity. A request
   sent once is never retried; an interrupted planned transition reports
   `:code :weaver/restarted` with sent-once ambiguity. Restart classification
-  requires both the previous weaver and generation identities to match. A
-  present `previous_weaver_id` in `restart.json` must be a non-blank string."
+  requires both the previous weaver and generation identities to match. Pooled
+  calls resolve the host record through `:pool-restart-path` and match the
+  previous member by canonical workspace. Mismatched pooled identity fails
+  loudly as malformed restart state. A present `previous_weaver_id` in
+  isolated `restart.json` must be a non-blank string."
   ([peerish op] (call! peerish op {}))
   ([peerish op args]
    (let [peer (-> peerish
@@ -112,14 +117,19 @@
   "Project validated metadata `m` into a data-first peer row."
   [m]
   (validate-peer-row!
-   {:name (:name m)
-    :workspace (:config-dir m)
-    :weaver-id (:nonce m)
-    :generation-id (:generation-id m)
-    :protocol-version (:protocol-version m)
-    :socket-path (:socket-path m)
-    :state-dir (:state-dir m)
-    :running? (not (metadata/stale-or-missing? m))}))
+   (cond-> {:name (:name m)
+            :workspace (:config-dir m)
+            :weaver-id (:nonce m)
+            :generation-id (:generation-id m)
+            :protocol-version (:protocol-version m)
+            :socket-path (:socket-path m)
+            :state-dir (:state-dir m)
+            :running? (not (metadata/stale-or-missing? m))}
+     (:jvm-pool m)
+     (assoc :jvm-pool (:jvm-pool m)
+            :host-id (:host-id m)
+            :host-generation-id (:host-generation-id m)
+            :pool-restart-path (:pool-restart-path m)))))
 
 (defn- validate-peer-row!
   "Return `peer` when it conforms to the core-owned peer-row boundary."
@@ -131,7 +141,8 @@
                      :peer peer
                      :allowed #{:name :workspace :weaver-id :generation-id
                                 :protocol-version :socket-path :state-dir
-                                :running?}
+                                :running? :jvm-pool :host-id
+                                :host-generation-id :pool-restart-path}
                      :explain (s/explain-data
                                :millstrand.core.specs/peer-row peer)}))))
 
@@ -338,17 +349,108 @@
   weaver and generation identities must both match the stopped generation;
   state alone is not evidence that this peer's request crossed a cutover."
   [peer]
-  (let [file (io/file (:state-dir peer) "restart.json")]
+  (let [pooled? (contains? peer :jvm-pool)
+        file (if pooled?
+               (io/file (:pool-restart-path peer))
+               (io/file (:state-dir peer) "restart.json"))]
     (when (.isFile file)
-      (let [record (read-restart-record peer file)]
-        (validate-restart-record! peer file record)
-        (and (or (= "restarting" (get record "state"))
-                 (and (= "failed" (get record "state"))
-                      (true? (get record "old_generation_stopped")))
-                 (and (= "running" (get record "state"))
-                      (true? (get record "old_generation_stopped"))))
-             (= (:weaver-id peer) (get record "previous_weaver_id"))
-             (= (:generation-id peer) (get record "previous_generation_id")))))))
+      (if pooled?
+        (let [record (read-pool-restart-record peer file)]
+          (validate-pool-restart-record! peer file record)
+          (let [previous (or (get record "previous_host") {})
+                member (some #(when (= (canonical-path (:workspace peer))
+                                       (canonical-path (get % "config_dir")))
+                                %)
+                             (get previous "members"))
+                transitioned? (or (= "restarting" (get record "state"))
+                                  (and (#{"failed" "running"}
+                                        (get record "state"))
+                                       (true? (get record
+                                                   "old_generation_stopped"))))]
+            (when transitioned?
+              (when-not (and member
+                             (= (:weaver-id peer) (get member "weaver_id"))
+                             (= (:generation-id peer)
+                                (get member "generation_id")))
+                (throw (ex-info
+                        "Pool restart record does not identify the selected previous member"
+                        {:code :peer/restart-state-malformed
+                         :peer (peer-identity peer)
+                         :file (.getPath file)
+                         :previous-member member})))
+              true)))
+        (let [record (read-restart-record peer file)]
+          (validate-restart-record! peer file record)
+          (when (and (map? (get record "probe"))
+                     (re-find #"(?:^|/)jvm-pools/pool-probes(?:/|$)"
+                              (get-in record ["probe" "probe/workspace"])))
+            (throw (ex-info "Legacy pooled restart state cannot be used as isolated history"
+                            {:code :peer/restart-state-malformed
+                             :peer (peer-identity peer)
+                             :file (.getPath file)
+                             :field "probe/workspace"})))
+          (and (or (= "restarting" (get record "state"))
+                   (and (= "failed" (get record "state"))
+                        (true? (get record "old_generation_stopped")))
+                   (and (= "running" (get record "state"))
+                        (true? (get record "old_generation_stopped"))))
+               (= (:weaver-id peer) (get record "previous_weaver_id"))
+               (= (:generation-id peer) (get record "previous_generation_id"))))))))
+
+(defn- read-pool-restart-record
+  "Read one host-owned pooled restart record as string-keyed JSON data."
+  [peer ^File file]
+  (try
+    (with-open [reader (PushbackReader. (io/reader file) 64)]
+      (let [record (json/read reader)
+            trailing (json/read reader :eof-error? false :eof-value ::eof)]
+        (if (= ::eof trailing)
+          record
+          (throw (ex-info "Pool restart record contains multiple JSON values"
+                          {:trailing-value trailing})))))
+    (catch Exception e
+      (throw (ex-info "Pool restart record is malformed"
+                      {:code :peer/restart-state-malformed
+                       :peer (peer-identity peer)
+                       :file (.getPath file)}
+                      e)))))
+
+(defn- pooled-host-identity-matches?
+  [peer host]
+  (and (map? host)
+       (= (:host-id peer) (get host "host_id"))
+       (= (:host-generation-id peer) (get host "host_generation_id"))))
+
+(defn- validate-pool-restart-record!
+  "Return `record` when it conforms to the selected peer's host boundary."
+  [peer ^File file record]
+  (when-not (s/valid? :millstrand.core.specs/peer-pool-restart-record record)
+    (throw (ex-info "Pool restart record is malformed"
+                    {:code :peer/restart-state-malformed
+                     :peer (peer-identity peer)
+                     :file (.getPath file)
+                     :record record
+                     :explain (s/explain-data
+                               :millstrand.core.specs/peer-pool-restart-record
+                               record)})))
+  (when-not (= (:jvm-pool peer) (get record "jvm_pool"))
+    (throw (ex-info "Pool restart record identifies a different pool"
+                    {:code :peer/restart-state-malformed
+                     :peer (peer-identity peer)
+                     :file (.getPath file)
+                     :expected-pool (:jvm-pool peer)
+                     :actual-pool (get record "jvm_pool")})))
+  (when-not (or (pooled-host-identity-matches?
+                 peer (get record "admitted_host"))
+                (pooled-host-identity-matches?
+                 peer (get record "previous_host")))
+    (throw (ex-info "Pool restart record identifies a different host generation"
+                    {:code :peer/restart-state-malformed
+                     :peer (peer-identity peer)
+                     :file (.getPath file)
+                     :host-id (:host-id peer)
+                     :host-generation-id (:host-generation-id peer)})))
+  record)
 
 (defn- read-restart-record
   "Read exactly one JSON value from `file`, allowing only trailing whitespace.

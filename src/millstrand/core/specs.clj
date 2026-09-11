@@ -6,6 +6,7 @@
   as non-blank ids, relation names, lifecycle states, and JSON-object-encodable
   attributes."
   (:require [clojure.spec.alpha :as s]
+            [clojure.set :as set]
             [clojure.string :as str])
   (:import [java.io File]
            [java.time Instant]))
@@ -556,8 +557,10 @@
 (s/def :millstrand.jvm-pool/host-generation-id non-blank-string?)
 (s/def :millstrand.jvm-pool/member-basis-fingerprint
   :millstrand.core.specs/basis-fingerprint)
+(s/def :millstrand.jvm-pool/pool-restart-path canonical-absolute-path?)
 (def ^:private pool-start-metadata-keys
-  #{:jvm-pool :host-id :host-generation-id :member-basis-fingerprint})
+  #{:jvm-pool :host-id :host-generation-id :member-basis-fingerprint
+    :pool-restart-path})
 (s/def :millstrand.weaver-start/pool-metadata
   (s/and
    (s/keys :req-un [:millstrand.jvm-pool/jvm-pool
@@ -577,7 +580,7 @@
     :generation-id :dependency-diagnostic})
 (def ^:private launch-manifest-keys
   #{:format :jvm-pool :host-id :host-generation-id :membership-revision
-    :millstrand-source :millstrand-version :members})
+    :pool-restart-path :millstrand-source :millstrand-version :members})
 (def ^:private probe-member-keys
   #{:original-config-dir :original-source-cwd :probe-config-dir
     :probe-state-dir :probe-data-dir :member-diagnostic :name
@@ -731,7 +734,7 @@
 (def ^:private pooled-status-keys
   #{:jvm-pool :registered-members :live-members :pending-members
     :restart-required :host-id :host-generation-id
-    :member-basis-fingerprint})
+    :member-basis-fingerprint :pool-restart-path})
 (defn- pooled-status? [value]
   (and (map? value)
        (every? pooled-status-keys (keys value))
@@ -750,20 +753,25 @@
            (pool-member-id? (:host-generation-id value)))
        (or (not (contains? value :member-basis-fingerprint))
            (s/valid? :millstrand.core.specs/basis-fingerprint
-                     (:member-basis-fingerprint value)))))
+                     (:member-basis-fingerprint value)))
+       (or (not (contains? value :pool-restart-path))
+           (s/valid? :millstrand.jvm-pool/pool-restart-path
+                     (:pool-restart-path value)))))
 (s/def :millstrand.jvm-pool/status-projection pooled-status?)
 (s/def :millstrand.core.specs/jvm-pool-status-projection
   :millstrand.jvm-pool/status-projection)
 (s/def :millstrand.jvm-pool/member-metadata
   (s/and map?
          #(= #{:jvm-pool :host-id :host-generation-id
-               :member-basis-fingerprint}
+               :pool-restart-path :member-basis-fingerprint}
              (set (keys %)))
          #(pool-id? (:jvm-pool %))
          #(pool-member-id? (:host-id %))
          #(pool-member-id? (:host-generation-id %))
          #(s/valid? :millstrand.core.specs/basis-fingerprint
-                    (:member-basis-fingerprint %))))
+                    (:member-basis-fingerprint %))
+         #(s/valid? :millstrand.jvm-pool/pool-restart-path
+                    (:pool-restart-path %))))
 (s/def :millstrand.core.specs/jvm-pool-member-metadata
   :millstrand.jvm-pool/member-metadata)
 
@@ -863,10 +871,16 @@
 (s/def :millstrand.peer/socket-path non-blank-string?)
 (s/def :millstrand.peer/state-dir non-blank-string?)
 (s/def :millstrand.peer/running? boolean?)
+(s/def :millstrand.peer/jvm-pool non-blank-string?)
+(s/def :millstrand.peer/host-id non-blank-string?)
+(s/def :millstrand.peer/host-generation-id non-blank-string?)
+(s/def :millstrand.peer/pool-restart-path canonical-absolute-path?)
 (def ^:private peer-identity-keys
   #{:name :workspace :weaver-id :generation-id :socket-path :state-dir})
+(def ^:private peer-pool-keys
+  #{:jvm-pool :host-id :host-generation-id :pool-restart-path})
 (def ^:private peer-row-keys
-  (conj peer-identity-keys :protocol-version :running?))
+  (into (conj peer-identity-keys :protocol-version :running?) peer-pool-keys))
 (s/def :millstrand.core.specs/peer-identity
   (s/and
    (s/keys :req-un [:millstrand.peer/name
@@ -886,7 +900,15 @@
                     :millstrand.peer/socket-path
                     :millstrand.peer/state-dir
                     :millstrand.peer/running?])
-   #(exact-keys? peer-row-keys %)))
+   #(keys-subset? peer-row-keys %)
+   #(let [present (set (filter (fn [key] (contains? % key)) peer-pool-keys))]
+      (or (empty? present) (= present peer-pool-keys)))
+   #(or (not (contains? % :jvm-pool))
+        (and (s/valid? :millstrand.peer/jvm-pool (:jvm-pool %))
+             (s/valid? :millstrand.peer/host-id (:host-id %))
+             (s/valid? :millstrand.peer/host-generation-id (:host-generation-id %))
+             (s/valid? :millstrand.peer/pool-restart-path
+                       (:pool-restart-path %))))))
 (s/def :millstrand.peer/argv
   (s/nilable (s/coll-of string? :kind vector?)))
 (s/def :millstrand.peer/payloads
@@ -1008,6 +1030,125 @@
        (peer-restart-state-consistent? value)))
 
 (s/def :millstrand.core.specs/peer-restart-record valid-peer-restart-record?)
+
+;; Pooled restart state is owned by the pool host rather than a member state
+;; directory. Peers read this closed JSON shape only to classify an interrupted
+;; request; Mill remains the writer and lifecycle authority.
+(def ^:private peer-pool-restart-member-keys
+  #{"config_dir" "weaver_id" "generation_id"})
+(def ^:private peer-pool-restart-host-keys
+  #{"host_id" "host_generation_id" "pid" "basis_fingerprint" "members"})
+(def ^:private peer-pool-restart-keys
+  #{"format" "jvm_pool" "state" "transition_id" "updated_at"
+    "membership_revision" "old_generation_stopped" "admitted_host"
+    "previous_host" "registered_members" "pending_members" "probe"
+    "failure"})
+
+(defn- sorted-canonical-paths?
+  [values]
+  (and (vector? values)
+       (every? canonical-absolute-path? values)
+       (= values (vec (sort values)))
+       (= (count values) (count (set values)))))
+
+(defn- peer-pool-restart-member?
+  [value]
+  (and (map? value)
+       (= peer-pool-restart-member-keys (set (keys value)))
+       (canonical-absolute-path? (get value "config_dir"))
+       (non-blank-string? (get value "weaver_id"))
+       (non-blank-string? (get value "generation_id"))))
+
+(defn- peer-pool-restart-host?
+  [value]
+  (and (or (nil? value) (map? value))
+       (or (nil? value)
+           (and (= peer-pool-restart-host-keys (set (keys value)))
+                (non-blank-string? (get value "host_id"))
+                (non-blank-string? (get value "host_generation_id"))
+                (pos-int? (get value "pid"))
+                (s/valid? :millstrand.core.specs/basis-fingerprint
+                          (get value "basis_fingerprint"))
+                (vector? (get value "members"))
+                (seq (get value "members"))
+                (every? peer-pool-restart-member? (get value "members"))
+                (sorted-canonical-paths?
+                 (mapv #(get % "config_dir") (get value "members")))))))
+
+(defn- pool-restart-host-configs
+  [host]
+  (set (map #(get % "config_dir") (get host "members"))))
+
+(defn- pool-restart-state-consistent?
+  [value]
+  (let [state (get value "state")
+        admitted (get value "admitted_host")
+        previous (get value "previous_host")
+        registered (set (get value "registered_members"))
+        pending (set (get value "pending_members"))
+        probe (get value "probe")
+        failure (get value "failure")
+        probe-success? (and (map? probe) (true? (get probe "success")))]
+    (and
+     (or (nil? admitted)
+         (= pending (set/difference registered
+                                    (pool-restart-host-configs admitted))))
+     (or (nil? previous)
+         (set/subset? (pool-restart-host-configs previous) registered))
+     (or (some? admitted)
+         (nil? previous)
+         (= pending (set/difference registered
+                                    (pool-restart-host-configs previous))))
+     (case state
+       "probing" (and (some? admitted) (nil? previous)
+                      (false? (get value "old_generation_stopped"))
+                      (nil? failure)
+                      (or (nil? probe) probe-success?))
+       "restarting" (and (nil? admitted) (some? previous)
+                         probe-success? (nil? failure))
+       "running" (and (some? admitted)
+                      (if (nil? previous)
+                        (and (false? (get value "old_generation_stopped"))
+                             (or (and (nil? probe)
+                                      (nil? failure)
+                                      (empty? pending))
+                                 (and (map? probe)
+                                      (false? (get probe "success"))
+                                      (= "probe" (get failure "stage")))))
+                        (and (empty? pending)
+                             probe-success?
+                             (true? (get value "old_generation_stopped"))
+                             (nil? failure))))
+       "failed" (and (nil? admitted) (some? previous)
+                     probe-success? (map? failure))
+       false))))
+
+(defn- valid-peer-pool-restart-record?
+  [value]
+  (and (map? value)
+       (= peer-pool-restart-keys (set (keys value)))
+       (= "millstrand.jvm-pool-restart/v1" (get value "format"))
+       (non-blank-string? (get value "jvm_pool"))
+       (contains? #{"probing" "restarting" "running" "failed"}
+                  (get value "state"))
+       (non-blank-string? (get value "transition_id"))
+       (non-blank-string? (get value "updated_at"))
+       (non-blank-string? (get value "membership_revision"))
+       (boolean? (get value "old_generation_stopped"))
+       (peer-pool-restart-host? (get value "admitted_host"))
+       (peer-pool-restart-host? (get value "previous_host"))
+       (sorted-canonical-paths? (get value "registered_members"))
+       (sorted-canonical-paths? (get value "pending_members"))
+       (or (nil? (get value "probe"))
+           (valid-peer-restart-probe? (get value "probe")))
+       (or (nil? (get value "failure"))
+           (valid-peer-restart-failure? (get value "failure")))
+       (or (some? (get value "admitted_host"))
+           (some? (get value "previous_host")))
+       (pool-restart-state-consistent? value)))
+
+(s/def :millstrand.core.specs/peer-pool-restart-record
+  valid-peer-pool-restart-record?)
 
 ;; Weaver-owned scheduler wake boundary shape (RFC-009): the single durable-write
 ;; contract shared by db persistence and the API tiers above it, so prose specs,

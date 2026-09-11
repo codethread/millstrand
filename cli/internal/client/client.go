@@ -33,6 +33,7 @@ type Metadata struct {
 	HostID                 string  `json:"host_id,omitempty"`
 	HostGenerationID       string  `json:"host_generation_id,omitempty"`
 	MemberBasisFingerprint string  `json:"member_basis_fingerprint,omitempty"`
+	PoolRestartPath        string  `json:"pool_restart_path,omitempty"`
 	ConfigDir              string  `json:"config_dir"`
 	StateDir               string  `json:"state_dir"`
 	DataDir                string  `json:"data_dir"`

@@ -90,6 +90,7 @@
    :host-id "host-test"
    :host-generation-id "host-generation-test"
    :membership-revision "membership-test"
+   :pool-restart-path (.getCanonicalPath (io/file root "jvm-pools" "hosts" "restart.json"))
    :millstrand-source (.getCanonicalPath (io/file "."))
    :millstrand-version "dev"
    :members [(pool-member root "a") (pool-member root "b")]})

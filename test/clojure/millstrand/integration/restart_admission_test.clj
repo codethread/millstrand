@@ -2,6 +2,7 @@
   "Focused contract tests for planned peer interruption at the send boundary."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [millstrand.api.peers.alpha :as peers]
             [millstrand.spools.test-support :as test-support])
@@ -24,6 +25,33 @@
   (merge {"transition_id" "transition-1"
           "updated_at" "2026-08-24T00:00:00Z"}
          fields))
+
+(defn- pool-restart-record [workspace]
+  {"format" "millstrand.jvm-pool-restart/v1"
+   "jvm_pool" "backend"
+   "state" "restarting"
+   "transition_id" "pool-transition-1"
+   "updated_at" "2026-08-24T00:00:00Z"
+   "membership_revision" "membership-1"
+   "old_generation_stopped" false
+   "admitted_host" nil
+   "previous_host" {"host_id" "host-1"
+                    "host_generation_id" "host-generation-1"
+                    "pid" 12345
+                    "basis_fingerprint" (str "sha256:" (str/join (repeat 64 "a")))
+                    "members" [{"config_dir" workspace
+                                "weaver_id" "peer-weaver"
+                                "generation_id" "peer-generation"}]}
+   "registered_members" [workspace]
+   "pending_members" []
+   "probe" {"success" true
+            "stage" "probe/complete"
+            "probe/workspace" "/tmp/probe"
+            "source/workspace" "/tmp/source"
+            "completed" []
+            "diagnostics" []
+            "log" "/tmp/probe.log"}
+   "failure" nil})
 
 (defn- with-peer-server [response f]
   (let [root (test-support/temp-dir "millstrand-restart-admission")
@@ -158,6 +186,113 @@
         (is false "expected ordinary peer transport failure")
         (catch clojure.lang.ExceptionInfo ex
           (is (= :peer/transport-failed (:code (ex-data ex)))))))))
+
+(deftest pooled-peer-restart-uses-host-record-and-member-identity
+  (with-peer-server nil
+    (fn [peer]
+      (let [record-path (io/file (:state-dir peer) "pool-restart.json")
+            pooled-peer (assoc peer
+                               :jvm-pool "backend"
+                               :host-id "host-1"
+                               :host-generation-id "host-generation-1"
+                               :pool-restart-path (.getCanonicalPath record-path))]
+        (spit record-path
+              (json/write-str
+               (pool-restart-record
+                (.getCanonicalPath (io/file (:workspace peer))))))
+        (try
+          (peers/call! pooled-peer "read")
+          (is false "expected pooled host restart state to classify the old call")
+          (catch clojure.lang.ExceptionInfo ex
+            (is (= :weaver/restarted (:code (ex-data ex))))))))))
+
+(deftest partial-pooled-peer-identity-fails-before-send
+  (with-peer-server nil
+    (fn [peer]
+      (let [partial-peer (assoc peer :jvm-pool "backend")]
+        (try
+          (peers/call! partial-peer "read")
+          (is false "expected partial pooled identity to be rejected")
+          (catch clojure.lang.ExceptionInfo ex
+            (is (= :peer/invalid-peer (:code (ex-data ex))))))))))
+
+(deftest mismatched-pooled-restart-identity-fails-loudly
+  (doseq [[label peer-fields record-fields]
+          [["pool"
+            {:jvm-pool "backend"
+             :host-id "host-1"
+             :host-generation-id "host-generation-1"}
+            {"jvm_pool" "other"}]
+           ["host generation"
+            {:jvm-pool "backend"
+             :host-id "other-host"
+             :host-generation-id "other-generation"}
+            {}]]]
+    (with-peer-server nil
+      (fn [peer]
+        (let [record-path (io/file (:state-dir peer)
+                                   (str "pool-restart-" label ".json"))
+              pooled-peer (assoc (merge peer peer-fields)
+                                 :pool-restart-path
+                                 (.getCanonicalPath record-path))]
+          (spit record-path
+                (json/write-str
+                 (merge (pool-restart-record
+                         (.getCanonicalPath (io/file (:workspace peer))))
+                        record-fields)))
+          (try
+            (peers/call! pooled-peer "read")
+            (is false (str "expected mismatched " label " to be rejected"))
+            (catch clojure.lang.ExceptionInfo ex
+              (is (= :peer/restart-state-malformed
+                     (:code (ex-data ex)))))))))))
+
+(deftest mismatched-pooled-previous-member-fails-loudly
+  (with-peer-server nil
+    (fn [peer]
+      (let [record-path (io/file (:state-dir peer) "pool-restart-member.json")
+            pooled-peer (assoc peer
+                               :jvm-pool "backend"
+                               :host-id "host-1"
+                               :host-generation-id "host-generation-1"
+                               :pool-restart-path (.getCanonicalPath record-path))
+            record (assoc-in
+                    (pool-restart-record
+                     (.getCanonicalPath (io/file (:workspace peer))))
+                    ["previous_host" "members" 0 "generation_id"]
+                    "other-generation")]
+        (spit record-path (json/write-str record))
+        (try
+          (peers/call! pooled-peer "read")
+          (is false "expected mismatched previous member to be rejected")
+          (catch clojure.lang.ExceptionInfo ex
+            (is (= :peer/restart-state-malformed
+                   (:code (ex-data ex))))))))))
+
+(deftest legacy-pooled-member-record-is-not-isolated-history
+  (with-peer-server nil
+    (fn [peer]
+      (let [file (io/file (:state-dir peer) "restart.json")]
+        (spit file
+              (json/write-str
+               (restart-record
+                {"state" "running"
+                 "generation_id" "replacement-generation"
+                 "old_generation_stopped" true
+                 "previous_weaver_id" "peer-weaver"
+                 "previous_generation_id" "peer-generation"
+                 "probe" {"success" true
+                          "stage" "probe/complete"
+                          "probe/workspace" "/tmp/jvm-pools/pool-probes/legacy"
+                          "source/workspace" "/tmp/source"
+                          "completed" []
+                          "diagnostics" []
+                          "log" "/tmp/probe.log"}})))
+        (try
+          (peers/call! peer "read")
+          (is false "expected legacy pooled state to be rejected")
+          (catch clojure.lang.ExceptionInfo ex
+            (is (= :peer/restart-state-malformed (:code (ex-data ex))))))))))
 
 (deftest malformed-peer-restart-records-fail-at-the-boundary
   (doseq [[label record expected-field]

@@ -231,7 +231,7 @@ func TestRestartPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testi
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	oldManifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: []poolLaunchMember{{ConfigDir: world.ConfigDir, SourceCWD: source, StateDir: world.StateDir, DataDir: world.DataDir, Name: "member", WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, DependencyDiagnostic: dependencyDiagnosticPath(world)}}}
+	oldManifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, PoolRestartPath: filepath.Join(hostDir, poolRestartRecordFile), MillstrandSource: source, MillstrandVersion: config.Version, Members: []poolLaunchMember{{ConfigDir: world.ConfigDir, SourceCWD: source, StateDir: world.StateDir, DataDir: world.DataDir, Name: "member", WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, DependencyDiagnostic: dependencyDiagnosticPath(world)}}}
 	if err := writePoolLaunchManifest(filepath.Join(hostDir, "launch-host-1.json"), oldManifest); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestRestartPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testi
 	if err := atomicPoolJSON(readyPath, oldMarker); err != nil {
 		t.Fatal(err)
 	}
-	host := &weaverHost{Pool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRev: snapshot.Revision, PID: cmd.Process.Pid, cmd: cmd, Live: true, ReadyPath: readyPath, ManifestPath: filepath.Join(hostDir, "launch-host-1.json"), LogPath: filepath.Join(hostDir, "host.log"), Members: []poolMember{{World: world, WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, Identity: identity}}}
+	host := &weaverHost{Pool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", BasisFingerprint: poolTestBasis, MembershipRev: snapshot.Revision, PID: cmd.Process.Pid, cmd: cmd, Live: true, ReadyPath: readyPath, ManifestPath: filepath.Join(hostDir, "launch-host-1.json"), LogPath: filepath.Join(hostDir, "host.log"), PoolRestartPath: oldManifest.PoolRestartPath, Members: []poolMember{{World: world, WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, Identity: identity}}}
 	s := &server{poolRegistry: registry, poolHosts: map[string]*weaverHost{"backend": host}, poolMembers: map[string]*weaverHost{world.ConfigDir: host}}
 
 	originalBaseline, originalProbe := poolProbeBaselineStatus, poolProbeRuntime
@@ -263,6 +263,10 @@ func TestRestartPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testi
 	_, err = s.restartPooledWeaver(client.MillWorldRequest{CWD: source, ConfigDir: world.ConfigDir}, world, "backend")
 	if err == nil || !strings.Contains(err.Error(), "backend") || !strings.Contains(err.Error(), world.ConfigDir) || !strings.Contains(err.Error(), "artifact cleanup") {
 		t.Fatalf("member cleanup failure was not contextualized: %v", err)
+	}
+	record, present, recordErr := readPoolRestartRecord(host.PoolRestartPath, host.Pool)
+	if recordErr != nil || !present || record.State != restartStateFailed || !record.OldGenerationStopped || record.Failure == nil || record.Failure.Stage != "artifact-cleanup" {
+		t.Fatalf("member cleanup failure record = %#v present=%v err=%v", record, present, recordErr)
 	}
 	if host.Live {
 		t.Fatal("restart member cleanup failure left stopped host marked live")
@@ -351,42 +355,6 @@ func TestPooledRestartProbeResultRetainsObservedFailureOnly(t *testing.T) {
 		if row["stage"] == "evaluate" || row["stage"] == "staged" {
 			t.Fatalf("pooled probe fabricated isolated lifecycle stage: %#v", row)
 		}
-	}
-}
-
-func TestPooledRestartRecordsRetainCutoverTruthAndPendingDiagnostics(t *testing.T) {
-	oldWorld := config.World{ConfigDir: filepath.Join(t.TempDir(), "old", ".millstrand"), StateDir: filepath.Join(t.TempDir(), "old-state")}
-	pendingWorld := config.World{ConfigDir: filepath.Join(t.TempDir(), "pending", ".millstrand"), StateDir: filepath.Join(t.TempDir(), "pending-state")}
-	probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "/tmp/probe", SourceWorkspace: oldWorld.ConfigDir, Completed: []string{"probe/complete"}, Diagnostics: []map[string]any{}, Log: "/tmp/probe.log"}
-	failure := &restartFailure{Stage: "launch", Message: "replacement startup failed", LogPath: "/tmp/host.log"}
-	old := poolMember{World: oldWorld, WeaverID: "old-weaver", GenerationID: "old-generation"}
-	if err := writePooledRestartRecords([]poolMember{old}, pendingWorld, restartStateFailed, "transition-1", probe, failure, true); err != nil {
-		t.Fatal(err)
-	}
-	record, ok, err := readRestartRecordDetailed(oldWorld)
-	if err != nil || !ok || record.State != restartStateFailed || record.GenerationID != "" || !record.OldGenerationStopped || record.PreviousGeneration != "old-generation" || record.PreviousWeaver != "old-weaver" {
-		t.Fatalf("cutover record lost old-generation truth: record=%#v ok=%v err=%v", record, ok, err)
-	}
-	pendingRecord, ok, err := readRestartRecordDetailed(pendingWorld)
-	if err != nil || !ok || pendingRecord.State != restartStateFailed || pendingRecord.GenerationID != "" {
-		t.Fatalf("pending initiator record admitted a generation: record=%#v ok=%v err=%v", pendingRecord, ok, err)
-	}
-	status := map[string]any{"state": "pending"}
-	merged := (&server{}).mergePooledDetailedRestartStatus(pendingWorld, status)
-	if merged["state"] != "pending" || merged["probe"] == nil || merged["restart_failure"] == nil {
-		t.Fatalf("pending status lost initiator diagnostics or state: %#v", merged)
-	}
-}
-
-func TestPooledDetailedStatusKeepsStoppedStateAfterFailedProbe(t *testing.T) {
-	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand"), StateDir: filepath.Join(t.TempDir(), "state")}
-	probe := &restartProbeResult{Success: false, Stage: "probe/failure", ProbeWorkspace: "/tmp/probe", SourceWorkspace: world.ConfigDir, Completed: []string{"probe/basis"}, Diagnostics: []map[string]any{{"stage": "probe/failure", "status": "failed", "data": map[string]any{"message": "missing source"}}}, Log: "/tmp/probe.log"}
-	if err := writeRestartRecord(world, restartRecord{State: restartStateRunning, TransitionID: "transition-1", GenerationID: "old-generation", Probe: probe, Failure: &restartFailure{Stage: "probe", Message: "missing source"}}); err != nil {
-		t.Fatal(err)
-	}
-	status := (&server{}).mergePooledDetailedRestartStatus(world, map[string]any{"state": "stopped"})
-	if status["state"] != "stopped" || status["probe"] == nil || status["restart_failure"] == nil {
-		t.Fatalf("historical probe record overwrote current stopped state: %#v", status)
 	}
 }
 
@@ -612,7 +580,11 @@ func TestPendingPoolStatusReportsCompleteRegisteredProjection(t *testing.T) {
 	registered := poolConfigDirsFromSnapshot(snapshot)
 	pending := []string{worlds[1].ConfigDir, worlds[2].ConfigDir}
 	sort.Strings(pending)
-	host := &weaverHost{Pool: "backend", HostID: "host-1", Live: true, Members: []poolMember{{World: worlds[0]}}}
+	restartPath, err := poolRestartRecordPath(mustStateRoot(t), "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := &weaverHost{Pool: "backend", HostID: "host-1", PoolRestartPath: restartPath, Live: true, Members: []poolMember{{World: worlds[0]}}}
 	s := &server{poolHosts: map[string]*weaverHost{"backend": host}, poolRegistry: registry}
 	statusB, ok, err := s.poolStatusForWorld(worlds[1])
 	if err != nil || !ok {
@@ -771,7 +743,11 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: members}
+	restartPath, err := poolRestartRecordPath(root, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, PoolRestartPath: restartPath, MillstrandSource: source, MillstrandVersion: config.Version, Members: members}
 	manifestPath := filepath.Join(hostDir, "launch-"+hostID+".json")
 	if err := writePoolLaunchManifest(manifestPath, manifest); err != nil {
 		t.Fatal(err)
@@ -855,7 +831,15 @@ func writePooledMemberMetadata(t *testing.T, world config.World, pid int, weaver
 		t.Fatal(err)
 	}
 	databasePath := world.DBPath
-	metadata := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: config.Version, PID: pid, DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &databasePath, DaemonID: weaverID, GenerationID: generationID, BasisFingerprint: poolTestBasis, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGenerationID, MemberBasisFingerprint: poolTestBasis, ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: filepath.Base(world.ConfigDir), SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "2026-09-11T00:00:00Z"}
+	stateRoot, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restartPath, err := poolRestartRecordPath(stateRoot, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: config.Version, PID: pid, DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &databasePath, DaemonID: weaverID, GenerationID: generationID, BasisFingerprint: poolTestBasis, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGenerationID, MemberBasisFingerprint: poolTestBasis, PoolRestartPath: restartPath, ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: filepath.Base(world.ConfigDir), SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "2026-09-11T00:00:00Z"}
 	metadata.NREPL.Host = "127.0.0.1"
 	metadata.NREPL.Port = 4100
 	b, err := json.Marshal(metadata)

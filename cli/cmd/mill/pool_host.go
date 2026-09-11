@@ -35,6 +35,7 @@ type weaverHost struct {
 	Pool             string
 	HostID           string
 	HostGenerationID string
+	BasisFingerprint string
 	MembershipRev    string
 	cmd              *exec.Cmd
 	PID              int
@@ -45,6 +46,7 @@ type weaverHost struct {
 	ReadyPath        string
 	ManifestPath     string
 	LogPath          string
+	PoolRestartPath  string
 	Live             bool
 }
 
@@ -54,6 +56,7 @@ type poolLaunchManifest struct {
 	HostID             string             `json:"host_id"`
 	HostGenerationID   string             `json:"host_generation_id"`
 	MembershipRevision string             `json:"membership_revision"`
+	PoolRestartPath    string             `json:"pool_restart_path"`
 	MillstrandSource   string             `json:"millstrand_source"`
 	MillstrandVersion  string             `json:"millstrand_version"`
 	Members            []poolLaunchMember `json:"members"`
@@ -180,11 +183,13 @@ func atomicPoolJSON(path string, value any) error {
 }
 
 func validatePoolLaunchManifest(m poolLaunchManifest) error {
-	if m.Format != poolLaunchFormat || strings.TrimSpace(m.JVMPool) == "" || strings.TrimSpace(m.HostID) == "" || strings.TrimSpace(m.HostGenerationID) == "" || strings.TrimSpace(m.MembershipRevision) == "" || strings.TrimSpace(m.MillstrandSource) == "" || strings.TrimSpace(m.MillstrandVersion) == "" {
+	if m.Format != poolLaunchFormat || strings.TrimSpace(m.JVMPool) == "" || strings.TrimSpace(m.HostID) == "" || strings.TrimSpace(m.HostGenerationID) == "" || strings.TrimSpace(m.MembershipRevision) == "" || strings.TrimSpace(m.PoolRestartPath) == "" || strings.TrimSpace(m.MillstrandSource) == "" || strings.TrimSpace(m.MillstrandVersion) == "" {
 		return errors.New("invalid JVM pool launch manifest identity")
 	}
-	if !filepath.IsAbs(m.MillstrandSource) || filepath.Clean(m.MillstrandSource) != m.MillstrandSource {
-		return errors.New("JVM pool launch millstrand_source must be canonical absolute path")
+	for label, path := range map[string]string{"pool_restart_path": m.PoolRestartPath, "millstrand_source": m.MillstrandSource} {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+			return fmt.Errorf("JVM pool launch %s must be canonical absolute path", label)
+		}
 	}
 	if len(m.Members) == 0 {
 		return errors.New("JVM pool launch manifest must contain members")
@@ -273,6 +278,9 @@ func validatePoolAdmission(host *weaverHost, marker poolReadyMarker, statuses ma
 		}
 		if status["jvm_pool"] != host.Pool || status["host_id"] != host.HostID || status["host_generation_id"] != host.HostGenerationID || status["basis_fingerprint"] != marker.BasisFingerprint || status["member_basis_fingerprint"] == "" {
 			return fmt.Errorf("JVM pool member %s host or basis metadata mismatch", expected.World.ConfigDir)
+		}
+		if host.PoolRestartPath != "" && status["pool_restart_path"] != host.PoolRestartPath {
+			return fmt.Errorf("JVM pool member %s pool restart path mismatch", expected.World.ConfigDir)
 		}
 		if actual.SocketPath != identity.Socket {
 			return fmt.Errorf("JVM pool member %s socket identity mismatch", expected.World.ConfigDir)

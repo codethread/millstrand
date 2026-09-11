@@ -306,6 +306,7 @@
    :host-id "host-1"
    :host-generation-id "host-generation-1"
    :membership-revision "membership-1"
+   :pool-restart-path (.getCanonicalPath (io/file source "jvm-pools" "hosts" "restart.json"))
    :millstrand-source (.getCanonicalPath source)
    :millstrand-version "dev"
    :members (mapv (fn [[config-dir source-cwd name]]

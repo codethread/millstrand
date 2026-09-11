@@ -53,8 +53,8 @@
   [value]
   (closed-raw :launch-manifest
               #{"format" "jvm_pool" "host_id" "host_generation_id"
-                "membership_revision" "millstrand_source" "millstrand_version"
-                "members"}
+                "membership_revision" "pool_restart_path" "millstrand_source"
+                "millstrand_version" "members"}
               value)
   (let [members (mapv decode-launch-member (required value "members"))]
     (require-valid!
@@ -64,6 +64,7 @@
       :host-id (required value "host_id")
       :host-generation-id (required value "host_generation_id")
       :membership-revision (required value "membership_revision")
+      :pool-restart-path (required value "pool_restart_path")
       :millstrand-source (required value "millstrand_source")
       :millstrand-version (required value "millstrand_version")
       :members members}

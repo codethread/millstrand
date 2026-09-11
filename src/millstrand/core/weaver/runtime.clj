@@ -662,6 +662,8 @@
                                            :host-id (:host-id pool-metadata)
                                            :host-generation-id
                                            (:host-generation-id pool-metadata)
+                                           :pool-restart-path
+                                           (:pool-restart-path pool-metadata)
                                            :member-basis-fingerprint
                                            (:member-basis-fingerprint pool-metadata)})
             op-store (core-registry/backed-registry :ops)

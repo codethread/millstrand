@@ -64,6 +64,9 @@ type server struct {
 	// routine status/list poll. Entries are invalidated when the file identity,
 	// size, or modification time changes.
 	restartSummaryCache map[string]restartSummaryCacheEntry
+	// poolRestartSummaryCache applies the same invalidation discipline to the
+	// host-scoped pooled restart record.
+	poolRestartSummaryCache map[string]poolRestartSummaryCacheEntry
 	// restartFn is nil in production. Tests may inject the lifecycle boundary
 	// to exercise the mill route and its closed result validation without
 	// starting a Weaver process.
