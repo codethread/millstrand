@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,6 +90,160 @@ func TestLoadAcceptsValidAlphaConfig(t *testing.T) {
 	}
 	if world.ConfigDir != tDir {
 		t.Fatalf("unexpected world config dir: %#v", world)
+	}
+}
+
+func TestLoadAcceptsJVMPoolFromBaseConfig(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","name":"shop-fe","autoStart":true,"JVMPool":" backend "}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, err := Load(d)
+	if err != nil {
+		t.Fatalf("expected JVMPool to load, got %v", err)
+	}
+	if c.JVMPool == nil || *c.JVMPool != " backend " {
+		t.Fatalf("unexpected JVMPool: %#v", c.JVMPool)
+	}
+	if c.ConfigFormat != "alpha" || c.Name != "shop-fe" || !c.AutoStart {
+		t.Fatalf("existing config fields changed: %#v", c)
+	}
+}
+
+func TestLoadAcceptsJVMPoolFromLocalOverlay(t *testing.T) {
+	d := t.TempDir()
+	base := []byte(`{"configFormat":"alpha","JVMPool":"base"}`)
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), base, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, LocalConfigFileName), []byte(`{"JVMPool":"local"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, err := Load(d)
+	if err != nil {
+		t.Fatalf("expected local JVMPool overlay to load, got %v", err)
+	}
+	if c.JVMPool == nil || *c.JVMPool != "local" {
+		t.Fatalf("local JVMPool did not win: %#v", c.JVMPool)
+	}
+	if err := os.WriteFile(filepath.Join(d, LocalConfigFileName), []byte(`{"JVMPool":null}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err = Load(d)
+	if err != nil {
+		t.Fatalf("expected local null JVMPool opt-out to load, got %v", err)
+	}
+	if c.JVMPool != nil {
+		t.Fatalf("local null did not clear base JVMPool: %#v", c.JVMPool)
+	}
+}
+
+func TestLoadRejectsInvalidJVMPool(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "number", value: `123`},
+		{name: "boolean", value: `false`},
+		{name: "blank", value: `""`},
+		{name: "whitespace", value: `" \t "`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := t.TempDir()
+			data := []byte(`{"configFormat":"alpha","JVMPool":` + tc.value + `}`)
+			if err := os.WriteFile(filepath.Join(d, ConfigFileName), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := Load(d); err == nil || !strings.Contains(err.Error(), "client config JVMPool must be a non-blank string or null") {
+				t.Fatalf("expected JVMPool validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRetainsUnknownConfigWarningsWithJVMPool(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","JVMPool":"backend","future":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, err := Load(d)
+	if err != nil {
+		t.Fatalf("expected config to load, got %v", err)
+	}
+	if c.JVMPool == nil || *c.JVMPool != "backend" {
+		t.Fatalf("unexpected JVMPool: %#v", c.JVMPool)
+	}
+	if len(c.Warnings) != 1 || len(c.Warnings[0].Keys) != 1 || c.Warnings[0].Keys[0] != "future" {
+		t.Fatalf("unexpected unknown-key warnings: %#v", c.Warnings)
+	}
+}
+
+func TestSetLocalJVMPoolPreservesLocalKeysAndBaseBytes(t *testing.T) {
+	d := t.TempDir()
+	base := []byte("{\n  \"configFormat\": \"alpha\",\n  \"JVMPool\": \"base\"\n}\n")
+	local := []byte("{\"name\":\"local\",\"future\":{\"keep\":true}}\n")
+	if err := os.WriteFile(filepath.Join(d, ConfigFileName), base, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, LocalConfigFileName), local, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetLocalJVMPool(d, " backend "); err != nil {
+		t.Fatalf("expected local JVMPool write to succeed, got %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(d, ConfigFileName)); err != nil {
+		t.Fatal(err)
+	} else if string(got) != string(base) {
+		t.Fatalf("base config changed: got %q want %q", got, base)
+	}
+	var persisted map[string]json.RawMessage
+	b, err := os.ReadFile(filepath.Join(d, LocalConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	var future map[string]bool
+	if err := json.Unmarshal(persisted["future"], &future); err != nil {
+		t.Fatal(err)
+	}
+	if string(persisted["JVMPool"]) != `" backend "` || string(persisted["name"]) != `"local"` || !future["keep"] {
+		t.Fatalf("local keys were not preserved: %s", b)
+	}
+}
+
+func TestSetLocalJVMPoolRejectsInvalidInputWithoutReplacement(t *testing.T) {
+	d := t.TempDir()
+	path := filepath.Join(d, LocalConfigFileName)
+	original := []byte(`{"name":"keep"}`)
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetLocalJVMPool(d, " \t "); err == nil || !strings.Contains(err.Error(), "non-blank string") {
+		t.Fatalf("expected blank JVMPool rejection, got %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil {
+		t.Fatal(err)
+	} else if string(got) != string(original) {
+		t.Fatalf("blank input replaced local config: got %q want %q", got, original)
+	}
+
+	malformed := []byte(`{"name":`)
+	if err := os.WriteFile(path, malformed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetLocalJVMPool(d, "backend"); err == nil || !strings.Contains(err.Error(), "malformed local client config") {
+		t.Fatalf("expected malformed local config rejection, got %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil {
+		t.Fatal(err)
+	} else if string(got) != string(malformed) {
+		t.Fatalf("malformed local config was replaced: got %q want %q", got, malformed)
 	}
 }
 
@@ -181,6 +336,8 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 		{"unknown-auto-start", `{"autoStart":true}`, "", "autoStart"},
 		{"blank-name", `{"name":""}`, "local client config name must be a non-blank string", ""},
 		{"non-string-name", `{"name":false}`, "local client config name must be a non-blank string", ""},
+		{"blank-jvm-pool", `{"JVMPool":""}`, "local client config JVMPool must be a non-blank string or null", ""},
+		{"non-string-jvm-pool", `{"JVMPool":false}`, "local client config JVMPool must be a non-blank string or null", ""},
 		{"malformed", `{"name":`, "malformed local client config", ""},
 	}
 	for _, tc := range cases {

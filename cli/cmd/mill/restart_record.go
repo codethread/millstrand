@@ -22,7 +22,7 @@ type restartFailure struct {
 type restartRecord struct {
 	State                string              `json:"state"`
 	TransitionID         string              `json:"transition_id"`
-	GenerationID         string              `json:"generation_id"`
+	GenerationID         string              `json:"generation_id,omitempty"`
 	PreviousGeneration   string              `json:"previous_generation_id,omitempty"`
 	PreviousWeaver       string              `json:"previous_weaver_id,omitempty"`
 	UpdatedAt            string              `json:"updated_at"`

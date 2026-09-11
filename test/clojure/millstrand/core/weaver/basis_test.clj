@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millstrand.core.weaver.basis :as basis]))
+            [millstrand.core.weaver.basis :as basis]
+            [millstrand.core.weaver.pool-basis :as pool-basis]))
 
 (defn- inspect-basis!
   [workspace & arguments]
@@ -22,15 +23,28 @@
     (edn/read-string output)))
 
 (defn- workspace!
-  [project extra]
-  (let [directory (.toFile
-                   (java.nio.file.Files/createTempDirectory
-                    "millstrand-basis-"
-                    (make-array java.nio.file.attribute.FileAttribute 0)))]
-    (spit (io/file directory "deps.edn") (pr-str project))
-    (when extra
-      (spit (io/file directory "deps.local.edn") (pr-str extra)))
-    directory))
+  ([project extra]
+   (workspace! nil project extra))
+  ([parent project extra]
+   (let [directory (.toFile
+                    (if parent
+                      (java.nio.file.Files/createTempDirectory
+                       (.toPath (io/file parent))
+                       "millstrand-basis-"
+                       (make-array java.nio.file.attribute.FileAttribute 0))
+                      (java.nio.file.Files/createTempDirectory
+                       "millstrand-basis-"
+                       (make-array java.nio.file.attribute.FileAttribute 0))))]
+     (spit (io/file directory "deps.edn") (pr-str project))
+     (when extra
+       (spit (io/file directory "deps.local.edn") (pr-str extra)))
+     directory)))
+
+(defn- fixture-root!
+  []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "millstrand-basis-fixture-"
+            (make-array java.nio.file.attribute.FileAttribute 0))))
 
 (defn- resolved-basis
   [options]
@@ -284,3 +298,325 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"outside the canonical EDN domain"
                         (basis/canonical-edn (java.util.UUID/randomUUID)))))
+
+(defn- launch-manifest
+  [members source]
+  {:format "millstrand.jvm-pool-launch/v1"
+   :jvm-pool "backend"
+   :host-id "host-1"
+   :host-generation-id "host-generation-1"
+   :membership-revision "membership-1"
+   :millstrand-source (.getCanonicalPath source)
+   :millstrand-version "dev"
+   :members (mapv (fn [[config-dir source-cwd name]]
+                    {:config-dir (.getCanonicalPath config-dir)
+                     :source-cwd (.getCanonicalPath source-cwd)
+                     :state-dir (.getCanonicalPath (io/file config-dir "state"))
+                     :data-dir (.getCanonicalPath (io/file config-dir "data"))
+                     :name name
+                     :weaver-id (str "weaver-" name)
+                     :generation-id (str "generation-" name)
+                     :dependency-diagnostic
+                     (.getCanonicalPath (io/file config-dir "dependency.json"))})
+                  members)})
+
+(deftest pool-basis-keeps-member-relative-resolution-and-root-order
+  (let [source (workspace! {} nil)
+        member-a (workspace! {:deps {'demo/a {:local/root "member-a-root"}}} nil)
+        member-b (workspace! {:deps {'demo/b {:local/root "member-b-root"}}} nil)
+        captured (atom [])
+        manifest (launch-manifest [[member-a source "a"]
+                                   [member-b source "b"]]
+                                  source)
+        root-a (.getCanonicalPath (io/file source "root-a"))
+        root-b (.getCanonicalPath (io/file source "root-b"))
+        shared (.getCanonicalPath (io/file source "shared"))
+        created
+        (binding [basis/*create-basis*
+                  (fn [options]
+                    (swap! captured conj options)
+                    {:libs {:demo/a {:mvn/version "1"}}
+                     :classpath-roots (if (= (.getCanonicalPath member-a)
+                                             (:dir options))
+                                        [root-a shared shared]
+                                        [shared root-b])
+                     :argmap {}})]
+          (pool-basis/create-pool-basis manifest
+                                        {:local/root (.getCanonicalPath source)}))]
+    (is (= [(.getCanonicalPath member-a) (.getCanonicalPath member-b)]
+           (mapv :dir @captured)))
+    (is (every? #(nil? (:dependency-source-workspace %)) @captured))
+    (is (= ["member-a-root" "member-b-root"]
+           (mapv #(get-in % [:project :deps
+                             (if (= (:dir %) (.getCanonicalPath member-a))
+                               'demo/a
+                               'demo/b)
+                             :local/root])
+                 @captured)))
+    (is (= [root-a shared root-b] (:classpath-roots created)))
+    (is (nil? (:libs created))
+        "the pool basis never presents a merged dependency map")
+    (is (= {:mvn/version "1"}
+           (get-in created [:members 0 :generation-basis :basis :libs :demo/a])))
+    (is (instance? ClassLoader (:classloader created)))
+    (is (= 2 (count (:members created))))
+    (is (not= (get-in created [:members 0 :generation-basis :classloader])
+              (get-in created [:members 1 :generation-basis :classloader])))))
+
+(deftest pool-basis-fingerprint-includes-members-and-member-roots
+  (let [source (workspace! {} nil)
+        member-a (workspace! {} nil)
+        member-b (workspace! {} nil)
+        manifest (launch-manifest [[member-a source "a"]
+                                   [member-b source "b"]]
+                                  source)
+        roots (atom {(.getCanonicalPath member-a) ["/root/a"]
+                     (.getCanonicalPath member-b) ["/root/b"]})
+        make-basis (fn [candidate]
+                     (binding [basis/*create-basis*
+                               (fn [{:keys [dir]}]
+                                 {:libs {}
+                                  :classpath-roots (@roots dir)
+                                  :argmap {}})]
+                       (pool-basis/create-pool-basis
+                        candidate {:local/root (.getCanonicalPath source)})))
+        original (make-basis manifest)
+        changed-root (do (swap! roots update (.getCanonicalPath member-b)
+                                conj "/root/changed")
+                         (make-basis manifest))]
+    (is (not= (:fingerprint original) (:fingerprint changed-root)))
+    (reset! roots {(.getCanonicalPath member-a) ["/root/a"]
+                   (.getCanonicalPath member-b) ["/root/b"]})
+    (is (= (:fingerprint original)
+           (:fingerprint
+            (make-basis (assoc-in manifest [:members 1 :name]
+                                  "changed")))))
+    (is (not= (:fingerprint original)
+              (:fingerprint
+               (make-basis
+                (assoc manifest :members (vec (reverse (:members manifest))))))))))
+
+(deftest pool-manifests-are-closed
+  (let [source (workspace! {} nil)
+        member (workspace! {} nil)
+        manifest (launch-manifest [[member source "a"]] source)]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"closed contract"
+         (pool-basis/validate-launch-manifest
+          (assoc manifest :unexpected true))))))
+
+(deftest probe-private-paths-cannot-escape-before-basis-resolution
+  (let [fixture-root (fixture-root!)
+        root (workspace! fixture-root {} nil)
+        original (workspace! fixture-root {} nil)
+        probe-root (doto (io/file fixture-root "probe") (.mkdirs))
+        private-config (workspace! probe-root {} nil)
+        sentinel (io/file probe-root "sentinel")
+        member {:original-config-dir (.getCanonicalPath original)
+                :original-source-cwd (.getCanonicalPath original)
+                :probe-config-dir (.getCanonicalPath private-config)
+                :probe-state-dir (.getCanonicalPath (io/file private-config "state"))
+                :probe-data-dir (.getCanonicalPath (io/file private-config "data"))
+                :member-diagnostic
+                (.getCanonicalPath (io/file private-config "diagnostic.jsonl"))
+                :name "a"
+                :candidate-weaver-id "candidate-a"
+                :candidate-generation-id "generation-a"
+                :old-member-baseline nil}
+        manifest {:format "millstrand.jvm-pool-probe/v1"
+                  :jvm-pool "backend"
+                  :probe-id "probe-boundary"
+                  :candidate-host-id "host-boundary"
+                  :candidate-host-generation-id "generation-host-boundary"
+                  :probe-root (.getCanonicalPath probe-root)
+                  :millstrand-source (.getCanonicalPath root)
+                  :result (.getCanonicalPath (io/file private-config "result.json"))
+                  :collective-diagnostic
+                  (.getCanonicalPath (io/file private-config "collective.jsonl"))
+                  :members [member]}
+        escaped (.getCanonicalPath (io/file probe-root ".." "escaped.json"))
+        sibling (str (.getCanonicalPath probe-root) "-sibling" "/result.json")
+        original-state (.getCanonicalPath (io/file original "state"))]
+    (spit sentinel "untouched")
+    (doseq [[label candidate] [["escaped-result" (assoc manifest :result escaped)]
+                               ["sibling-diagnostic"
+                                (assoc manifest :collective-diagnostic sibling)]
+                               ["original-state"
+                                (assoc-in manifest [:members 0 :probe-state-dir]
+                                          original-state)]
+                               ["escaped-member-diagnostic"
+                                (assoc-in manifest [:members 0 :member-diagnostic]
+                                          escaped)]]]
+      (testing label
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (pool-basis/validate-probe-manifest candidate)))))
+    (is (= "untouched" (slurp sentinel)))))
+
+(deftest probe-basis-uses-private-config-and-original-config-authority
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
+        original-root (workspace! fixture-root {} nil)
+        probe-root (workspace! fixture-root
+                               {:deps {'demo/local {:local/root "original-lib"}}}
+                               nil)
+        _ (do
+            (.mkdirs (io/file probe-root "config"))
+            (spit (io/file probe-root "config" "deps.edn")
+                  "{:deps {demo/local {:local/root \"original-lib\"}}}\n"))
+        captured (atom nil)
+        manifest {:format "millstrand.jvm-pool-probe/v1"
+                  :jvm-pool "backend"
+                  :probe-id "probe-1"
+                  :candidate-host-id "probe-host-1"
+                  :candidate-host-generation-id "probe-generation-1"
+                  :probe-root (.getCanonicalPath probe-root)
+                  :millstrand-source (.getCanonicalPath source)
+                  :result (.getCanonicalPath (io/file probe-root "result.json"))
+                  :collective-diagnostic
+                  (.getCanonicalPath (io/file probe-root "collective.jsonl"))
+                  :members [{:original-config-dir (.getCanonicalPath original-root)
+                             :original-source-cwd (.getCanonicalPath source)
+                             :probe-config-dir
+                             (.getCanonicalPath (io/file probe-root "config"))
+                             :probe-state-dir
+                             (.getCanonicalPath (io/file probe-root "state"))
+                             :probe-data-dir
+                             (.getCanonicalPath (io/file probe-root "data"))
+                             :member-diagnostic
+                             (.getCanonicalPath (io/file probe-root "member.jsonl"))
+                             :name "a"
+                             :candidate-weaver-id "probe-weaver-a"
+                             :candidate-generation-id "probe-generation-a"
+                             :old-member-baseline nil}]}
+        result
+        (binding [basis/*create-basis*
+                  (fn [options]
+                    (reset! captured options)
+                    {:libs {}
+                     :classpath-roots []
+                     :argmap {}})]
+          (pool-basis/create-probe-pool-basis
+           manifest {:local/root (.getCanonicalPath source)}))]
+    (is (= (.getCanonicalPath (io/file probe-root "config")) (:dir @captured)))
+    (is (= (.getCanonicalPath (io/file original-root "original-lib"))
+           (get-in @captured [:project :deps 'demo/local :local/root])))
+    (is (= (.getCanonicalPath original-root)
+           (get-in result [:members 0 :config-dir])))
+    (is (instance? ClassLoader (:classloader result)))))
+
+(deftest pool-and-isolated-bases-share-real-relative-dependency-resolution
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
+        member (workspace! fixture-root
+                           {:paths ["member-src"]
+                            :deps {'demo/parent {:local/root "../local-lib"}
+                                   'demo/nested {:local/root "local-lib"}}
+                            :aliases {:millstrand/weaver {:extra-paths ["weaver-src"]}}}
+                           {:paths ["extra-src"]
+                            :aliases {:millstrand/local {:extra-paths ["local-src"]}}})
+        parent-lib (local-library! (.getParentFile member)
+                                   "local-lib"
+                                   "demo.parent-lib")
+        nested-lib (local-library! member "local-lib" "demo.nested-lib")
+        _ (doseq [path ["member-src" "extra-src" "weaver-src" "local-src"]]
+            (.mkdirs (io/file member path)))
+        runtime-coordinate {:local/root (.getCanonicalPath (io/file "."))}
+        isolated (basis/create-generation-basis
+                  (.getCanonicalPath member)
+                  runtime-coordinate)
+        pooled (pool-basis/create-pool-basis
+                (launch-manifest [[member source "member"]] source)
+                runtime-coordinate)
+        pooled-generation (get-in pooled [:members 0 :generation-basis])
+        isolated-roots (set (get-in isolated [:basis :classpath-roots]))]
+    (is (= [:millstrand/weaver :millstrand/local]
+           (:aliases isolated)))
+    (is (= (:basis isolated) (:basis pooled-generation)))
+    (is (= (:fingerprint isolated) (:fingerprint pooled-generation)))
+    (is (= (get-in isolated [:basis :classpath-roots])
+           (:classpath-roots pooled)))
+    (is (every? isolated-roots
+                (map #(.getCanonicalPath (io/file member %))
+                     ["extra-src" "weaver-src" "local-src"])))
+    (is (contains? isolated-roots
+                   (.getCanonicalPath (io/file parent-lib "src"))))
+    (is (contains? isolated-roots
+                   (.getCanonicalPath (io/file nested-lib "src"))))
+    (is (= (.getCanonicalPath parent-lib)
+           (get-in pooled-generation [:basis :libs 'demo/parent :deps/root])))
+    (is (= (.getCanonicalPath nested-lib)
+           (get-in pooled-generation [:basis :libs 'demo/nested :deps/root])))))
+
+(deftest probe-basis-rebases-real-copied-dependencies-from-original-config
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
+        project {:paths ["member-src"]
+                 :deps {'demo/parent {:local/root "../local-lib"}
+                        'demo/nested {:local/root "local-lib"}}
+                 :aliases {:millstrand/weaver {:extra-paths ["weaver-src"]}}}
+        extra {:paths ["extra-src"]
+               :aliases {:millstrand/local {:extra-paths ["local-src"]}}}
+        original (workspace! fixture-root project extra)
+        parent-lib (local-library! (.getParentFile original)
+                                   "local-lib"
+                                   "demo.parent-lib")
+        nested-lib (local-library! original "local-lib" "demo.nested-lib")
+        probe-root (doto (io/file fixture-root "probe") (.mkdirs))
+        copied (workspace! probe-root project extra)
+        _ (doseq [path ["member-src" "extra-src" "weaver-src" "local-src"]]
+            (.mkdirs (io/file copied path)))
+        runtime-coordinate {:local/root (.getCanonicalPath (io/file "."))}
+        isolated (basis/create-generation-basis
+                  (.getCanonicalPath original)
+                  runtime-coordinate)
+        probe-manifest {:format "millstrand.jvm-pool-probe/v1"
+                        :jvm-pool "backend"
+                        :probe-id "probe-real"
+                        :candidate-host-id "probe-host-real"
+                        :candidate-host-generation-id "probe-generation-real"
+                        :probe-root (.getCanonicalPath probe-root)
+                        :millstrand-source (.getCanonicalPath source)
+                        :result (.getCanonicalPath (io/file copied "result.json"))
+                        :collective-diagnostic
+                        (.getCanonicalPath (io/file copied "collective.jsonl"))
+                        :members [{:original-config-dir
+                                   (.getCanonicalPath original)
+                                   :original-source-cwd (.getCanonicalPath source)
+                                   :probe-config-dir (.getCanonicalPath copied)
+                                   :probe-state-dir
+                                   (.getCanonicalPath (io/file copied "state"))
+                                   :probe-data-dir
+                                   (.getCanonicalPath (io/file copied "data"))
+                                   :member-diagnostic
+                                   (.getCanonicalPath
+                                    (io/file copied "member.jsonl"))
+                                   :name "member"
+                                   :candidate-weaver-id "probe-weaver-member"
+                                   :candidate-generation-id
+                                   "probe-generation-member"
+                                   :old-member-baseline nil}]}
+        probe (pool-basis/create-probe-pool-basis
+               probe-manifest runtime-coordinate)
+        probe-generation (get-in probe [:members 0 :generation-basis])
+        isolated-libs (select-keys (get-in isolated [:basis :libs])
+                                   ['demo/parent 'demo/nested])
+        probe-libs (select-keys (get-in probe-generation [:basis :libs])
+                                ['demo/parent 'demo/nested])
+        probe-roots (set (get-in probe-generation [:basis :classpath-roots]))]
+    (is (= isolated-libs probe-libs))
+    (is (= (get-in isolated [:basis :argmap])
+           (get-in probe-generation [:basis :argmap])))
+    (is (contains? probe-roots
+                   (.getCanonicalPath (io/file parent-lib "src"))))
+    (is (contains? probe-roots
+                   (.getCanonicalPath (io/file nested-lib "src"))))
+    (is (every? probe-roots
+                (map #(.getCanonicalPath (io/file copied %))
+                     ["extra-src" "weaver-src" "local-src"])))
+    (is (= (.getCanonicalPath original)
+           (get-in probe [:members 0 :config-dir])))
+    (is (= (.getCanonicalPath parent-lib)
+           (get-in probe-generation [:basis :libs 'demo/parent :deps/root])))
+    (is (= (.getCanonicalPath nested-lib)
+           (get-in probe-generation [:basis :libs 'demo/nested :deps/root])))))

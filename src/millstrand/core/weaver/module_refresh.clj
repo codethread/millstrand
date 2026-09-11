@@ -29,13 +29,28 @@
 (def ^:private declaration-record-key
   ::declaration-record)
 
-(def ^:private declaration-record-version 2)
+(def ^:private declaration-record-version 3)
 
 (def ^:private registry-state-key
   :millstrand.api.registry.alpha/state)
 
 (def ^:dynamic *declaration-record-snapshots*
   nil)
+
+(defn declaration-scope
+  "Return the declaration-record scope owned by `runtime`.
+
+  Pooled members share a JVM namespace, so their records include the host
+  generation and member configuration directory. Isolated runtimes retain
+  generation-local records with the same workspace identity included."
+  [runtime]
+  (let [config-dir (or (get-in runtime [:metadata :config-dir])
+                       (:source-config-dir runtime))
+        host-generation-id (or (get-in runtime [:metadata :host-generation-id])
+                               (get-in runtime [:pool-metadata :host-generation-id]))]
+    (if host-generation-id
+      [:host-generation host-generation-id config-dir]
+      [:generation (:generation-id runtime) config-dir])))
 
 (declare fail!)
 
@@ -161,7 +176,7 @@
 
 (defn- retain-declarations!
   "Replace `ns-sym`'s complete replay record."
-  [module-key ns-sym contribution kind-declarations lifecycle-declarations]
+  [runtime module-key ns-sym contribution kind-declarations lifecycle-declarations]
   (let [namespace (find-ns ns-sym)]
     (when-not namespace
       (fail! "Cannot retain declarations for an unloaded module namespace"
@@ -174,13 +189,19 @@
                 %
                 (assoc % ns-sym
                        (get (meta namespace) declaration-record-key)))))
-    (alter-meta! namespace assoc declaration-record-key
-                 {:version declaration-record-version
-                  :module-key module-key
-                  :namespace ns-sym
-                  :contribution contribution
-                  :kind-declarations kind-declarations
-                  :lifecycle lifecycle-declarations})
+    (let [scope (declaration-scope runtime)
+          previous (get (meta namespace) declaration-record-key)
+          scopes (if (= declaration-record-version (:version previous))
+                   (:scopes previous)
+                   {})]
+      (alter-meta! namespace assoc declaration-record-key
+                   {:version declaration-record-version
+                    :scopes (assoc scopes scope
+                                   {:module-key module-key
+                                    :namespace ns-sym
+                                    :contribution contribution
+                                    :kind-declarations kind-declarations
+                                    :lifecycle lifecycle-declarations})}))
     {:contribution contribution
      :kind-declarations kind-declarations
      :lifecycle lifecycle-declarations}))
@@ -195,11 +216,34 @@
       (alter-meta! namespace assoc declaration-record-key record)
       (alter-meta! namespace dissoc declaration-record-key))))
 
+(defn- cleanup-declaration-scope!
+  "Remove declarations for removed modules from this runtime's scope only."
+  [runtime removed-module-keys]
+  (when (seq removed-module-keys)
+    (let [scope (declaration-scope runtime)]
+      (doseq [namespace (all-ns)
+              :let [record (get (meta namespace) declaration-record-key)
+                    scoped (get-in record [:scopes scope])]
+              :when (and (= declaration-record-version (:version record))
+                         (contains? removed-module-keys (:module-key scoped)))]
+        (when *declaration-record-snapshots*
+          (swap! *declaration-record-snapshots*
+                 #(if (contains? % (ns-name namespace))
+                    %
+                    (assoc % (ns-name namespace) record))))
+        (let [scopes (dissoc (:scopes record) scope)]
+          (if (seq scopes)
+            (alter-meta! namespace assoc declaration-record-key
+                         (assoc record :scopes scopes))
+            (alter-meta! namespace dissoc declaration-record-key)))))))
+
 (defn- replay-declarations
   "Return the retained declaration record for loaded `ns-sym`."
-  [module-key ns-sym]
+  [runtime module-key ns-sym]
   (let [namespace (find-ns ns-sym)
-        record (some-> namespace meta declaration-record-key)]
+        record (some-> namespace meta declaration-record-key)
+        scope (declaration-scope runtime)
+        scoped-record (get-in record [:scopes scope])]
     (when-not namespace
       (fail! "Image module namespace is not loaded"
              {:reason :namespace-not-loaded
@@ -220,19 +264,26 @@
               :load :image
               :record/version (:version record)
               :expected/version declaration-record-version}))
-    (when-not (= ns-sym (:namespace record))
+    (when-not scoped-record
+      (fail! "Image module has no declaration record for this runtime scope"
+             {:reason :missing-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :scope scope
+              :load :image}))
+    (when-not (= ns-sym (:namespace scoped-record))
       (fail! "Image module authoring declaration record names another namespace"
              {:reason :foreign-declaration-record
               :module/key module-key
               :ns ns-sym
-              :record/namespace (:namespace record)}))
-    (when-not (= module-key (:module-key record))
+              :record/namespace (:namespace scoped-record)}))
+    (when-not (= module-key (:module-key scoped-record))
       (fail! "Image module authoring declaration record belongs to another module"
              {:reason :foreign-declaration-record
               :module/key module-key
               :ns ns-sym
-              :record/module-key (:module-key record)}))
-    (select-keys record [:contribution :kind-declarations :lifecycle])))
+              :record/module-key (:module-key scoped-record)}))
+    (select-keys scoped-record [:contribution :kind-declarations :lifecycle])))
 
 (defn- informative-throwable
   "Return the deepest structured cause beneath compiler and loader wrappers."
@@ -443,7 +494,7 @@
   `:ns` target with no source load and no contribution-collection scope. Entry
   contribution replays from the namespace's retained authoring declaration
   record. The outcome carries `:source/status :image` and no source stamp."
-  [key declaration]
+  [runtime key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
       (fail! image-contribution-remedy
@@ -451,7 +502,7 @@
               :reason :namespace-not-loaded}))
     (try
       (let [_ (reject-public-spool! key ns-sym)
-            replay (replay-declarations key ns-sym)]
+            replay (replay-declarations runtime key ns-sym)]
         {:status :ready
          :module/key key
          :module/namespace ns-sym
@@ -469,7 +520,7 @@
   [runtime with-loader key declaration previous-contribution previous-source]
   (try
     (if (= :image (:load declaration))
-      (evaluate-image-module key declaration)
+      (evaluate-image-module runtime key declaration)
       (let [context (with-loader #(collection-context runtime key declaration))
             {:keys [return kind-declarations lifecycle] collected :contribution}
             (module-graph/with-contribution-collection
@@ -484,7 +535,7 @@
             kind-declarations
             (if (= :unchanged source-status)
               (try
-                (:kind-declarations (replay-declarations key module-ns))
+                (:kind-declarations (replay-declarations runtime key module-ns))
                 (catch clojure.lang.ExceptionInfo throwable
                   (if (= :missing-declaration-record
                          (:reason (ex-data throwable)))
@@ -494,7 +545,7 @@
             lifecycle
             (if (= :unchanged source-status)
               (try
-                (:lifecycle (replay-declarations key module-ns))
+                (:lifecycle (replay-declarations runtime key module-ns))
                 (catch clojure.lang.ExceptionInfo throwable
                   (if (= :missing-declaration-record
                          (:reason (ex-data throwable)))
@@ -667,12 +718,12 @@
   failure or dependency retention therefore leaves the namespace's previous
   record untouched, while the outer refresh snapshot still rolls back records
   if a later coordinator-wide validation or publication step refuses."
-  [raw outcomes]
+  [runtime raw outcomes]
   (doseq [[module-key raw-outcome] raw
           :let [outcome (get outcomes module-key)]
           :when (retainable-staged-declarations? raw-outcome outcome)]
     (retain-declarations!
-     module-key
+     runtime module-key
      (:module/namespace raw-outcome)
      (:contribution raw-outcome)
      (:kind-declarations raw-outcome)
@@ -1046,6 +1097,7 @@
                 (candidate-projection backends (:candidates staged))
                 old-generation (:old-generation/baseline opts)
                 _ (when (and (:probe? opts)
+                             (some? old-generation)
                              (not (s/valid? :millstrand.weaver-start/old-generation-baseline
                                             old-generation)))
                     (fail! "Fresh probe requires an admitted old-generation baseline"
@@ -1057,9 +1109,10 @@
                    opts :candidate/staged :completed
                    {:candidate-registries candidate-projection
                     :old-generation/diff
-                    (assoc (semantic-diff (:projection old-generation)
-                                          candidate-projection)
-                           :baseline-status (:status old-generation))})
+                    (when old-generation
+                      (assoc (semantic-diff (:projection old-generation)
+                                            candidate-projection)
+                             :baseline-status (:status old-generation)))})
                 _ (publication/validate-op-candidates! backends (:candidates staged))
                 _ (publication/validate-kind-candidates!
                    runtime backends (:candidates staged))
@@ -1081,7 +1134,7 @@
               (let [live-backends (publication/backends runtime)
                     live-candidates (publication/candidates live-backends)
                     live-spool-state @(:spool-state runtime)
-                    _ (retain-staged-declarations! raw (:outcomes staged))
+                    _ (retain-staged-declarations! runtime raw (:outcomes staged))
                     changed-kinds (publication/publish!
                                    runtime staged-runtime backends (:candidates staged))
                     removal-order (->> (module-graph/dependency-order old-graph)
@@ -1093,6 +1146,7 @@
                      runtime state graph raw
                      provisional
                      changed-kinds reconcile-order lifecycle-resolvers)
+                    _ (cleanup-declaration-scope! runtime removed)
                     _ (try
                         (publication/validate-op-glossary-refs!
                          runtime backends (:candidates staged))

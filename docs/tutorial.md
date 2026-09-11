@@ -42,12 +42,23 @@ Start in a new Git repository:
 mkdir learn-millstrand
 cd learn-millstrand
 git init
+```
+
+`mill init` sends its request through a running local `mill`; it is not a standalone local bootstrap command. Start the foreground supervisor in one terminal and leave it running:
+
+```sh
+mill start
+```
+
+Open a second terminal in `learn-millstrand` and initialize the workspace there:
+
+```sh
 mill init
 ```
 
 `mill init` creates `.millstrand`, the repository's Millstrand workspace. It contains shared config, startup code, and approved spool coordinates. Runtime metadata, sockets, and the SQLite database live outside the repository under Millstrand's state directory.
 
-You do not need a running `mill` process for ordinary `mill init`. It is a local bootstrap command and never initializes the database or runs `git init` for you. The `--auto-start` variant is different: it requires a running Mill because Mill writes the registration and starts the Weaver during the command.
+If Mill is not running, `mill init` returns a Mill transport error and does not create the workspace. Init never initializes the database or runs `git init` for you. The `--auto-start` variant also requires a running Mill because Mill writes the automatic-start registration and starts the Weaver during the command.
 
 To remember this workspace for Weaver startup after a later Mill restart, add the explicit opt-in during init:
 
@@ -56,6 +67,20 @@ mill init --auto-start
 ```
 
 `--auto-start` writes `"autoStart": true` to the shared `config.json`, records the workspace, and starts its Weaver immediately. If no Mill is running, the command returns the Mill transport error and does not register the workspace. The setting is not available in `config.local.json`.
+
+To opt this workspace into a named JVM pool, use a non-blank pool name:
+
+```sh
+mill init --jvm-pool backend
+```
+
+This requires a running Mill, writes `"JVMPool":"backend"` only to the machine-local `config.local.json`, and durably registers the workspace. The pool flag does not start a host. Add `--auto-start` to enable automatic startup, register the workspace for it, and start the stopped pool during init:
+
+```sh
+mill init --jvm-pool backend --auto-start
+```
+
+Pool membership is separate from automatic-start registration. Start, stop, and restart through any registered member affect every registered member in that pool. A member added while a pool is live remains pending until `mill weaver restart`; automatic start does not replace the live host. A workspace with omitted or `null` `JVMPool` remains an isolated Weaver. See [Customising your workspace](./spools/customisation.md#jvm-pools) for endpoint targeting, shared-code boundaries, and refresh behavior.
 
 Unknown keys in either config file are ignored for compatibility. Weaver startup reports them in the Mill log by file and key; status and invoke reads do not log the retained warnings. Wrong types for known keys still fail, and `config.local.json` rejects the known misplaced `configFormat` key. A local `autoStart` key is unknown, so it is ignored with the startup warning and cannot enable remembered startup.
 
@@ -73,13 +98,7 @@ mill weaver start --workspace "${workspace:?}"
 
 ## Start Millstrand
 
-`mill` is the local router and supervisor. Start it in a terminal and leave it running:
-
-```sh
-mill start
-```
-
-If it reports that `mill` is already running, keep the existing supervisor and continue. Open another terminal in `learn-millstrand`. For a workspace initialized with `--auto-start`, Mill starts its Weaver during supervisor startup. Otherwise start it explicitly:
+The `mill` supervisor is already running in the first terminal. Continue in the second terminal. For a workspace initialized with `--auto-start`, Mill starts its Weaver during supervisor startup. Otherwise start it explicitly:
 
 ```sh
 mill weaver start

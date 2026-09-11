@@ -158,6 +158,51 @@ Routine `mill weaver status` and `mill weaver list` use a compact cached project
 
 The planned restart continuity covers native children only when their owning spool uses `millstrand.api.process.alpha` and reconciles the retained process facts. Ordinary in-JVM callbacks remain interruptible, and domain spools decide how interruption changes their durable state. The [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the probe, admission, custody, and interruption contracts in SPEC-004.C113–C123.
 
+## JVM pools
+
+Pooling is an opt-in hosting choice. Set the same non-blank `JVMPool` value in each member's effective configuration. A value in `config.local.json` overrides `config.json`, including an explicit `null`, which opts that workspace out. An omitted or null value keeps one isolated Weaver.
+
+Register a workspace without starting its host:
+
+```sh
+mill init --jvm-pool backend
+```
+
+The command requires a running Mill, writes the pool name only to `config.local.json`, and records the canonical workspace in Mill's durable pool membership registry. Adding `--auto-start` composes registration with starting a stopped pool:
+
+```sh
+mill init --jvm-pool backend --auto-start
+```
+
+`--auto-start` does not replace a live host. Membership is separate from remembered automatic-start records. Start through either registered member to start the whole pool:
+
+```sh
+mill weaver start --workspace "${workspace_a:?}"
+mill weaver status --json --workspace "${workspace_a:?}"
+mill weaver status --json --workspace "${workspace_b:?}"
+```
+
+The two status responses have one host PID and host generation, but distinct member `weaver_id`, `generation_id`, sockets, nREPL endpoints, database identities, and runtime registries. Send CLI and REPL work to the selected workspace endpoint. A namespace name or the last REPL connection does not select a member:
+
+```sh
+strand --workspace "${workspace_b:?}" <op> [args...]
+mill weaver repl --stdin --workspace "${workspace_b:?}"
+```
+
+Start, stop, and restart are collective. Stopping through either member closes all members and keeps their registration; starting later restores the complete registered set:
+
+```sh
+mill weaver stop --workspace "${workspace_b:?}"
+mill weaver start --workspace "${workspace_a:?}"
+mill weaver restart --workspace "${workspace_a:?}"
+```
+
+A workspace registered while the host is live is pending. Starting it returns `mill/jvm-pool-restart-required` and leaves the admitted members serving. Restart explicitly to probe and admit the complete registered set. A membership, selected alias, dependency, or shared-classpath change also needs restart. A full managed refresh coordinates every member and returns one outcome per member. A pooled targeted refresh with `{:only [...]}` fails with `:pool/targeted-refresh-unsupported` before source evaluation. The advanced `runtime/reload-code!` path still changes the shared JVM code environment; it does not make namespaces private to a member.
+
+To change a workspace's pool assignment or opt out with `null`, stop its current weaver first. For a pooled member this stops the whole host. Then update the configuration and run `mill init` to register the new assignment before starting it. A live placement change is rejected with `mill/jvm-pool-stop-required`.
+
+One pooled JVM shares classes, namespaces, Vars, Java static state, and system properties. Pool owners are responsible for dependency and namespace compatibility. Each member still owns its runtime, database, registries, workflow state, request and nREPL endpoints, and native-process custody. Millstrand does not reconcile dependencies, isolate namespaces, admit hot classpath changes, or provide member-only stop.
+
 ## REPL hygiene in a shared weaver
 
 Much of this iteration happens from `mill weaver repl`. The REPL (and `mill weaver repl --stdin`) evaluates inside the live weaver JVM, in the shared `user` namespace. Exploratory requires and scratch defs mutate that namespace for every other session attached to the same weaver, so use names that are easy to identify and clean up: prefer `:as` aliases over `:refer`, prefix aliases and scratch vars with an owner or session prefix (`ct-`, `agent-abc-`, a task slug), and avoid unprefixed scratch vars like `result`, `x`, or `data`. Clean aliases with `ns-unalias` and scratch vars with `ns-unmap` when done:

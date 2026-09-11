@@ -264,6 +264,25 @@ func launchTokenEnv(token string) []string {
 func (s *server) admitControlCaller(weaverID, launchToken string, callerPID int) (config.World, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, host := range s.poolHosts {
+		if host == nil || host.cmd == nil || host.cmd.Process == nil || host.PID != callerPID || !processAlive(host.PID) {
+			continue
+		}
+		for memberID, world := range host.Allowances {
+			if memberID == weaverID {
+				if host.Live && launchToken == "" {
+					return world, nil
+				}
+				if host.LaunchToken != launchToken {
+					return config.World{}, errors.New("JVM pool launch token does not match host")
+				}
+				return world, nil
+			}
+		}
+		if host.LaunchToken == launchToken && strings.TrimSpace(weaverID) != "" {
+			return config.World{}, fmt.Errorf("unknown JVM pool member Weaver identity %q", weaverID)
+		}
+	}
 	for _, child := range s.children {
 		if child != nil && child.identity.WeaverID == weaverID {
 			if child.identity.PID != callerPID {

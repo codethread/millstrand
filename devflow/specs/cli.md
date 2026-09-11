@@ -2,7 +2,7 @@
 
 - **Document ID:** `SPEC-002`
 - **Status:** Implemented
-- **Last Updated:** 2026-09-08
+- **Last Updated:** 2026-09-11
 - **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md)
 - **Code:** `cli/`, `src/millstrand/core/weaver`, `src/millstrand/api/weaver/alpha.clj`, `.millstrand/workflows.clj` (this repository's coordination workspace; application workspaces use `.millstrand` or `.ms`)
 
@@ -24,7 +24,7 @@ mill changelog
 mill start [--json]
 mill status [--json]
 mill weaver list
-mill init [--workspace <dir>] [--auto-start]
+mill init [--workspace <dir>] [--auto-start] [--jvm-pool <name>]
 mill init --stealth [--auto-start]
 mill weaver start [--workspace <dir>] [--name <name>] [--ready-timeout <dur>] [--json]
 mill weaver restart [--workspace <dir>] [--ready-timeout <dur>] [--json]
@@ -108,6 +108,7 @@ in the Mill CLI and its focused lifecycle and acceptance tests.
 - **SPEC-002.C62 (startup pruning):** When Mill starts, it re-reads each remembered registration's selected shared `config.json` before attempting a start. It prunes registrations whose config omits `autoStart` or sets it to `false`, then attempts the remaining eligible registrations. A registration pruned during that startup is not rediscovered merely because its config later changes to `autoStart: true`. An explicit `mill weaver start` creates a registration only when shared `autoStart` was already true; false or omitted explicit starts never register, including if the config later changes to true. `mill weaver start` or `mill init --auto-start` must register it again.
 - **SPEC-002.C63 (bounded restoration):** Mill starts eligible remembered workspaces with at most four starts in flight. Before launching each Weaver or waiting for its readiness, it writes an autostart progress log naming the workspace and announcing the start attempt; the contract does not require an attempt identifier or counter. Each eligible registration gets one start attempt per Mill boot. Mill logs that start and any failure, releases the workspace's start slot on every outcome, and continues with other eligible registrations after an individual failure. Restoration does not add a retry queue or alter Weaver readiness, source resolution, naming, or restart semantics.
 - **SPEC-002.C64 (registration storage):** Remembered-start registrations are Mill-owned state under the existing XDG state root. Their physical files and log format are internal; no workspace overlay or second user-facing registration file is part of the CLI contract.
+
 - **SPEC-002.C48 (mill bin boundary):** `mill bin list`, `mill bin build <bin>`, and `mill bin run <bin> [args...]` are client-side Mill verbs over the live Weaver's read-only `bins` op. Bin list and plan requests are non-interactive invokes (`is_tty=false`, `tty_col=null`); a build or run process inherits the caller's terminal as specified below. `strand` has no bin execution path and remains a pure dispatcher.
 - **SPEC-002.C49 (bin list):** `mill bin list` relays the `bins list` result as one JSON object. The result contains the effective winning declarations after owner and override resolution. An empty `:bins` registry returns an empty `bins` collection. The command does not inspect the filesystem and does not start a process.
 - **SPEC-002.C50 (bin run):** `mill bin run <bin> [args...]` requires a runnable plan and passes every trailing argument unchanged after the resolved executable. Mill flag parsing stops at `<bin>`, so Mill flags, including `--workspace`, precede it. The bin replaces Mill, preserves the caller's cwd, and inherits stdin, stdout, stderr, controlling terminal, session, and foreground process group. Success emits no Mill result.
@@ -125,3 +126,13 @@ in the Mill CLI and its focused lifecycle and acceptance tests.
 ## SPEC-002.P6 Deferred
 
 The public CLI is limited to Mill bootstrap, supervision, trusted REPL attach, changelog and bin execution, plus dispatch of registered Weaver ops. Runtime authoring and extension remain trusted workspace, API, spool, and REPL concerns.
+
+## SPEC-002.P4a JVM pools
+
+The following amendments promote `DELTA-Jvp-001` from the feature folder. The clause IDs above remain the stable contract addresses.
+
+- **SPEC-002.C2/C2a (JVM pool configuration):** `JVMPool` is an optional JSON string whose trimmed value must be non-blank, or JSON `null`. Mill preserves a valid string exactly without trimming or case folding. The local overlay wins over the base config, including an explicit local `null`; omission or effective `null` selects the isolated Weaver path. `JVMPool` is known in both config layers.
+- **SPEC-002.C14a (pooled init):** `mill init --jvm-pool NAME` validates one non-blank name, writes only `"JVMPool":"NAME"` to `config.local.json` with an atomic read-modify-write, and durably registers the selected canonical workspace. Without `--auto-start`, it does not contact a Weaver or start a host. With `--auto-start`, it uses the existing Mill startup path and may start a stopped pool, but never replaces a live host to admit a newcomer. Plain `mill init` honors the effective configured pool without moving it to the base config.
+- **SPEC-002.C20/C20a (pooled status):** A pooled status projection adds `jvm_pool`, sorted canonical `registered_members`, `live_members`, `pending_members`, and `restart_required`. A running member also reports `host_id`, `host_generation_id`, and `member_basis_fingerprint`; `pid` and `basis_fingerprint` identify the shared host. A pending selected member reports `state:"pending"` and the pool projection but no running identity, endpoint, or database fields. A stopped registered member reports the pool projection with empty live and pending sets.
+- **SPEC-002.C56/C59 (collective lifecycle):** Start, stop, and restart through an admitted or pending member address the whole named pool. Starting a stopped pool starts every registered member; starting through an admitted member is idempotent. Starting through a pending member returns non-success `mill/jvm-pool-restart-required` with `jvm_pool`, `selected_workspace`, sorted `live_members`, sorted `pending_members`, `host_pid`, `host_generation_id`, and `restart_command`, without launching or replacing the live host. Moving a workspace between pools requires a stopped host and otherwise returns `mill/jvm-pool-stop-required`. Stop retains registration, and a later start reconstructs the registered set.
+- **SPEC-002.C61/C62/C63 (membership and automatic start):** Pool membership is Mill-owned state at `StateRoot()/jvm-pools/membership.json`, separate from remembered automatic-start records. Its closed format is `millstrand.jvm-pool-membership/v1`, with an opaque revision and members sorted bytewise by canonical `config_dir`; each member has canonical `config_dir`, `source_cwd`, and `jvm_pool`. Registration survives Mill and Weaver restarts. Automatic-start records remain independent; eligible members with the same effective pool are grouped into one host start, and a live host is never replaced implicitly for a newly registered member. Omitted or `null` `JVMPool` keeps the existing isolated behavior.

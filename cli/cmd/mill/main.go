@@ -20,6 +20,7 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/jvmpool"
 	"millstrand-strand-cli/internal/process"
 )
 
@@ -28,6 +29,13 @@ type server struct {
 	mu        sync.Mutex
 	children  map[string]*weaverChild
 	custodies map[string]*process.Custody
+	// poolHosts owns one command per named pool. poolMembers is only a reverse
+	// route from member identity to that host; custody remains keyed by member.
+	poolHosts          map[string]*weaverHost
+	poolMembers        map[string]*weaverHost
+	poolAdmissionLocks map[string]*sync.Mutex
+	poolStartClaims    map[string]chan struct{}
+	poolRegistry       *jvmpool.Registry
 	// startClaims close the check-to-registration window for a new child. A
 	// restart waits for the claim to resolve instead of racing a start that has
 	// not yet published its admitted generation.
@@ -56,6 +64,10 @@ type server struct {
 	// routine status/list poll. Entries are invalidated when the file identity,
 	// size, or modification time changes.
 	restartSummaryCache map[string]restartSummaryCacheEntry
+	// restartFn is nil in production. Tests may inject the lifecycle boundary
+	// to exercise the mill route and its closed result validation without
+	// starting a Weaver process.
+	restartFn func(client.MillWorldRequest) (map[string]any, error)
 }
 
 type weaverChild struct {
@@ -203,11 +215,20 @@ Environment:
 		workspace, _ := cmd.Flags().GetString("workspace")
 		stealth, _ := cmd.Flags().GetBool("stealth")
 		autoStart, _ := cmd.Flags().GetBool("auto-start")
-		return runInit(workspace, stealth, autoStart)
+		var jvmPool *string
+		if cmd.Flags().Changed("jvm-pool") {
+			value, _ := cmd.Flags().GetString("jvm-pool")
+			if strings.TrimSpace(value) == "" {
+				return errors.New("--jvm-pool requires a non-empty value")
+			}
+			jvmPool = &value
+		}
+		return runInit(workspace, stealth, autoStart, jvmPool)
 	}}
 	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	initCmd.Flags().Bool("stealth", false, "keep repo-local .millstrand/.ms and Claude guidance untracked through .git/info/exclude")
 	initCmd.Flags().Bool("auto-start", false, "enable and register this workspace for automatic weaver startup")
+	initCmd.Flags().String("jvm-pool", "", "register this workspace in the named JVM pool (local config override)")
 	root.AddCommand(initCmd)
 
 	weaver := &cobra.Command{Use: "weaver", Short: "Manage supervised weavers"}
@@ -421,6 +442,16 @@ func (s *server) handle(conn net.Conn) {
 			}
 			return
 		}
+		pool, poolErr := s.reconcileInitPool(world, req.World.CWD, req.World.JVMPool)
+		if poolErr != nil {
+			var responseErr *client.ResponseError
+			if errors.As(poolErr, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+			} else {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", poolErr.Error()))
+			}
+			return
+		}
 		if stealth != nil {
 			if req.World.AutoStart {
 				if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
@@ -433,7 +464,12 @@ func (s *server) handle(conn net.Conn) {
 				}
 				started, err := s.startWeaver(req.World)
 				if err != nil {
-					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", err.Error()))
+					var responseErr *client.ResponseError
+					if errors.As(err, &responseErr) {
+						_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+					} else {
+						_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", err.Error()))
+					}
 					return
 				}
 				if isRetainedFailedStart(started) {
@@ -450,6 +486,9 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		result := map[string]any{"config_dir": world.ConfigDir, "config_file": world.ConfigFile}
+		if pool != "" {
+			result["jvm_pool"] = pool
+		}
 		if req.World.AutoStart {
 			if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
 				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
@@ -461,7 +500,12 @@ func (s *server) handle(conn net.Conn) {
 			}
 			started, startErr := s.startWeaver(req.World)
 			if startErr != nil {
-				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", startErr.Error()))
+				var responseErr *client.ResponseError
+				if errors.As(startErr, &responseErr) {
+					_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				} else {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", startErr.Error()))
+				}
 				return
 			}
 			if isRetainedFailedStart(started) {
@@ -475,6 +519,11 @@ func (s *server) handle(conn net.Conn) {
 	case "weaver-start":
 		result, err := s.startWeaver(req.World)
 		if err != nil {
+			var responseErr *client.ResponseError
+			if errors.As(err, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				return
+			}
 			var dependencyFailure *dependencyLaunchError
 			if errors.As(err, &dependencyFailure) {
 				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: &client.ResponseError{Type: "domain", Code: "mill/weaver-start-failed", Message: "weaver start failed", Details: map[string]any{"dependency": dependencyFailure.diagnostic}}})
@@ -501,8 +550,17 @@ func (s *server) handle(conn net.Conn) {
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-restart":
-		result, err := s.restartWeaver(req.World)
+		restart := s.restartWeaver
+		if s.restartFn != nil {
+			restart = s.restartFn
+		}
+		result, err := restart(req.World)
 		if err != nil {
+			var responseErr *client.ResponseError
+			if errors.As(err, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				return
+			}
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
 			return
 		}
@@ -581,6 +639,9 @@ func drainRequestWhitespace(reader *bufio.Reader) error {
 func validateInitRequest(world client.MillWorldRequest) error {
 	if world.Stealth && strings.TrimSpace(world.ConfigDir) != "" {
 		return errors.New("stealth init cannot select an explicit workspace")
+	}
+	if world.JVMPool != nil && strings.TrimSpace(*world.JVMPool) == "" {
+		return errors.New("jvm_pool must be a non-blank string when present")
 	}
 	return nil
 }

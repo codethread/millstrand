@@ -39,9 +39,17 @@
    :declaration/shadows {}
    :publication/kinds [:queries]})
 
+(def ^:private pooled-refresh-result
+  {:status :partial
+   :jvm-pool "backend"
+   :host-generation-id "host-generation-1"
+   :members {"/workspace/a" {:status :applied}
+             "/workspace/b" {:status :failed}}})
+
 (deftest live-module-result-specs-own-public-shapes
   (testing "refresh and plan results keep their public envelopes"
     (is (s/valid? ::runtime/refresh-result applied-refresh-result))
+    (is (s/valid? ::runtime/refresh-result pooled-refresh-result))
     (is (not (s/valid? ::runtime/refresh-result
                        (assoc applied-refresh-result :status :bogus))))
     (let [planned (assoc applied-refresh-result :dry-run? true :caveat "loads recorded")]
@@ -57,6 +65,8 @@
       (is (s/valid? ::runtime/status-result status))
       (is (not (s/valid? ::runtime/status-result (dissoc status :last-refresh))))
       (is (s/valid? ::runtime/reload-code-result reload))
+      (is (s/valid? ::runtime/reload-code-result
+                    (assoc reload :shared? true)))
       (is (not (s/valid? ::runtime/reload-code-result (dissoc reload :status))))))
   (testing "module declarations keep the public file/image grammar"
     (let [image {:ns 'millstrand.api.runtime.alpha-test :load :image

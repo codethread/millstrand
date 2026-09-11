@@ -51,14 +51,18 @@ type MillRequest struct {
 }
 
 type MillWorldRequest struct {
-	CWD            string `json:"cwd,omitempty"`
-	ConfigDir      string `json:"config_dir,omitempty"`
-	Source         string `json:"source,omitempty"`
-	Name           string `json:"name,omitempty"`
-	AutoStart      bool   `json:"auto_start,omitempty"`
-	ReadyTimeoutMs int64  `json:"ready_timeout_ms,omitempty"`
-	Stealth        bool   `json:"stealth,omitempty"`
-	Details        bool   `json:"details,omitempty"`
+	CWD       string `json:"cwd,omitempty"`
+	ConfigDir string `json:"config_dir,omitempty"`
+	Source    string `json:"source,omitempty"`
+	Name      string `json:"name,omitempty"`
+	// JVMPool is nil when init did not receive --jvm-pool. A pointer carries
+	// the non-nil flag value on the wire; omission and JSON null both decode to
+	// nil, which is the no-override contract.
+	JVMPool        *string `json:"jvm_pool,omitempty"`
+	AutoStart      bool    `json:"auto_start,omitempty"`
+	ReadyTimeoutMs int64   `json:"ready_timeout_ms,omitempty"`
+	Stealth        bool    `json:"stealth,omitempty"`
+	Details        bool    `json:"details,omitempty"`
 }
 
 type MillResponse struct {

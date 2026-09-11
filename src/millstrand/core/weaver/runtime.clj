@@ -34,6 +34,19 @@
   "Optional test seam called with a generation's metadata after publication."
   nil)
 
+(deftype RuntimeState [state]
+  clojure.lang.IDeref
+  (deref [_] @state))
+
+(defmethod print-method RuntimeState [_ ^java.io.Writer writer]
+  (.write writer "#<millstrand.runtime-state>"))
+
+(defn- state-holder []
+  (RuntimeState. (atom nil)))
+
+(defn- reset-state! [^RuntimeState holder value]
+  (reset! (.-state holder) value))
+
 (defonce ^:private nrepl-port-runtimes
   (atom {}))
 
@@ -302,10 +315,10 @@
   ((requiring-resolve 'millstrand.core.weaver.module-refresh/collect-lifecycle!)
    effect-id declaration))
 
-(defn refresh-modules!
+(defn- refresh-modules-isolated!
   "Run the internal full or targeted live-module refresh coordinator."
   ([runtime]
-   (refresh-modules! runtime {}))
+   (refresh-modules-isolated! runtime {}))
   ([runtime opts]
    (let [running (:generation-basis runtime)
          boundary? (and running
@@ -331,6 +344,21 @@
          ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
           runtime (module-coordinator-context runtime) opts)))))
 
+(defn refresh-modules!
+  "Refresh one runtime, delegating pooled members to their host coordinator."
+  ([runtime]
+   (refresh-modules! runtime {}))
+  ([runtime opts]
+   (if (and (:pool-host runtime)
+            (not (:pool-refreshing? opts))
+            (not (:startup? opts)))
+     ((requiring-resolve 'millstrand.core.weaver.pool/refresh!)
+      (if (instance? clojure.lang.IDeref (:pool-host runtime))
+        @(:pool-host runtime)
+        (:pool-host runtime))
+      opts)
+     (refresh-modules-isolated! runtime opts))))
+
 (defn module-status
   "Return offline joined state for the internal live-module coordinator."
   [runtime]
@@ -339,49 +367,64 @@
 (defn reload-basis-lib!
   "Reload loaded namespaces backed by source paths for `lib` in the running basis.
 
+  A pooled member selects roots from its own member basis, takes the host
+  refresh lock, and reports that the reloaded definitions are shared.
+
   Returns the closed result owned by
   `:millstrand.api.runtime.alpha/reload-code-result` (SPEC-003.C24)."
   [runtime lib]
-  (let [coordinate (get-in runtime [:generation-basis :basis :libs lib])]
-    (when-not coordinate
-      (throw (ex-info "Library is absent from the running generation basis"
-                      {:lib lib :stage :lookup})))
-    (let [roots (->> (:paths coordinate)
-                     (map #(-> % io/file .getCanonicalPath))
-                     vec)]
-      (when-not (seq roots)
-        (throw (ex-info "Library has no source-backed classpath entry"
-                        {:lib lib :stage :source-paths})))
-      (let [source-files (fn [namespace]
-                           (->> (ns-interns namespace)
-                                vals
-                                (keep (comp :file meta))
-                                distinct))
-            loader (:generation-classloader runtime)
-            namespaces
-            (->> (all-ns)
-                 (keep (fn [namespace]
-                         (when (some (fn [file]
-                                       (when-let [resource (.getResource ^ClassLoader loader file)]
-                                         (when (= "file" (.getProtocol resource))
-                                           (let [path (-> resource .toURI io/file
-                                                          .getCanonicalPath)]
-                                             (some #(or (= path %)
-                                                        (str/starts-with?
-                                                         path
-                                                         (str % java.io.File/separator)))
-                                                   roots)))))
-                                     (source-files namespace))
-                           (ns-name namespace))))
-                 (sort-by str)
-                 vec)]
-        (with-runtime-and-generation-classloader
-          runtime
-          #(doseq [namespace namespaces]
-             (require namespace :reload)))
-        {:lib lib
-         :status (if (seq namespaces) :reloaded :unchanged)
-         :namespaces namespaces}))))
+  (let [host (when (:pool-host runtime)
+               (if (instance? clojure.lang.IDeref (:pool-host runtime))
+                 @(:pool-host runtime)
+                 (:pool-host runtime)))
+        reload! (fn []
+                  (let [basis (or (:member-generation-basis runtime)
+                                  (:generation-basis runtime))
+                        coordinate (get-in basis [:basis :libs lib])]
+                    (when-not coordinate
+                      (throw (ex-info "Library is absent from the running generation basis"
+                                      {:lib lib :stage :lookup})))
+                    (let [roots (->> (:paths coordinate)
+                                     (map #(-> % io/file .getCanonicalPath))
+                                     vec)]
+                      (when-not (seq roots)
+                        (throw (ex-info "Library has no source-backed classpath entry"
+                                        {:lib lib :stage :source-paths})))
+                      (let [source-files (fn [namespace]
+                                           (->> (ns-interns namespace)
+                                                vals
+                                                (keep (comp :file meta))
+                                                distinct))
+                            loader (:generation-classloader runtime)
+                            namespaces
+                            (->> (all-ns)
+                                 (keep (fn [namespace]
+                                         (when (some (fn [file]
+                                                       (when-let [resource
+                                                                  (.getResource ^ClassLoader loader file)]
+                                                         (when (= "file" (.getProtocol resource))
+                                                           (let [path (-> resource .toURI io/file
+                                                                          .getCanonicalPath)]
+                                                             (some #(or (= path %)
+                                                                        (str/starts-with?
+                                                                         path
+                                                                         (str % java.io.File/separator)))
+                                                                   roots)))))
+                                                     (source-files namespace))
+                                           (ns-name namespace))))
+                                 (sort-by str)
+                                 vec)]
+                        (with-runtime-and-generation-classloader
+                          runtime
+                          #(doseq [namespace namespaces]
+                             (require namespace :reload)))
+                        (cond-> {:lib lib
+                                 :status (if (seq namespaces) :reloaded :unchanged)
+                                 :namespaces namespaces}
+                          (:pool-host runtime) (assoc :shared? true))))))]
+    (if-let [lock (:refresh-lock host)]
+      (locking lock (reload!))
+      (reload!))))
 
 (defn- close-module-lifecycle!
   "Close runtime-scoped module lifecycle resources before spool state."
@@ -568,7 +611,9 @@
   [db-file {:keys [world name publish? storage probe? diagnostic!
                    generation-basis
                    expected-version old-generation-baseline
-                   pre-publication-claim]
+                   pre-publication-claim defer-publication?
+                   weaver-id generation-id member-generation-basis pool-metadata
+                   pool-host]
             :or {publish? true}}]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Weaver startup requires a valid generation basis"
@@ -593,13 +638,13 @@
       (let [storage (storage-for storage db-file world)
             ds (:connectable storage)
             _ (db/init! ds)
-            runtime-state (atom nil)
+            runtime-state (state-holder)
             server (when-not probe?
                      (nrepl/start-server :bind loopback-host :port 0
                                          :handler (runtime-nrepl-handler runtime-state)))
             port (some-> server :port)
-            nonce (metadata/new-nonce)
-            generation-id (str (java.util.UUID/randomUUID))
+            nonce (or weaver-id (metadata/new-nonce))
+            generation-id (or generation-id (str (java.util.UUID/randomUUID)))
             meta (metadata/metadata-shape {:pid (current-pid)
                                            :version version
                                            :host loopback-host
@@ -612,7 +657,13 @@
                                            :basis-fingerprint basis-fingerprint
                                            :world world
                                            :name (or name (default-name world))
-                                           :started-at (str (Instant/now))})
+                                           :started-at (str (Instant/now))
+                                           :jvm-pool (:jvm-pool pool-metadata)
+                                           :host-id (:host-id pool-metadata)
+                                           :host-generation-id
+                                           (:host-generation-id pool-metadata)
+                                           :member-basis-fingerprint
+                                           (:member-basis-fingerprint pool-metadata)})
             op-store (core-registry/backed-registry :ops)
             query-store (core-registry/backed-registry :queries)
             pattern-store (core-registry/backed-registry :patterns)
@@ -631,6 +682,8 @@
                           :help-transform-slot (atom nil)
                           :generation-id generation-id
                           :generation-basis generation-basis
+                          :member-generation-basis (or member-generation-basis
+                                                       generation-basis)
                           :basis-fingerprint basis-fingerprint
                           :generation-classloader
                           (:classloader generation-basis)
@@ -641,14 +694,17 @@
                           :module-refresh-lock (Object.)
                           :spool-state (atom {})
                           :server server
-                          :metadata meta}
+                          :pool-host pool-host
+                          :metadata meta
+                          :pre-publication-claim pre-publication-claim
+                          :runtime-state runtime-state}
             runtime-base (start-event-system! runtime-base (not probe?))
-            _ (reset! runtime-state runtime-base)]
+            _ (reset-state! runtime-state runtime-base)]
         (try
           (let [socket-runtime (when-not probe?
                                  (socket/start! runtime-state (:socket-path meta)))
                 runtime (assoc runtime-base :socket-runtime socket-runtime)]
-            (reset! runtime-state runtime)
+            (reset-state! runtime-state runtime)
             (when port
               (swap! nrepl-port-runtimes assoc port runtime))
             (when (and (publishes-ambient-runtime? publish? probe?)
@@ -672,19 +728,21 @@
                 (scheduler/rearm! runtime))
               (let [published-runtime (if probe?
                                         runtime
-                                        (let [metadata-file (metadata/publish! meta)]
+                                        (let [metadata-file (when-not defer-publication?
+                                                              (metadata/publish! meta))]
                                           ;; Release before the hook: publication's
                                           ;; nonce now owns the artifacts, and a
                                           ;; hook may stop or start this world.
                                           ;; Keeping the pre-publication claim
                                           ;; through that hook would make safe
                                           ;; teardown conservatively skip deletion.
-                                          (metadata/release-pre-publication-artifacts!
-                                           world pre-publication-claim)
+                                          (when-not defer-publication?
+                                            (metadata/release-pre-publication-artifacts!
+                                             world pre-publication-claim))
                                           (when *after-metadata-publish!*
                                             (*after-metadata-publish!* meta))
                                           (assoc runtime :metadata-file metadata-file)))]
-                (reset! runtime-state published-runtime)
+                (reset-state! runtime-state published-runtime)
                 (when port
                   (swap! nrepl-port-runtimes assoc port published-runtime))
                 (when (publishes-ambient-runtime? publish? probe?)
@@ -736,7 +794,7 @@
       (finally
         ;; Startup keeps the local token through setup but never holds the
         ;; artifact monitor over storage, userland, or endpoint work.
-        (when-not probe?
+        (when (and (not probe?) (not defer-publication?))
           (metadata/release-pre-publication-artifacts!
            world pre-publication-claim))))))
 
@@ -959,6 +1017,28 @@
   [runtime]
   (:metadata runtime))
 
+(defn publish-deferred!
+  "Publish a pooled runtime's metadata after collective activation.
+
+  A runtime started with defer-publication? owns a pre-publication claim until
+  this function is called. The returned runtime carries the published metadata
+  file while retaining its member-specific runtime state."
+  [runtime]
+  (when-not (:pre-publication-claim runtime)
+    (throw (ex-info "Runtime is not awaiting deferred metadata publication"
+                    {:generation-id (:generation-id runtime)})))
+  (let [world {:state-dir (get-in runtime [:metadata :state-dir])}
+        metadata-file (metadata/publish! (:metadata runtime))
+        published-runtime (assoc runtime
+                                 :metadata-file metadata-file
+                                 :pre-publication-claim nil)]
+    (metadata/release-pre-publication-artifacts!
+     world (:pre-publication-claim runtime))
+    (reset-state! (:runtime-state runtime) published-runtime)
+    (when-let [port (get-in published-runtime [:metadata :endpoint :port])]
+      (swap! nrepl-port-runtimes assoc port published-runtime))
+    published-runtime))
+
 (defn stop!
   "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
@@ -999,7 +1079,14 @@
          ;; This remains last: discovery stays available until its endpoints
          ;; have been asked to close, and stale handles cannot unlink successors.
     (attempt! :artifacts/delete
-              #(reset! artifacts (metadata/delete-owned! (:metadata runtime) world)))
+              #(reset! artifacts
+                       (if-let [claim (:pre-publication-claim runtime)]
+                         (metadata/rollback-pre-publication-artifacts!
+                          (:metadata runtime) world claim)
+                         (metadata/delete-owned! (:metadata runtime) world))))
+    (attempt! :artifacts/claim-release
+              #(when-let [claim (:pre-publication-claim runtime)]
+                 (metadata/release-pre-publication-artifacts! world claim)))
     (if-let [failure @primary]
       (throw failure)
       (cond-> {:stopped true}

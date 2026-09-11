@@ -53,6 +53,30 @@ func TestMillUnknownCommandRendersOnceAndPointsAtHelp(t *testing.T) {
 	}
 }
 
+func TestMillInitHelpExposesJVMPoolFlag(t *testing.T) {
+	root := newMillCommand()
+	init, _, err := root.Find([]string{"init"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if init.Flags().Lookup("jvm-pool") == nil {
+		t.Fatal("mill init is missing --jvm-pool")
+	}
+	if !strings.Contains(init.UsageString(), "--jvm-pool") {
+		t.Fatalf("mill init help does not describe --jvm-pool: %s", init.UsageString())
+	}
+}
+
+func TestMillInitRejectsBlankJVMPoolBeforeTransport(t *testing.T) {
+	got := runMillFailure(t, "init", "--jvm-pool", " \t ")
+	if !strings.Contains(got, "--jvm-pool requires a non-empty value") {
+		t.Fatalf("blank --jvm-pool was not rejected at the CLI boundary: %q", got)
+	}
+	if strings.Contains(got, "no running mill") {
+		t.Fatalf("blank --jvm-pool reached the mill transport: %q", got)
+	}
+}
+
 func TestMillUnknownCommandPointerFollowsTheChosenRendering(t *testing.T) {
 	t.Setenv("MILLSTRAND_ERROR_FORMAT", "pretty")
 	t.Setenv("NO_COLOR", "1")

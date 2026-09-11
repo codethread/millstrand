@@ -165,7 +165,8 @@
 
   Product `version` must conform to `:millstrand.release/version`."
   [{:keys [pid version host port storage-kind storage-label canonical-db-path nonce generation-id
-           basis-fingerprint started-at world name]
+           basis-fingerprint started-at world name jvm-pool host-id host-generation-id
+           member-basis-fingerprint]
     :as shape}]
   (let [socket-path (.getPath (socket-file world))
         name (or name (.getName (io/file (:config-dir world))))]
@@ -174,44 +175,54 @@
     (when-not (s/valid? :millstrand.release/version version)
       (throw (ex-info "Weaver product version is invalid" {:version version})))
     (require-storage-identity! shape)
-    {:pid pid
-     :version version
-     :transport :nrepl
-     :protocol-version protocol/version
-     :endpoint {:host host :port port}
-     :config-dir (:config-dir world)
-     :name name
-     :state-dir (:state-dir world)
-     :data-dir (:data-dir world)
-     :storage-kind storage-kind
-     :storage-label storage-label
-     :canonical-db-path canonical-db-path
-     :nonce nonce
-     :generation-id generation-id
-     :basis-fingerprint basis-fingerprint
-     :socket-path socket-path
-     :started-at started-at}))
+    (cond-> {:pid pid
+             :version version
+             :transport :nrepl
+             :protocol-version protocol/version
+             :endpoint {:host host :port port}
+             :config-dir (:config-dir world)
+             :name name
+             :state-dir (:state-dir world)
+             :data-dir (:data-dir world)
+             :storage-kind storage-kind
+             :storage-label storage-label
+             :canonical-db-path canonical-db-path
+             :nonce nonce
+             :generation-id generation-id
+             :basis-fingerprint basis-fingerprint
+             :socket-path socket-path
+             :started-at started-at}
+      jvm-pool (assoc :jvm-pool jvm-pool
+                      :host-id host-id
+                      :host-generation-id host-generation-id
+                      :member-basis-fingerprint member-basis-fingerprint))))
 
 (defn- json-metadata-shape
   "Return the public JSON metadata shape consumed by non-Clojure clients."
   [metadata]
-  {"version" (:version metadata)
-   "protocol_version" protocol/version
-   "pid" (:pid metadata)
-   "weaver_id" (:nonce metadata)
-   "config_dir" (:config-dir metadata)
-   "state_dir" (:state-dir metadata)
-   "name" (:name metadata)
-   "data_dir" (:data-dir metadata)
-   "database_kind" (name (:storage-kind metadata))
-   "database_label" (:storage-label metadata)
-   "database_path" (:canonical-db-path metadata)
-   "generation_id" (:generation-id metadata)
-   "basis_fingerprint" (:basis-fingerprint metadata)
-   "socket_path" (:socket-path metadata)
-   "started_at" (:started-at metadata)
-   "nrepl" {"host" (get-in metadata [:endpoint :host])
-            "port" (get-in metadata [:endpoint :port])}})
+  (merge {"version" (:version metadata)
+          "protocol_version" protocol/version
+          "pid" (:pid metadata)
+          "weaver_id" (:nonce metadata)
+          "config_dir" (:config-dir metadata)
+          "state_dir" (:state-dir metadata)
+          "name" (:name metadata)
+          "data_dir" (:data-dir metadata)
+          "database_kind" (name (:storage-kind metadata))
+          "database_label" (:storage-label metadata)
+          "database_path" (:canonical-db-path metadata)
+          "generation_id" (:generation-id metadata)
+          "basis_fingerprint" (:basis-fingerprint metadata)
+          "socket_path" (:socket-path metadata)
+          "started_at" (:started-at metadata)
+          "nrepl" {"host" (get-in metadata [:endpoint :host])
+                   "port" (get-in metadata [:endpoint :port])}}
+         (cond-> {}
+           (:jvm-pool metadata)
+           (merge {"jvm_pool" (:jvm-pool metadata)
+                   "host_id" (:host-id metadata)
+                   "host_generation_id" (:host-generation-id metadata)
+                   "member_basis_fingerprint" (:member-basis-fingerprint metadata)}))))
 
 (defn- write-atomic!
   "Write pretty-printed EDN `data` to `file` via an atomic rename."
@@ -374,7 +385,17 @@
            (and (string? (:generation-id metadata))
                 (not (str/blank? (:generation-id metadata)))))
        (s/valid? :millstrand.core.specs/basis-fingerprint
-                 (:basis-fingerprint metadata))))
+                 (:basis-fingerprint metadata))
+       (if (:jvm-pool metadata)
+         (and (string? (:jvm-pool metadata))
+              (not (str/blank? (:jvm-pool metadata)))
+              (string? (:host-id metadata))
+              (string? (:host-generation-id metadata))
+              (s/valid? :millstrand.core.specs/basis-fingerprint
+                        (:member-basis-fingerprint metadata)))
+         (not-any? #(contains? metadata %)
+                   [:host-id :host-generation-id
+                    :member-basis-fingerprint]))))
 
 (defn stale-or-missing?
   "Return true when metadata is absent, malformed, unsupported, or points at a dead process."

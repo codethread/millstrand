@@ -3,6 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [nrepl.core :as nrepl]
@@ -12,6 +13,8 @@
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
+            [millstrand.core.weaver.pool :as pool]
+            [millstrand.core.weaver.pool-wire :as pool-wire]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.weaver.scheduler :as scheduler]
             [millstrand.core.db :as db]
@@ -64,6 +67,93 @@
 
 (defn- runtime-coordinate []
   {:local/root (.getCanonicalPath (io/file "."))})
+
+(defn- pool-member [root name]
+  (let [config (io/file root name "config")
+        state (io/file root name "state")
+        data (io/file root name "data")]
+    (.mkdirs config)
+    (spit (io/file config "deps.edn") "{:paths []}\n")
+    {:config-dir (.getCanonicalPath config)
+     :source-cwd (.getCanonicalPath config)
+     :state-dir (.getCanonicalPath state)
+     :data-dir (.getCanonicalPath data)
+     :name name
+     :weaver-id (str "weaver-" name)
+     :generation-id (str "generation-" name)
+     :dependency-diagnostic
+     (.getCanonicalPath (io/file state "dependency.json"))}))
+
+(defn- pool-manifest [root]
+  {:format "millstrand.jvm-pool-launch/v1"
+   :jvm-pool "backend"
+   :host-id "host-test"
+   :host-generation-id "host-generation-test"
+   :membership-revision "membership-test"
+   :millstrand-source (.getCanonicalPath (io/file "."))
+   :millstrand-version "dev"
+   :members [(pool-member root "a") (pool-member root "b")]})
+
+(defn- write-pool-membership! [root manifest]
+  (let [file (io/file root "jvm-pools" "membership.json")]
+    (.mkdirs (.getParentFile file))
+    (spit file
+          (json/write-str
+           {:format "millstrand.jvm-pool-membership/v1"
+            :revision "membership-test"
+            :members (mapv (fn [{:keys [config-dir source-cwd]}]
+                             {:config_dir config-dir
+                              :source_cwd source-cwd
+                              :jvm_pool (:jvm-pool manifest)})
+                           (:members manifest))}))
+    file))
+
+(defn- write-pooled-module! [member ns-sym query]
+  (spit (io/file (:config-dir member) "shared.clj")
+        (str "(ns " ns-sym ")\n"
+             "(millstrand.api.runtime.alpha/collect-entry! "
+             ":queries \"owned\" " (pr-str query) ")\n"))
+  (spit (io/file (:config-dir member) "init.clj")
+        (str "(millstrand.api.runtime.alpha/module! "
+             "millstrand.core.weaver.runtime/*runtime* "
+             ":shared {:file \"shared.clj\"})\n")))
+
+(defn- write-pooled-image-module! [member ns-sym]
+  (spit (io/file (:config-dir member) "init.clj")
+        (str "(millstrand.api.runtime.alpha/module! "
+             "millstrand.core.weaver.runtime/*runtime* "
+             ":shared {:ns '" ns-sym " :load :image})\n")))
+
+(defn- pooled-probe-manifest [root]
+  (let [member (fn [name baseline]
+                 (let [original (io/file root name "original")
+                       probe (io/file root name "probe")
+                       state (io/file root name "state")
+                       data (io/file root name "data")
+                       diagnostic (io/file root name "diagnostic.edn")]
+                   (.mkdirs probe)
+                   (spit (io/file probe "deps.edn") "{:paths []}\n")
+                   {:original-config-dir (.getCanonicalPath original)
+                    :original-source-cwd (.getCanonicalPath original)
+                    :probe-config-dir (.getCanonicalPath probe)
+                    :probe-state-dir (.getCanonicalPath state)
+                    :probe-data-dir (.getCanonicalPath data)
+                    :member-diagnostic (.getCanonicalPath diagnostic)
+                    :name name
+                    :candidate-weaver-id (str "candidate-weaver-" name)
+                    :candidate-generation-id (str "candidate-generation-" name)
+                    :old-member-baseline baseline}))]
+    {:format "millstrand.jvm-pool-probe/v1"
+     :jvm-pool "backend"
+     :probe-id "probe-test"
+     :candidate-host-id "candidate-host-test"
+     :candidate-host-generation-id "candidate-generation-host-test"
+     :probe-root (.getCanonicalPath root)
+     :millstrand-source (.getCanonicalPath (io/file "."))
+     :result (.getCanonicalPath (io/file root "result.json"))
+     :collective-diagnostic (.getCanonicalPath (io/file root "collective.edn"))
+     :members [(member "a" nil)
+               (member "b" {:status :admitted :projection {}})]}))
 
 (defn- start-runtime! [db-file opts]
   (let [world (:world opts)]
@@ -236,6 +326,325 @@
                             (start-runtime! nil {:world world :publish? false :storage :postgres})))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pooled-start-options-fail-before-opening-runtime-resources
+  (let [world (temp-world)]
+    (try
+      (doseq [opts [{:pool-metadata {}}
+                    {:pool-metadata {:jvm-pool "backend"
+                                     :host-id "host-1"
+                                     :host-generation-id "generation-1"
+                                     :member-basis-fingerprint "sha256:invalid"}}
+                    {:pool-host (atom {})}]]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Weaver start options have an invalid shape"
+                              (start-runtime! nil
+                                              (merge {:world world
+                                                      :publish? false}
+                                                     opts)))
+            (pr-str opts)))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pooled-host-publishes-members-collectively-with-independent-runtime-state
+  (let [root (java.io.File/createTempFile "pool" "")]
+    (.delete root)
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)]
+      (try
+        (let [runtimes (:runtimes host)
+              metadata (mapv :metadata runtimes)]
+          (is (= 2 (count runtimes)))
+          (is (= 1 (count (set (map :generation-classloader runtimes)))))
+          (is (= 2 (count (set (map #(get-in % [:storage :storage-label])
+                                    runtimes)))))
+          (is (= 2 (count (set (map :socket-path metadata)))))
+          (is (= 2 (count (set (map #(get-in % [:endpoint :port]) metadata)))))
+          (is (= ["weaver-a" "weaver-b"] (mapv :nonce metadata)))
+          (is (nil? @weaver-runtime/current-runtime))
+          (is (.isFile (io/file (:ready-file host))))
+          (is (= (.getCanonicalPath
+                  (io/file root "jvm-pools" "hosts" (pool/pool-hash "backend")
+                           "ready.json"))
+                 (.getCanonicalPath (io/file (:ready-file host)))))
+          (is (every? metadata/valid-metadata? metadata)))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root)))
+      (is (not (.exists (io/file (pool/ready-file manifest))))))))
+
+(deftest runtime-and-pooled-host-handles-have-bounded-printing
+  (let [world (temp-world)
+        runtime (start-runtime! nil {:world world :publish? false})]
+    (try
+      (is (string? (pr-str runtime)))
+      (finally
+        (weaver-runtime/stop! runtime)
+        (delete-tree! (io/file (:config-dir world) "..")))))
+  (let [root (io/file "/tmp" (str "pool-print-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)]
+      (try
+        (is (string? (pr-str host)))
+        (is (string? (pr-str (:host-context host))))
+        (is (every? #(string? (pr-str %)) (:runtimes host)))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root))))))
+
+(deftest pooled-probe-preserves-first-and-later-startup-failures
+  (doseq [failure-index [1 2]]
+    (let [root (io/file "/tmp" (str "pool-probe-startup-failure-"
+                                    failure-index "-"
+                                    (java.util.UUID/randomUUID)))]
+      (.mkdirs root)
+      (let [manifest (pooled-probe-manifest root)
+            original-start! weaver-runtime/start!
+            calls (atom 0)]
+        (try
+          (let [result
+                (with-redefs [weaver-runtime/start!
+                              (fn [db-file opts]
+                                (if (= failure-index (swap! calls inc))
+                                  (throw (doto (ex-info "candidate startup failed"
+                                                        {:member (:name opts)})
+                                           (.addSuppressed
+                                            (ex-info "candidate cleanup failed" {}))))
+                                  (original-start! db-file opts)))]
+                  (pool/probe! manifest))
+                decoded (pool-wire/read-probe-result (:result manifest))]
+            (is (false? (:success result)))
+            (is (= "probe/failure" (:stage result)))
+            (is (false? (:success decoded)))
+            (is (= "probe/failure" (:stage decoded)))
+            (is (.isFile (io/file (:result manifest))))
+            (let [diagnostics
+                  (with-open [reader (io/reader (:collective-diagnostic manifest))]
+                    (doall (map edn/read-string (line-seq reader))))]
+              (is (some #(= "candidate startup failed"
+                            (get-in % [:data :message]))
+                        diagnostics))
+              (is (some #(= "candidate cleanup failed"
+                            (get-in % [:data :suppressed 0 :message]))
+                        diagnostics)))
+            (is (= (if (= 1 failure-index)
+                     [:failed :failed]
+                     [:validated :failed])
+                   (mapv :status (:members decoded))))
+            (is (nil? @weaver-runtime/current-runtime))
+            (is (every? #(not (.exists (metadata/json-metadata-file
+                                        {:state-dir (:probe-state-dir %)})))
+                        (:members manifest)))
+            (is (every? #(not (.exists (metadata/socket-file
+                                        {:state-dir (:probe-state-dir %)})))
+                        (:members manifest))))
+          (finally
+            (delete-tree! root)))))))
+
+(deftest pooled-host-failure-removes-all-unready-artifacts
+  (let [root (io/file "/tmp" (str "pool-failure-" (java.util.UUID/randomUUID)))]
+    (.delete root)
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          original-start! weaver-runtime/start!
+          calls (atom 0)]
+      (try
+        (with-redefs [weaver-runtime/start!
+                      (fn [db-file opts]
+                        (if (= 1 (swap! calls inc))
+                          (original-start! db-file opts)
+                          (throw (ex-info "member startup failed" {:member :b}))))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"member startup failed"
+                                (pool/start! manifest))))
+        (is (nil? @weaver-runtime/current-runtime))
+        (is (not (.exists (io/file (pool/ready-file manifest)))))
+        (is (every? #(not (.exists (metadata/json-metadata-file
+                                    {:state-dir (:state-dir %)})))
+                    (:members manifest)))
+        (is (every? #(not (.exists (metadata/socket-file
+                                    {:state-dir (:state-dir %)})))
+                    (:members manifest)))
+        (let [replacement (pool/start! manifest)]
+          (pool/stop! replacement))
+        (finally
+          (delete-tree! root))))))
+
+(deftest pooled-endpoints-select-the-shared-host-context
+  (let [root (io/file "/tmp" (str "pool-endpoint-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)
+          selected (weaver-runtime/runtime-for-nrepl-port
+                    (get-in (first (:runtimes host)) [:metadata :endpoint :port]))
+          called (atom nil)]
+      (try
+        (is (identical? (:pool-host selected) (:host-context host)))
+        (with-redefs [pool/refresh!
+                      (fn [selected-host opts]
+                        (reset! called [selected-host opts])
+                        {:status :unchanged})]
+          (let [{:keys [host port]} (get-in selected [:metadata :endpoint])]
+            (with-open [conn (nrepl/connect :host host :port port)]
+              (let [session (nrepl/client-session
+                             (nrepl/client conn (test-support/await-budget-ms)))
+                    responses (doall
+                               (nrepl/message
+                                session
+                                {:op "eval"
+                                 :code (str "(millstrand.core.weaver.runtime/refresh-modules! "
+                                            "(millstrand.core.weaver.runtime/"
+                                            "runtime-for-nrepl-port " port "))")}))]
+                (is (some :value responses)))))
+          (is (map? (first @called)))
+          (is (identical? (:host-context host)
+                          (:host-context (first @called)))))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root))))))
+
+(deftest pooled-host-replays-member-scoped-images-and-isolates-failures
+  (let [root (io/file "/tmp" (str "pool-replay-" (java.util.UUID/randomUUID)))
+        manifest (pool-manifest root)
+        [member-a member-b] (:members manifest)
+        ns-sym (symbol (str "test.pooled.shared-"
+                            (str/replace (str (java.util.UUID/randomUUID)) "-" "")))]
+    (.mkdirs root)
+    (try
+      (write-pooled-module! member-a ns-sym [:= [:attr :member] "a"])
+      (write-pooled-module! member-b ns-sym [:= [:attr :member] "b"])
+      (write-pool-membership! root manifest)
+      (let [host (pool/start! manifest)]
+        (try
+          (let [[runtime-a runtime-b] (:runtimes host)]
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (write-pooled-image-module! member-a ns-sym)
+            (write-pooled-image-module! member-b ns-sym)
+            (is (#{:applied :unchanged} (:status (pool/refresh! host))))
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (write-pooled-module! member-a ns-sym [:= [:attr :member] "a"])
+            (spit (io/file (:config-dir member-a) "shared.clj")
+                  (str "(ns " ns-sym ")\n"
+                       "(throw (ex-info \"member refresh failed\" {}))\n"))
+            (is (= :partial (:status (pool/refresh! host))))
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (spit (io/file (:config-dir member-a) "init.clj") "")
+            (is (#{:applied :unchanged} (:status (pool/refresh! host))))
+            (is (not (contains? (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned"))))
+          (finally
+            (pool/stop! host)))
+        (is (not (.exists (io/file (pool/ready-file manifest))))))
+      (finally
+        (delete-tree! root)))))
+
+(deftest pooled-endpoint-reload-code-takes-shared-lock
+  (let [root (io/file "/tmp" (str "pool-reload-" (java.util.UUID/randomUUID)))
+        manifest (pool-manifest root)]
+    (.mkdirs root)
+    (let [host (pool/start! manifest)
+          runtime (first (:runtimes host))
+          port (get-in runtime [:metadata :endpoint :port])
+          lock (get @(:pool-host runtime) :refresh-lock)
+          reloaded (atom [])
+          lock-held? (atom false)
+          root-lib 'io.millstrand/millstrand]
+      (try
+        (with-redefs [clojure.core/require
+                      (fn [namespace & args]
+                        (reset! lock-held? (Thread/holdsLock lock))
+                        (swap! reloaded conj [namespace args]))
+                      pool/refresh!
+                      (fn [& _]
+                        (throw (ex-info "reload-code must not reconcile modules" {})))]
+          (let [value (str "(millstrand.api.runtime.alpha/reload-code! "
+                           "(millstrand.core.weaver.runtime/runtime-for-nrepl-port "
+                           port ") '" root-lib ")")]
+            (with-open [conn (nrepl/connect :host "127.0.0.1" :port port)]
+              (let [session (nrepl/client-session
+                             (nrepl/client conn (test-support/await-budget-ms)))
+                    responses (doall (nrepl/message session {:op "eval"
+                                                             :code value}))
+                    result (some->> responses
+                                    (keep :value)
+                                    last
+                                    edn/read-string)]
+                (is (some :value responses) (pr-str responses))
+                (is (= :reloaded (:status result)))
+                (is (true? (:shared? result)))
+                (is (seq (:namespaces result))))))
+          (is @lock-held?)
+          (is (seq @reloaded)))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root))))))
+
+(deftest pooled-probe-uses-private-state-and-retains-result-root
+  (let [root (io/file "/tmp" (str "pool-probe-" (java.util.UUID/randomUUID)))]
+    (.delete root)
+    (.mkdirs root)
+    (try
+      (let [manifest (pooled-probe-manifest root)
+            result (pool/probe! manifest)]
+        (is (true? (:success result)))
+        (is (= "probe/complete" (:stage result)))
+        (is (s/valid? :millstrand.jvm-pool/probe-result result))
+        (is (= [:newcomer :live]
+               (mapv :baseline-kind (:members result))))
+        (is (every? #(= :validated (:status %)) (:members result)))
+        (is (nil? (get-in result [:members 0 :registry-diff])))
+        (is (map? (get-in result [:members 1 :registry-diff])))
+        (is (.isFile (io/file (:result manifest))))
+        (is (.isFile (io/file (:log result))))
+        (is (not= (:result manifest) (:log result)))
+        (let [raw (json/read-str (slurp (:result manifest)))]
+          (is (contains? (first (get raw "members")) "registry_diff"))
+          (is (= result (pool-wire/read-probe-result (:result manifest))))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (pool-wire/decode-probe-result
+                        (dissoc raw "members"))))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (pool-wire/decode-probe-result
+                        (update raw "members"
+                                #(vector (dissoc (first %) "registry_diff")))))))
+        (is (.isFile (io/file (:collective-diagnostic manifest))))
+        (is (nil? @weaver-runtime/current-runtime))
+        (is (not (.exists (metadata/json-metadata-file
+                           {:state-dir (:probe-state-dir
+                                        (first (:members manifest)))})))))
+      (finally
+        (delete-tree! root)))))
+
+(deftest stale-pooled-host-cannot-withdraw-a-successor-ready-marker
+  (let [root (io/file "/tmp" (str "pool-ready-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)
+          successor (assoc (:ready-marker host) :host-id "successor")]
+      (try
+        (pool-wire/write-json! (:ready-file host)
+                               (pool-wire/ready-marker-wire successor))
+        (pool/stop! host)
+        (is (.isFile (io/file (:ready-file host))))
+        (is (= "successor"
+               (get (json/read-str (slurp (:ready-file host))) "host_id")))
+        (finally
+          (delete-tree! root))))))
 
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)

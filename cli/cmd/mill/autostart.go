@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -16,6 +17,7 @@ import (
 const (
 	autostartDirectory = "autostart"
 	autostartSlots     = 4
+	autostartFailure   = "startup-failure.json"
 )
 
 // autoStartRegistration is intentionally small: the config remains the
@@ -115,24 +117,73 @@ func readAutoStartRegistrations() ([]autoStartRegistration, error) {
 		return nil, err
 	}
 	entries := make([]autoStartRegistration, 0, len(matches))
+	var failures []error
 	for _, path := range matches {
+		if filepath.Base(path) == autostartFailure {
+			continue
+		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			millLogf("Could not read automatic startup registration %s: %v", path, err)
+			failures = append(failures, fmt.Errorf("read automatic startup registration %s: %w", path, err))
 			continue
 		}
 		var entry autoStartRegistration
 		if err := json.Unmarshal(b, &entry); err != nil {
-			millLogf("Invalid automatic startup registration %s: %v", path, err)
+			failures = append(failures, fmt.Errorf("decode automatic startup registration %s: %w", path, err))
 			continue
 		}
 		if !entry.Enabled || strings.TrimSpace(entry.ConfigDir) == "" || strings.TrimSpace(entry.CWD) == "" {
-			millLogf("Invalid automatic startup registration %s: missing enabled, config_dir or cwd", path)
+			failures = append(failures, fmt.Errorf("invalid automatic startup registration %s: missing enabled, config_dir or cwd", path))
 			continue
 		}
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	return entries, errors.Join(failures...)
+}
+
+type autostartFailureRecord struct {
+	State  string   `json:"state"`
+	Errors []string `json:"errors"`
+}
+
+func autostartFailurePath() (string, error) {
+	root, err := config.StateRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, autostartDirectory, autostartFailure), nil
+}
+
+func writeAutostartFailure(failures []error) error {
+	if len(failures) == 0 {
+		return clearAutostartFailure()
+	}
+	path, err := autostartFailurePath()
+	if err != nil {
+		return err
+	}
+	record := autostartFailureRecord{State: "failed", Errors: make([]string, 0, len(failures))}
+	for _, failure := range failures {
+		if failure != nil {
+			record.Errors = append(record.Errors, failure.Error())
+		}
+	}
+	b, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWriteAutoStart(path, append(b, '\n'))
+}
+
+func clearAutostartFailure() error {
+	path, err := autostartFailurePath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove automatic startup failure %s: %w", path, err)
+	}
+	return nil
 }
 
 func (s *server) signalShutdown() {
@@ -153,36 +204,79 @@ func (s *server) shuttingDown() bool {
 	}
 }
 
+// persistAutostartFailures preserves unresolved evidence on cancellation.
+// A completed, error-free explicit opt-out may still remove the old record.
+func (s *server) persistAutostartFailures(failures []error, explicitOptOut bool) {
+	if s.shuttingDown() && !explicitOptOut {
+		return
+	}
+	if err := writeAutostartFailure(failures); err != nil {
+		millLogf("Could not persist automatic startup failure: %v", err)
+	}
+}
+
 func (s *server) startAutostart() {
 	entries, err := readAutoStartRegistrations()
+	failures := make([]error, 0, 1)
 	if err != nil {
-		millLogf("Could not read automatic startup registry: %v", err)
-		return
+		failures = append(failures, err)
+		millLogf("Automatic startup registry contains failures: %v", err)
 	}
 	if len(entries) == 0 {
+		s.persistAutostartFailures(failures, false)
 		return
 	}
+	// Automatic startup owns host processes, not logical members. Keep the
+	// first eligible remembered member for each effective pool and retain every
+	// isolated workspace as its own host job.
+	grouped := make(map[string]autoStartRegistration, len(entries))
+	optedOut := false
+	for _, entry := range entries {
+		cfg, _, err := config.Load(entry.ConfigDir)
+		if err != nil {
+			failure := fmt.Errorf("read startup config for registered workspace %s: %w", entry.ConfigDir, err)
+			failures = append(failures, failure)
+			millLogf("Automatic startup configuration failure: %v", failure)
+			continue
+		}
+		if !cfg.AutoStart {
+			if err := removeAutoStart(entry.ConfigDir); err != nil {
+				failure := fmt.Errorf("remove disabled automatic startup registration for %s: %w", entry.ConfigDir, err)
+				failures = append(failures, failure)
+				millLogf("Automatic startup cleanup failure: %v", failure)
+			} else {
+				optedOut = true
+			}
+			continue
+		}
+		key := "world:" + entry.ConfigDir
+		if cfg.JVMPool != nil {
+			key = "pool:" + *cfg.JVMPool
+		}
+		if _, exists := grouped[key]; !exists {
+			grouped[key] = entry
+		}
+	}
+	if len(grouped) == 0 {
+		s.persistAutostartFailures(failures, optedOut && len(failures) == 0)
+		return
+	}
+	jobsToStart := make([]autoStartRegistration, 0, len(grouped))
+	for _, entry := range grouped {
+		jobsToStart = append(jobsToStart, entry)
+	}
+	sort.Slice(jobsToStart, func(i, j int) bool { return jobsToStart[i].ConfigDir < jobsToStart[j].ConfigDir })
 	s.autostartWG.Add(1)
 	go func() {
 		defer s.autostartWG.Done()
 		sem := make(chan struct{}, autostartSlots)
 		var jobs sync.WaitGroup
+		var failureMu sync.Mutex
 		defer jobs.Wait()
 	launch:
-		for _, entry := range entries {
+		for _, entry := range jobsToStart {
 			if s.shuttingDown() {
 				break
-			}
-			cfg, _, err := config.Load(entry.ConfigDir)
-			if err != nil {
-				millLogf("Could not read startup config for %s: %v", entry.ConfigDir, err)
-				continue
-			}
-			if !cfg.AutoStart {
-				if err := removeAutoStart(entry.ConfigDir); err != nil {
-					millLogf("Could not remove startup registration for %s: %v", entry.ConfigDir, err)
-				}
-				continue
 			}
 			select {
 			case sem <- struct{}{}:
@@ -200,14 +294,27 @@ func (s *server) startAutostart() {
 				status, err := s.startWeaverWithShutdown(client.MillWorldRequest{CWD: entry.CWD, ConfigDir: entry.ConfigDir, Name: entry.Name}, s.shutdown)
 				if err != nil {
 					millLogf("Automatic startup failed for %s: %v", entry.ConfigDir, err)
+					if !s.shuttingDown() {
+						failureMu.Lock()
+						failures = append(failures, fmt.Errorf("automatic startup failed for %s: %w", entry.ConfigDir, err))
+						failureMu.Unlock()
+					}
 					return
 				}
 				if state, _ := status["state"].(string); state == restartStateFailed {
 					millLogf("Automatic startup failed for %s; previous startup failure needs attention", entry.ConfigDir)
+					failureMu.Lock()
+					failures = append(failures, fmt.Errorf("automatic startup for %s returned retained failed state", entry.ConfigDir))
+					failureMu.Unlock()
 					return
 				}
 			}(entry)
 		}
+		jobs.Wait()
+		failureMu.Lock()
+		deferredFailures := append([]error(nil), failures...)
+		failureMu.Unlock()
+		s.persistAutostartFailures(deferredFailures, false)
 	}()
 }
 

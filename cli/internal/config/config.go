@@ -49,6 +49,7 @@ type Config struct {
 	ConfigFormat string              `json:"configFormat"`
 	Name         string              `json:"name,omitempty"`
 	AutoStart    bool                `json:"autoStart,omitempty"`
+	JVMPool      *string             `json:"JVMPool,omitempty"`
 	Source       string              `json:"-"`
 	Warnings     []UnknownKeyWarning `json:"-"`
 }
@@ -107,6 +108,7 @@ func Load(configDir string) (Config, World, error) {
 		"configFormat": true,
 		"name":         true,
 		"autoStart":    true,
+		"JVMPool":      true,
 	})}
 	if v, ok := raw["configFormat"]; ok {
 		if err := json.Unmarshal(v, &c.ConfigFormat); err != nil {
@@ -133,10 +135,71 @@ func Load(configDir string) (Config, World, error) {
 			return Config{}, World{}, fmt.Errorf("client config autoStart must be a boolean")
 		}
 	}
+	if v, ok := raw["JVMPool"]; ok {
+		pool, err := parseJVMPool("client config JVMPool", v)
+		if err != nil {
+			return Config{}, World{}, err
+		}
+		c.JVMPool = pool
+	}
 	if err := applyLocalOverlay(&c, filepath.Join(w.ConfigDir, LocalConfigFileName)); err != nil {
 		return Config{}, World{}, err
 	}
 	return c, w, nil
+}
+
+// SetLocalJVMPool updates only the JVMPool setting in the machine-local
+// overlay. It validates the flag value before creating a replacement, and
+// leaves the shared config.json untouched.
+func SetLocalJVMPool(configDir, pool string) error {
+	if strings.TrimSpace(pool) == "" {
+		return fmt.Errorf("local client config JVMPool must be a non-blank string")
+	}
+
+	path := filepath.Join(configDir, LocalConfigFileName)
+	raw := make(map[string]json.RawMessage)
+	b, err := os.ReadFile(path)
+	if err == nil {
+		if err := json.Unmarshal(b, &raw); err != nil || raw == nil {
+			if err != nil {
+				return fmt.Errorf("malformed local client config: %w", err)
+			}
+			return fmt.Errorf("malformed local client config: expected a JSON object")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	value, err := json.Marshal(pool)
+	if err != nil {
+		return err
+	}
+	raw["JVMPool"] = value
+	updated, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(configDir, ".config.local.json.jvmpool-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(updated, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // SetAutoStart updates only the top-level autoStart setting in an existing
@@ -196,6 +259,17 @@ func parseConfigName(label string, raw json.RawMessage) (string, error) {
 	return name, nil
 }
 
+func parseJVMPool(label string, raw json.RawMessage) (*string, error) {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+	var pool string
+	if err := json.Unmarshal(raw, &pool); err != nil || strings.TrimSpace(pool) == "" {
+		return nil, fmt.Errorf("%s must be a non-blank string or null", label)
+	}
+	return &pool, nil
+}
+
 func unknownKeyWarnings(file string, raw map[string]json.RawMessage, known map[string]bool) []UnknownKeyWarning {
 	unknown := make([]string, 0)
 	for key := range raw {
@@ -225,13 +299,20 @@ func applyLocalOverlay(c *Config, path string) error {
 	if _, ok := raw["configFormat"]; ok {
 		return fmt.Errorf("local client config must not declare configFormat")
 	}
-	c.Warnings = append(c.Warnings, unknownKeyWarnings(path, raw, map[string]bool{"name": true})...)
+	c.Warnings = append(c.Warnings, unknownKeyWarnings(path, raw, map[string]bool{"name": true, "JVMPool": true})...)
 	if v, ok := raw["name"]; ok {
 		name, err := parseConfigName("local client config name", v)
 		if err != nil {
 			return err
 		}
 		c.Name = name
+	}
+	if v, ok := raw["JVMPool"]; ok {
+		pool, err := parseJVMPool("local client config JVMPool", v)
+		if err != nil {
+			return err
+		}
+		c.JVMPool = pool
 	}
 	return nil
 }

@@ -109,6 +109,22 @@
          #(s/valid? ::basis-change (:basis %))))
 (s/def ::refresh-status #{:applied :partial :unchanged})
 (s/def ::refresh-mode #{:full :targeted})
+(s/def ::pool-refresh-status
+  #{:applied :partial :unchanged :restart-required})
+(s/def ::pool-refresh-result
+  (s/and map?
+         #(every? #{:status :jvm-pool :host-generation-id :members :reason
+                    :dry-run? :caveat}
+                  (keys %))
+         #(every? (fn [key] (contains? % key))
+                  [:status :jvm-pool :host-generation-id :members])
+         #(s/valid? ::pool-refresh-status (:status %))
+         #(string? (:jvm-pool %))
+         #(string? (:host-generation-id %))
+         #(map? (:members %))
+         #(or (not (contains? % :reason)) (keyword? (:reason %)))
+         #(or (not (contains? % :dry-run?)) (true? (:dry-run? %)))
+         #(or (not (contains? % :caveat)) (s/valid? ::caveat (:caveat %)))))
 (defn- valid-lifecycle-projection?
   [{:keys [status phase] :as projection}]
   (and (map? projection)
@@ -132,7 +148,8 @@
    (vals modules)))
 
 (s/def ::refresh-result
-  (s/or :dependency ::dependency-diagnostic
+  (s/or :pool ::pool-refresh-result
+        :dependency ::dependency-diagnostic
         :restart ::restart-required-result
         :current (s/and map?
                         #(s/valid? ::refresh-status (:status %))
@@ -158,11 +175,19 @@
          #(vector? (:loaded-namespaces %))))
 
 (s/def ::reload-code-result
-  (s/and #(shapes/exact-keys? #{:lib :status :namespaces} %)
-         #(s/valid? ::root-lib (:lib %))
-         #(contains? #{:reloaded :unchanged} (:status %))
-         #(vector? (:namespaces %))
-         #(every? non-blank-symbol? (:namespaces %))))
+  (s/or :isolated
+        (s/and #(shapes/exact-keys? #{:lib :status :namespaces} %)
+               #(s/valid? ::root-lib (:lib %))
+               #(contains? #{:reloaded :unchanged} (:status %))
+               #(vector? (:namespaces %))
+               #(every? non-blank-symbol? (:namespaces %)))
+        :pooled
+        (s/and #(shapes/exact-keys? #{:lib :status :namespaces :shared?} %)
+               #(s/valid? ::root-lib (:lib %))
+               #(contains? #{:reloaded :unchanged} (:status %))
+               #(true? (:shared? %))
+               #(vector? (:namespaces %))
+               #(every? non-blank-symbol? (:namespaces %)))))
 
 (s/def ::staged-module-result
   (s/and #(shapes/exact-keys? #{:module/key :module/declaration :staged?} %)
@@ -397,6 +422,7 @@
   This advanced code-only seam reloads namespaces whose file resources belong
   to the selected library's source paths. It does not publish module
   contributions or reconcile resources; use `refresh!` for the normal path.
+  A pooled result marks the definitions as shared process-wide effects.
   The result conforms to `::reload-code-result` (SPEC-003.C24)."
   [runtime root-lib]
   (require-valid! ::root-lib root-lib "reload-code! root-lib must be a symbol")

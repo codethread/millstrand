@@ -12,17 +12,22 @@ This glossary covers Millstrand and this repository. Terms owned by external spo
 | --- | --- | --- |
 | **mill** | The Go router and supervisor. Owns everything that must work without a running weaver: workspace resolution, bootstrap, weaver lifecycle, and the trusted nREPL attach. | Daemon, weaver, launcher, the CLI |
 | **`strand` CLI** | The Go client. A pure dispatcher with zero builtin subcommands: it resolves selection context, assembles one invoke envelope per call, and relays NDJSON back. | Strand (the graph node), client if the REPL is also meant, tool |
-| **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, one generation basis/classloader, and module activation state. | Daemon, server, backend, mill |
+| **Weaver** | One logical application runtime for a selected workspace. In isolated mode, it runs in one long-lived local Clojure process. In a JVM pool, it is one member runtime hosted by a shared pool host; the member owns its storage, registries, event handlers, generation identity, and module activation state, while the host owns the shared process and classloader. | Daemon, server, backend, mill |
 | **Workspace** | A directory holding Millstrand config, `deps.edn`, optional local overlays, startup code, and workspace-relative modules. `--workspace <dir>` selects it explicitly. | Worktree, repo, project, database |
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
-| **Weaver generation** | One weaver process lifetime. Its generation basis and classloader are minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
+| **Weaver generation** | The identity of one isolated Weaver process lifetime. Its generation basis and classloader are minted at boot and never swapped while the process runs. In a JVM pool, use **member runtime generation** for the member lifetime and reserve **pool host generation** for the shared process lifetime. | Schema generation, version, restart, session |
+| **Pool host** | The one supervised JVM that hosts a frozen set of pooled members. It owns the process-global Clojure code environment, shared classloader, host refresh lock, collective readiness, and host shutdown. | Weaver, daemon, shared weaver |
+| **Pool host generation** | One pool-host process lifetime. It has one host PID, shared basis fingerprint, classloader, and frozen member set. A host generation changes only through collective replacement. | Member generation, schema generation, restart |
+| **Member runtime** | One workspace runtime hosted by a pool host. It owns that workspace's storage, registries, spool state, lifecycle resources, request socket, nREPL endpoint, and runtime binding. | Host, namespace, process |
+| **Member runtime generation** | The identity of one member runtime within a pool host generation. It is distinct from the shared host generation and from fresh probe identities. | Host generation, schema generation |
+| **JVM pool member** | A registered workspace admitted into one pool host generation. Membership is durable and a newcomer is pending until collective restart admits the new frozen set. | Host, peer, namespace |
 | **Cutover** | The transition from one weaver generation to the next, including the window where the previous generation's classpath ownership still applies. | Migration, upgrade, deploy |
 | **Refresh** | `runtime/refresh!`, the pickup path for config, startup, and module source changes. It classifies each change and applies what it safely can. | Reload, restart, hot reload |
 | **Basis change** | A dependency-file, selected-alias, or coordinate change that produces a different candidate basis fingerprint. It requires a new Weaver generation. | Live dependency update, hot dependency reload |
 | **Live source change** | A workspace-relative `:file` module or current-basis source change that refresh can apply in the running generation. | Basis change |
-| **Ambient runtime** | The runtime published as the process-wide default. One real weaver process publishes exactly one (SPEC-004.C8a). | Global runtime, singleton, the weaver |
+| **Ambient runtime** | The process-wide default runtime. Isolated startup publishes one by default and refuses a second publication. A pooled host publishes no ambient runtime; each member is selected through its explicit runtime binding (SPEC-004.C8a). | Global runtime, singleton, the weaver |
 | **Harness** | A coding-agent provider. Harness names are data in workspace config, and no feature may require a particular one ([PHILOSOPHY](./PHILOSOPHY.md), "No harness is home"). | Agent, model, LLM, backend, provider |
 | **Invoke envelope** | The request `strand` assembles per call, carrying op name, argv, payloads, and selection context. | Request, payload, command |
 
@@ -162,7 +167,7 @@ Registered by the modules under `.millstrand/me/workflows/` and `.millstrand/me/
 - A **note** is a closed strand attached by the `notes` battery. Its text is write-once and cannot be rewritten, archived, or deleted on any mutation path.
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
 - A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
-- One real weaver process publishes exactly one **ambient runtime**.
+- An isolated weaver publishes one **ambient runtime** by default. A **pool host** publishes none; each member uses an explicit runtime binding.
 - A **weaver generation** mints one generation basis and classloader at boot. A **basis change** requires a replacement generation; workspace-relative source changes can refresh live in the current basis.
 - An **op** is the only thing the **`strand` CLI** can invoke. There are no builtin subcommands, so every command name came from a spool.
 - A **workflow run** has one root at a time, and that root moves as **stages** advance.

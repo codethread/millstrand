@@ -18,6 +18,7 @@ Docs: [codethread.github.io/millstrand](https://codethread.github.io/millstrand/
 - [About](#about)
     - [A graph](#a-graph)
     - [The weaver](#the-weaver)
+    - [JVM pools](#jvm-pools)
     - [Named queries](#named-queries)
     - [Going further](#going-further)
 - [See it in action](#see-it-in-action)
@@ -141,6 +142,24 @@ Stop and join the worker when you are finished:
 The [Clojure crash course](./docs/clojure-crash-course.md) covers the rest.
 
 </details>
+
+### JVM pools
+
+Workspaces can opt into one supervised JVM by naming the same non-blank `JVMPool` value. Each member still has its own database, runtime registries, spool state, request socket, nREPL endpoint, and runtime binding. The host shares one classloader and process-global Clojure code environment, so pool owners must keep their dependencies, namespaces, Vars, classes, and Java static state compatible.
+
+Set a pool for one workspace with a machine-local override:
+
+```sh
+mill init --jvm-pool backend
+```
+
+This requires a running Mill and registers the workspace durably without starting a host. Add `--auto-start` to register and start the stopped pool during the same command:
+
+```sh
+mill init --jvm-pool backend --auto-start
+```
+
+Starting, stopping, and restarting through any registered member affects the whole pool. A member added while the host is live stays pending until an explicit `mill weaver restart`; automatic start does not replace the live host. Workspaces with omitted or `null` `JVMPool` keep the isolated Weaver model. For the full lifecycle and refresh rules, see [Customising your workspace](./docs/spools/customisation.md#jvm-pools).
 
 ```mermaid
 sequenceDiagram
