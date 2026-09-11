@@ -15,7 +15,7 @@ Mill supervises Weaver processes, but replacement is not a first-class transitio
 
 Mill is the local Go supervisor. A Weaver is the Clojure process serving one selected workspace, and each replacement process is a new generation. A spool is Clojure code loaded into a Weaver. A native process is an operating-system child such as an agent harness; its waiter is the Weaver thread blocked until it exits. Restart state is visible through `mill weaver status`, lifecycle command results, and Mill-routed client errors.
 
-Current consumers fail differently. Legacy `agent-run` kills a verified orphan and retries. Newer `harness-core`/`agent-cli` has no equivalent reconciliation and can leave a durable run in its running phase. Millhouse shell execution can lose its waiter. Ralph is external but treats a failed board call as terminal. In-JVM callbacks cannot transfer at all.
+Current consumers fail differently. Legacy `agent-run` kills a verified orphan and retries. Newer `harness-core`/`agent-cli` has no equivalent reconciliation and can leave a durable run in its running phase. Millhouse shell execution can lose its waiter. In-JVM callbacks cannot transfer at all.
 
 ## PROP-Wrc-001.P2 Goals
 
@@ -148,7 +148,7 @@ Clean Mill shutdown terminates owned process trees and records terminal cancella
 
 ### PROP-Wrc-001.S7 — Consumer migration
 
-Legacy `agent-run` and newer `harness-core`/`agent-cli` converge on one custody-backed headless path before release. Millhouse shell execution adopts the same primitive. Existing interactive backends keep their separate lifecycle contract. Ralph waits before new calls; if an accepted read returns `weaver/restarted`, Ralph waits for readiness and explicitly reissues only that safe read. It does not reissue mutations automatically.
+Legacy `agent-run` and newer `harness-core`/`agent-cli` converge on one custody-backed headless path before release. Millhouse shell execution adopts the same primitive. Existing interactive backends keep their separate lifecycle contract.
 
 ### PROP-Wrc-001.S8 — In-JVM outcomes
 
@@ -293,7 +293,7 @@ Spool-owned children leave the waiter and process pipes inside the generation be
 
 Mill's current serial start idempotence and ordinary lifecycle behavior are implemented in [`startWeaver`](https://github.com/codethread/millstrand/blob/8142fded78030327d5b48dd02c2043f660af0e64/cli/cmd/mill/lifecycle.go#L99-L190) and covered by [lifecycle tests](https://github.com/codethread/millstrand/blob/8142fded78030327d5b48dd02c2043f660af0e64/cli/cmd/mill/lifecycle_test.go). A sibling start may currently receive `starting`; concurrent callers do not yet join one terminal transition.
 
-These sources demonstrate the current failure modes. [`reconcile!`](https://github.com/codethread/agent-harness.spool/blob/ded2f8ae3efa572ff2bd642453dcc5a02d3c2392/agent-run/src/ct/spools/agent_run.clj#L2323-L2362) destroys and resets legacy headless orphans. [`process-result`](https://github.com/codethread/agent-harness.spool/blob/ded2f8ae3efa572ff2bd642453dcc5a02d3c2392/agent-cli/src/ct/spools/agent_cli.clj#L169-L181) starts and waits for the newer child inside the Weaver. Millhouse [`execute!` and `run-gate!`](https://github.com/codethread/millhouse.spool/blob/f1cdda3b46706b186f547251d285791be650d232/spools/shell-executor/src/millhouse/spools/executors/shell.clj#L224-L303) join the process wait to its gate update in one Weaver-owned call. Ralph's [gate read](https://github.com/codethread/codethread.spool/blob/b83b9adb9b75665ea968cf3a4500cacfabf010fd/spools/ralph/internal/loop/loop.go#L284-L290) turns an ordinary board error into a terminal loop error.
+These sources demonstrate the current failure modes. [`reconcile!`](https://github.com/codethread/agent-harness.spool/blob/ded2f8ae3efa572ff2bd642453dcc5a02d3c2392/agent-run/src/ct/spools/agent_run.clj#L2323-L2362) destroys and resets legacy headless orphans. [`process-result`](https://github.com/codethread/agent-harness.spool/blob/ded2f8ae3efa572ff2bd642453dcc5a02d3c2392/agent-cli/src/ct/spools/agent_cli.clj#L169-L181) starts and waits for the newer child inside the Weaver. Millhouse [`execute!` and `run-gate!`](https://github.com/codethread/millhouse.spool/blob/f1cdda3b46706b186f547251d285791be650d232/spools/shell-executor/src/millhouse/spools/executors/shell.clj#L224-L303) join the process wait to its gate update in one Weaver-owned call.
 
 ## PROP-Wrc-001.P10 Open questions
 

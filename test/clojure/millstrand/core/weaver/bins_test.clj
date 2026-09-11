@@ -52,7 +52,7 @@
             _ (io/make-parents root-executable)
             _ (spit root-executable "#!/bin/sh\n")
             _ (.setExecutable root-executable true false)
-            coordinate {:git/dir "spools/ralph"
+            coordinate {:git/dir "spools/example"
                         :deps/root (.getCanonicalPath root)
                         :paths [(.getCanonicalPath source-root)]}
             rt (publish!

@@ -23,6 +23,17 @@ else
   expected_branch=$target
 fi
 
+git_metadata_path=$(git rev-parse --git-path millstrand-land-quality-head) \
+  || die "cannot locate the worktree quality marker"
+
+# A marker is a claim about one exact tested commit. Remove it before any
+# attempt so a failed or interrupted retry cannot reuse an older result.
+rm -f "$git_metadata_path" \
+  || die "cannot invalidate the previous quality marker: $git_metadata_path"
+
+mkdir -p "$(dirname "$git_metadata_path")" \
+  || die "cannot create the quality marker directory"
+
 current_branch=$(git branch --show-current) || die "cannot read the checked-out branch"
 [ "$current_branch" = "$expected_branch" ] \
   || die "checked-out branch is $current_branch; expected $expected_branch"
@@ -80,5 +91,11 @@ else
   [ "$upstream_head_after" = "$head_before" ] \
     || die "upstream changed during quality checks: expected $head_before, found $upstream_head_after"
 fi
+
+marker_tmp="$git_metadata_path.$$"
+printf '%s\n' "$head_before" >"$marker_tmp" \
+  || die "cannot write the quality marker: $git_metadata_path"
+mv -f "$marker_tmp" "$git_metadata_path" \
+  || die "cannot publish the quality marker: $git_metadata_path"
 
 printf '%s\n' "land quality gate: passed at unchanged $expected_branch HEAD $head_before"

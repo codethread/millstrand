@@ -1,6 +1,6 @@
 # Brief: Weaver restart continuity
 
-Replacing a Weaver interrupts work that outlives its JVM. Durable graph, workflow, and scheduler state reconstructs, but native children can lose their waiter: agent runs may be killed, retried, or left running; Millhouse shell execution has the same gap. External loops such as Ralph survive outside the Weaver but may stop when a board call fails during replacement.
+Replacing a Weaver interrupts work that outlives its JVM. Durable graph, workflow, and scheduler state reconstructs, but native children can lose their waiter: agent runs may be killed, retried, or left running; Millhouse shell execution has the same gap.
 
 Make replacement a normal Mill-supervised transition:
 
@@ -17,7 +17,7 @@ Arbitrary JVM work remains interruptible. Callbacks, handlers, REPL connections,
 1. What atomic states and failures define `mill weaver restart`, including convergence and readiness?
 2. How do client waiting, deadlines, direct socket access, and one-send behavior work?
 3. What custody protocol covers idempotent launch, process identity and trees, output, status, cancellation, retained completion, acknowledgement, and cleanup?
-4. How do agent runners, Millhouse shell execution, interactive agents, and Ralph use that contract?
+4. How do agent runners, Millhouse shell execution, and interactive agents use that contract?
 5. What interruption or reconciliation result applies to runtime code, scheduled and event work, chime delivery, peer calls, REPLs, streams, and awaits?
 6. Which end-to-end tests prove continuity, reconciliation, one-send behavior, startup failure reporting, and clean shutdown?
 

@@ -18,6 +18,10 @@
    'millstrand.api.registry.alpha-test
    'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test
    'millstrand.ct.release-workflow-test
+   'millstrand.ct.land-workflow-test
+   'millstrand.ct.review-workflow-test
+   'millstrand.ct.merge-queue-test
+   'millstrand.ct.land-scripts-test
    'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test

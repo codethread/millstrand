@@ -1,7 +1,23 @@
 (ns me.workflows.support
   "Shared script helpers for the repo's independently loaded workflow definitions."
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.java.shell :as shell]
+            [clojure.string :as str]
+            [millhouse.spools.workflow :as workflow]))
+
+(defn canonical-worktree
+  "Resolve the canonical checkout while the feature worktree still exists.
+
+  The resulting path is frozen into cleanup gates, so their working directory
+  survives removal of the feature worktree."
+  [worktree]
+  (let [{:keys [exit out err]}
+        (shell/sh "git" "-C" worktree "rev-parse"
+                  "--path-format=absolute" "--git-common-dir")]
+    (when-not (zero? exit)
+      (throw (ex-info "Cannot locate canonical landing checkout"
+                      {:worktree worktree :exit exit :error err})))
+    (.getCanonicalPath (.getParentFile (io/file (str/trim out))))))
 
 (defn non-blank-string?
   "Return true when v is a non-blank string."
@@ -48,3 +64,34 @@
 (def land-cleanup-script
   "Clean up the landed feature branch and worktree."
   (script "land-cleanup.sh"))
+
+(defn land-cleanup-argv
+  "Freeze cleanup and obtain its expected branch HEAD from the merged PR.
+
+  A rebase may have changed HEAD after the continuation was poured. The merged
+  PR retains that identity even when a previous cleanup removed the worktree."
+  [branch worktree pr-number]
+  (sh-gate
+   (str "set -eu\n"
+        "head=$(gh pr view \"$3\" --json headRefOid --jq .headRefOid)\n"
+        "exec sh -c \"$4\" land-cleanup \"$1\" \"$2\" \"$head\"\n")
+   "land-cleanup-head" branch worktree (str pr-number) land-cleanup-script))
+
+(defn card-gate
+  "Build a short, retryable card bookkeeping gate."
+  [id title dependencies callable]
+  (workflow/gate id title :code
+                 :depends-on dependencies
+                 :attributes {"code/fn" callable
+                              "code/params" #(select-keys % [:card])}
+                 "This card update is automatic. On failure, fix the cause and clear gate/error to retry."))
+
+(defn shell-gate
+  "Build a shell gate whose request is frozen with the worktree context."
+  [id title dependencies argv timeout instruction]
+  (workflow/gate id title :shell
+                 :depends-on dependencies
+                 :attributes {"shell/argv" argv
+                              "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                              "shell/timeout-secs" timeout}
+                 instruction))

@@ -64,4 +64,4 @@ Notebook/notes verification note; full locked suite at queue acceptance; land vi
 
 ## PLAN-Sbl-001.P8 Task context
 
-- **PLAN-Sbl-001.TC1:** Worked directly by the coordinator (ralph iteration 15) — four sequential single-repo slices; no parallel fan-out (each slice is small, and release tagging is inherently serial per repo).
+- **PLAN-Sbl-001.TC1:** Worked directly by the coordinator (iteration 15) — four sequential single-repo slices; no parallel fan-out (each slice is small, and release tagging is inherently serial per repo).
