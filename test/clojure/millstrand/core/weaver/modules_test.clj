@@ -147,8 +147,8 @@
             :pool-basis pool-basis
             :refresh-lock (Object.)
             :runtimes-by-config (zipmap (map :config-dir members)
-                                        (map #(hash-map :member-config (:config-dir %))
-                                             members))}}))
+                                        (for [member members]
+                                          {:member-config (:config-dir member)}))}}))
 
 (defn- write-membership! [file members]
   (spit file (json/write-str {:format "millstrand.jvm-pool-membership/v1"

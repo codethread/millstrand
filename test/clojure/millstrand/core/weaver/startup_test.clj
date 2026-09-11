@@ -541,7 +541,7 @@
     (let [host (pool/start! manifest)
           runtime (first (:runtimes host))
           port (get-in runtime [:metadata :endpoint :port])
-          lock (get-in @(:pool-host runtime) [:refresh-lock])
+          lock (get @(:pool-host runtime) :refresh-lock)
           reloaded (atom [])
           lock-held? (atom false)
           root-lib 'io.millstrand/millstrand]
