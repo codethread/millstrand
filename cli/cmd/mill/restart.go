@@ -453,6 +453,21 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		waitForStartClaim(claim)
+		return s.restartWeaver(req)
+	}
+	if live, liveErr := s.livePoolHostForConfig(world.ConfigDir); liveErr != nil {
+		return nil, liveErr
+	} else if live != nil && live.Live {
+		desired, desiredErr := configuredPool(world)
+		if desiredErr != nil {
+			return nil, desiredErr
+		}
+		if live.Pool != desired {
+			return nil, poolStopRequiredError(world.ConfigDir, live.Pool, live.HostID)
+		}
+	}
 	if pool, poolErr := configuredPool(world); poolErr != nil {
 		return nil, poolErr
 	} else if pool != "" {
@@ -463,10 +478,6 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 		host := poolHostForConfigLocked(s, world.ConfigDir)
 		s.mu.Unlock()
 		return nil, poolStopRequiredError(world.ConfigDir, host.Pool, host.HostID)
-	}
-	if claim := s.startClaim(world.ConfigDir); claim != nil {
-		waitForStartClaim(claim)
-		return s.restartWeaver(req)
 	}
 	if recordedPool, recorded, recordedErr := s.registeredPoolForConfig(world.ConfigDir); recordedErr != nil {
 		return nil, recordedErr

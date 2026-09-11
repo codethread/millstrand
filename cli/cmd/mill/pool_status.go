@@ -91,10 +91,8 @@ func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, e
 			}
 			status := baseStatus(world, "pending")
 			status["jvm_pool"] = recordedPool
-			status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)
 			status["live_members"] = poolConfigDirs(host.Members)
-			status["pending_members"] = []string{world.ConfigDir}
-			status["restart_required"] = true
+			addPoolPending(status, host, snapshot)
 			return status, true, nil
 		}
 	}
@@ -129,20 +127,8 @@ func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, e
 		}
 		status := baseStatus(world, "pending")
 		status["jvm_pool"] = pool
-		status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)
 		status["live_members"] = poolConfigDirs(host.Members)
-		pending := []string{}
-		live := map[string]bool{}
-		for _, member := range host.Members {
-			live[member.World.ConfigDir] = true
-		}
-		for _, member := range snapshot.Members {
-			if !live[member.ConfigDir] {
-				pending = append(pending, member.ConfigDir)
-			}
-		}
-		status["pending_members"] = pending
-		status["restart_required"] = len(pending) != 0
+		addPoolPending(status, host, snapshot)
 		return status, true, nil
 	}
 	return poolStatusForRegistered(world, pool, snapshot), true, nil

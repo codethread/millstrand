@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -97,6 +98,150 @@ func TestRestartRejectsLivePooledOwnerAfterConfigBecomesIsolated(t *testing.T) {
 	var responseErr *client.ResponseError
 	if !errors.As(err, &responseErr) || responseErr.Code != "mill/jvm-pool-stop-required" {
 		t.Fatalf("live pooled owner was not protected from isolated restart: %v", err)
+	}
+}
+
+func TestInitRejectsLiveIsolatedOwnerBeforePoolMutation(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
+			terminatePID(cmd.Process.Pid)
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	writeWeaverMetadata(t, world, cmd.Process.Pid, "isolated-live")
+
+	launches := 0
+	originalLaunch := launchWeaver
+	launchWeaver = func(string, []string, []string, func(*exec.Cmd) error, io.Writer, io.Writer) (*exec.Cmd, error) {
+		launches++
+		return nil, errors.New("unexpected launch")
+	}
+	t.Cleanup(func() { launchWeaver = originalLaunch })
+
+	pool := "backend"
+	s := &server{}
+	_, err = s.reconcileInitPool(world, source, &pool)
+	var responseErr *client.ResponseError
+	if !errors.As(err, &responseErr) || responseErr.Code != "mill/jvm-pool-stop-required" {
+		t.Fatalf("live isolated owner was not protected from pool init: %v", err)
+	}
+	if launches != 0 {
+		t.Fatalf("live isolated init launched %d weavers", launches)
+	}
+	if _, err := os.Stat(filepath.Join(cfg, config.LocalConfigFileName)); !os.IsNotExist(err) {
+		t.Fatalf("live isolated init wrote local config: %v", err)
+	}
+	registry, err := jvmpool.New(mustStateRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.Snapshot(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Members) != 0 {
+		t.Fatalf("live isolated init registered a pool member: %#v", snapshot.Members)
+	}
+}
+
+func TestStartRejectsLivePooledPlacementEdits(t *testing.T) {
+	source := tempSource(t)
+	cases := []struct {
+		name string
+		pool *string
+	}{
+		{name: "pooled to isolated"},
+		{name: "pool move", pool: func() *string { value := "other"; return &value }()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := tempConfig(t, source)
+			if tc.pool != nil {
+				if err := config.SetLocalJVMPool(cfg, *tc.pool); err != nil {
+					t.Fatal(err)
+				}
+			}
+			world, err := config.RuntimeWorld(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			host := &weaverHost{Pool: "backend", HostID: "host-1", Live: true, Members: []poolMember{{World: world}}}
+			s := &server{poolMembers: map[string]*weaverHost{world.ConfigDir: host}, poolHosts: map[string]*weaverHost{"backend": host}}
+			_, err = s.startWeaver(client.MillWorldRequest{CWD: source, ConfigDir: cfg})
+			var responseErr *client.ResponseError
+			if !errors.As(err, &responseErr) || responseErr.Code != "mill/jvm-pool-stop-required" {
+				t.Fatalf("live pooled placement edit was not refused: %v", err)
+			}
+			if s.poolHosts["backend"] != host || s.poolMembers[world.ConfigDir] != host {
+				t.Fatalf("placement refusal changed live owner: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+			}
+		})
+	}
+}
+
+func TestPendingPoolStatusReportsCompleteRegisteredProjection(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfgA := tempConfig(t, source)
+	cfgB := tempConfig(t, source)
+	cfgC := tempConfig(t, source)
+	for _, cfg := range []string{cfgA, cfgB, cfgC} {
+		if err := config.SetLocalJVMPool(cfg, "backend"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	worlds := make([]config.World, 0, 3)
+	for _, cfg := range []string{cfgA, cfgB, cfgC} {
+		world, err := config.RuntimeWorld(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		worlds = append(worlds, world)
+	}
+	registry, err := jvmpool.New(mustStateRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, world := range worlds {
+		if _, err := registry.Reconcile(jvmpool.Member{ConfigDir: world.ConfigDir, SourceCWD: source, JVMPool: "backend"}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, err := registry.Snapshot("backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registered := poolConfigDirsFromSnapshot(snapshot)
+	pending := []string{worlds[1].ConfigDir, worlds[2].ConfigDir}
+	sort.Strings(pending)
+	host := &weaverHost{Pool: "backend", HostID: "host-1", Live: true, Members: []poolMember{{World: worlds[0]}}}
+	s := &server{poolHosts: map[string]*weaverHost{"backend": host}, poolRegistry: registry}
+	statusB, ok, err := s.poolStatusForWorld(worlds[1])
+	if err != nil || !ok {
+		t.Fatalf("pending member status failed: status=%#v ok=%v err=%v", statusB, ok, err)
+	}
+	statusC, ok, err := s.poolStatusForWorld(worlds[2])
+	if err != nil || !ok {
+		t.Fatalf("second pending member status failed: status=%#v ok=%v err=%v", statusC, ok, err)
+	}
+	for name, status := range map[string]map[string]any{"B": statusB, "C": statusC} {
+		if status["state"] != "pending" || !reflect.DeepEqual(status["registered_members"], registered) || !reflect.DeepEqual(status["live_members"], []string{worlds[0].ConfigDir}) || !reflect.DeepEqual(status["pending_members"], pending) {
+			t.Fatalf("pending %s status has incomplete projection: %#v", name, status)
+		}
 	}
 }
 
@@ -196,7 +341,8 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	source := tempSource(t)
 	cfgA := tempConfig(t, source)
 	cfgB := tempConfig(t, source)
-	for _, cfg := range []string{cfgA, cfgB} {
+	cfgC := tempConfig(t, source)
+	for _, cfg := range []string{cfgA, cfgB, cfgC} {
 		if err := config.SetLocalJVMPool(cfg, "backend"); err != nil {
 			t.Fatal(err)
 		}
@@ -209,11 +355,15 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	if err != nil {
 		t.Fatal(err)
 	}
+	worldC, err := config.RuntimeWorld(cfgC)
+	if err != nil {
+		t.Fatal(err)
+	}
 	registry, err := jvmpool.New(mustStateRoot(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, member := range []jvmpool.Member{{ConfigDir: worldA.ConfigDir, SourceCWD: source, JVMPool: "backend"}, {ConfigDir: worldB.ConfigDir, SourceCWD: source, JVMPool: "backend"}} {
+	for _, member := range []jvmpool.Member{{ConfigDir: worldA.ConfigDir, SourceCWD: source, JVMPool: "backend"}, {ConfigDir: worldB.ConfigDir, SourceCWD: source, JVMPool: "backend"}, {ConfigDir: worldC.ConfigDir, SourceCWD: source, JVMPool: "backend"}} {
 		if _, err := registry.Reconcile(member, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -279,6 +429,21 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	for _, world := range []config.World{worldA, worldB} {
 		if err := os.WriteFile(filepath.Join(world.ConfigDir, config.LocalConfigFileName), []byte(`{"JVMPool":null}`), 0o644); err != nil {
 			t.Fatal(err)
+		}
+	}
+	listServer := &server{}
+	rows, err := listServer.weaverList()
+	if err != nil {
+		t.Fatalf("fresh server pool list failed: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("fresh server list should include two live and one pending member: %#v", rows)
+	}
+	registered := poolConfigDirsFromSnapshot(snapshot)
+	pending := []string{worldC.ConfigDir}
+	for _, row := range rows {
+		if row["jvm_pool"] != "backend" || !reflect.DeepEqual(row["registered_members"], registered) || !reflect.DeepEqual(row["live_members"], []string{worldA.ConfigDir, worldB.ConfigDir}) || !reflect.DeepEqual(row["pending_members"], pending) {
+			t.Fatalf("fresh server list lost exact pool projection: %#v", row)
 		}
 	}
 	s := &server{}

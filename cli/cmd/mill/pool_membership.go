@@ -125,14 +125,38 @@ func (s *server) livePoolHostForConfig(configDir string) (*weaverHost, error) {
 	s.mu.Lock()
 	host := poolHostForConfigLocked(s, configDir)
 	s.mu.Unlock()
-	if host != nil && host.Live {
+	if host != nil && host.Live && (host.PID <= 0 || processAlive(host.PID)) {
 		return host, nil
 	}
 	pool, recorded, err := s.registeredPoolForConfig(configDir)
-	if err != nil || !recorded {
+	if err != nil {
 		return nil, err
 	}
-	return s.discoverPoolHost(pool)
+	if recorded {
+		if host, err := s.discoverPoolHost(pool); err != nil {
+			return nil, err
+		} else if host != nil && poolHostHasMember(host, configDir) {
+			return host, nil
+		}
+	}
+	// A live isolated weaver has no durable pool owner to discover. Its
+	// validated metadata is still the authoritative live-placement proof, so
+	// represent it as an unnamed host for the stop-required comparison. Stale
+	// metadata is deliberately ignored: validateMetadata has already checked
+	// the process, storage identity, and endpoint shape through readStatus.
+	world, err := config.RuntimeWorld(configDir)
+	if err != nil {
+		return nil, err
+	}
+	status, stale := readStatus(world)
+	if status == nil || stale || strings.TrimSpace(stringStatus(status, "jvm_pool")) != "" {
+		return nil, nil
+	}
+	identity, err := identityFromStatus(status)
+	if err != nil {
+		return nil, fmt.Errorf("live isolated weaver metadata is unusable: %w", err)
+	}
+	return &weaverHost{HostID: identity.WeaverID, PID: identity.PID, Live: true}, nil
 }
 
 func (s *server) livePoolOwnership() jvmpool.LiveOwnership {
@@ -140,7 +164,7 @@ func (s *server) livePoolOwnership() jvmpool.LiveOwnership {
 	defer s.mu.Unlock()
 	ownership := jvmpool.LiveOwnership{}
 	for pool, host := range s.poolHosts {
-		if host == nil || !host.Live {
+		if host == nil || !host.Live || (host.PID > 0 && !processAlive(host.PID)) {
 			continue
 		}
 		for _, member := range host.Members {

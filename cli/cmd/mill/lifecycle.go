@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -153,16 +154,27 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
-	if pool, poolErr := configuredPool(world); poolErr != nil {
-		return nil, poolErr
-	} else if pool != "" {
-		return s.startPooledWeaver(req, world, pool, shutdown)
-	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		if !waitForStartClaimWithShutdown(claim, shutdown) {
 			return nil, errors.New("weaver start cancelled during mill shutdown")
 		}
 		return s.startWeaverWithShutdown(req, shutdown)
+	}
+	if live, liveErr := s.livePoolHostForConfig(world.ConfigDir); liveErr != nil {
+		return nil, liveErr
+	} else if live != nil && live.Live {
+		desired, desiredErr := configuredPool(world)
+		if desiredErr != nil {
+			return nil, desiredErr
+		}
+		if live.Pool != desired {
+			return nil, poolStopRequiredError(world.ConfigDir, live.Pool, live.HostID)
+		}
+	}
+	if pool, poolErr := configuredPool(world); poolErr != nil {
+		return nil, poolErr
+	} else if pool != "" {
+		return s.startPooledWeaver(req, world, pool, shutdown)
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
 		// A probe leaves the admitted old generation serving.  Starting during
@@ -478,36 +490,108 @@ func (s *server) weaverReplContext(req client.MillWorldRequest) (map[string]any,
 	return status, nil
 }
 
+func (s *server) durablePoolSnapshots() (map[string]jvmpool.PoolSnapshot, error) {
+	registry, err := s.jvmPoolRegistry()
+	if err != nil {
+		return nil, err
+	}
+	doc, err := registry.Read()
+	if err != nil {
+		return nil, err
+	}
+	snapshots := map[string]jvmpool.PoolSnapshot{}
+	for _, member := range doc.Members {
+		snapshot := snapshots[member.JVMPool]
+		snapshot.Pool = member.JVMPool
+		snapshot.Revision = doc.Revision
+		snapshot.Members = append(snapshot.Members, member)
+		snapshots[member.JVMPool] = snapshot
+	}
+	return snapshots, nil
+}
+
 func (s *server) weaverList() ([]map[string]any, error) {
+	durable, err := s.durablePoolSnapshots()
+	if err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	pools := make(map[string]bool, len(durable)+len(s.poolHosts))
+	for pool := range durable {
+		pools[pool] = true
+	}
+	for pool := range s.poolHosts {
+		pools[pool] = true
+	}
+	s.mu.Unlock()
+	poolNames := make([]string, 0, len(pools))
+	for pool := range pools {
+		poolNames = append(poolNames, pool)
+	}
+	sort.Strings(poolNames)
 	seen := map[string]bool{}
 	rows := []map[string]any{}
-	for _, host := range s.poolHosts {
+	for _, pool := range poolNames {
+		snapshot, snapshotOK := durable[pool]
+		if !snapshotOK {
+			snapshot, err = s.poolRegisteredSnapshot(pool)
+			if err != nil {
+				return nil, err
+			}
+		}
+		s.mu.Lock()
+		host := s.poolHosts[pool]
+		s.mu.Unlock()
+		if host == nil || !host.Live || (host.PID > 0 && !processAlive(host.PID)) {
+			host, err = s.discoverPoolHost(pool)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if host == nil || !host.Live || len(host.Members) == 0 {
 			continue
 		}
-		snapshot := jvmpool.PoolSnapshot{Pool: host.Pool}
-		if s.poolRegistry != nil {
-			var snapshotErr error
-			snapshot, snapshotErr = s.poolRegistry.Snapshot(host.Pool)
-			if snapshotErr != nil {
-				return nil, snapshotErr
-			}
-		}
+		live := map[string]bool{}
 		for _, member := range host.Members {
+			live[member.World.ConfigDir] = true
 			if status := s.poolStatusForMember(host, member.World.ConfigDir); status != nil {
 				addPoolPending(status, host, snapshot)
 				rows = append(rows, status)
 			}
 			seen[member.World.StateDir] = true
 		}
+		pending := make([]string, 0)
+		for _, member := range snapshot.Members {
+			if !live[member.ConfigDir] {
+				pending = append(pending, member.ConfigDir)
+			}
+		}
+		for _, configDir := range pending {
+			world, worldErr := config.RuntimeWorld(configDir)
+			if worldErr != nil {
+				return nil, worldErr
+			}
+			status := baseStatus(world, "pending")
+			status["jvm_pool"] = host.Pool
+			status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)
+			status["live_members"] = poolConfigDirs(host.Members)
+			status["pending_members"] = pending
+			status["restart_required"] = true
+			rows = append(rows, status)
+			seen[world.StateDir] = true
+		}
 	}
+	s.mu.Lock()
+	children := make([]*weaverChild, 0, len(s.children))
 	for _, child := range s.children {
+		children = append(children, child)
+	}
+	for _, child := range children {
 		status := s.weaverStatusForWorldLocked(child.world)
 		rows = append(rows, status)
 		seen[child.world.StateDir] = true
 	}
+	s.mu.Unlock()
 	root, err := config.StateRoot()
 	if err != nil {
 		return nil, err
