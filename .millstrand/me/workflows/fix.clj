@@ -18,16 +18,6 @@
 (s/def ::worktree ::non-blank-string)
 (s/def ::card ::non-blank-string)
 
-;; fix: the light bug-fix workflow (family `fix`)
-;;
-;; Less ceremony than devflow, but the doc discipline is structural: after the
-;; implementation step, a docs-sync step owns the spec-delta and CLAUDE.md
-;; judgment and a machine shell gate proves `make docs-check` green
-;; (PHILOSOPHY: prose guides, code decides). The branch and worktree are
-;; poured params so that gate has a cwd; the claim step creates them. The run
-;; ends by handing the branch to the shared review workflow.
-;; ---------------------------------------------------------------------------
-
 (s/def ::fix-params (s/keys :req-un [::subject ::branch ::worktree]
                             :opt-un [::card]))
 
@@ -41,7 +31,7 @@
        |--branch %s --worktree %s`, with the worktree created for the branch.
        |Then stamp the card on this step before completing it: `strand update
        |<this-step-id> --attributes '{\"fix/card\":\"%s\"}'` — the stamp is the
-       |run's durable link to the card the land hand-off names."
+       |run's durable link to the card the review handoff names."
       card card branch worktree card))
     (format-alpha/reflow
      (format
@@ -49,7 +39,7 @@
        |owner, branch `%s`, and worktree `%s` created for the branch. Then
        |stamp the card on this step before completing it: `strand update
        |<this-step-id> --attributes '{\"fix/card\":\"<card-id>\"}'` — the stamp
-       |is the run's durable link to the card the land hand-off names."
+       |is the run's durable link to the card the review handoff names."
       branch worktree))))
 
 (defn- fix-handoff-instruction
@@ -65,17 +55,7 @@
                                     :card (or card "<fix/card>")})))
 
 (workflow/defworkflow fix
-  "Run the light BUG-FIX workflow (family \"fix\").
-
-  The low-ceremony path for a bug fix, direct or picking up an existing
-  card: claim a card and worktree, implement with a regression lock,
-  then face the doc discipline as structure — a docs-sync step for the
-  spec-delta and CLAUDE.md judgment, and a machine gate that proves
-  `make docs-check` green — before validating and handing the branch to
-  the shared `review` workflow. Params: `subject` (one-line statement
-  of the bug), `branch` and `worktree` (the pair the claim step
-  creates), `card` (optional existing card id to claim instead of
-  pouring one)."
+  "Run one light bug fix through the shared review handoff."
   {:entrypoints #{:start}
    :param-spec ::fix-params
    :defaults {}
@@ -96,37 +76,35 @@
    (workflow/step :claim-trail
                   (fn [{:keys [subject]}] (str "Card + worktree trail for: " subject))
                   :self
-                  :attributes {"workflow/action-ref" "fix.claim-trail"
-                               "workflow/instruction" fix-claim-instruction})
+                  :attributes {"workflow/action-ref" "fix.claim-trail"}
+                  fix-claim-instruction)
    (workflow/step :implement
                   (fn [{:keys [subject]}] (str "Fix: " subject))
                   :self
                   :depends-on [:claim-trail]
-                  :attributes {"workflow/action-ref" "fix.implement"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Create a kanban task under the card for the slice you choose;
-                                   |the agent doing the work owns that task's scope. Fix the bug
-                                   |in the worktree with a regression lock where feasible: a
-                                   |focused test that fails before the fix and passes after (cold
-                                   |run green). Note findings and decisions on that doing-task as
-                                   |you go — the notes are the handover. Commit the work to the
-                                   |branch before completing."))})
+                  :attributes {"workflow/action-ref" "fix.implement"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Create a kanban task under the card for the slice you choose;
+                      |the agent doing the work owns that task's scope. Fix the bug
+                      |in the worktree with a regression lock where feasible: a
+                      |focused test that fails before the fix and passes after (cold
+                      |run green). Note findings and decisions on that doing-task as
+                      |you go — the notes are the handover. Commit the work to the
+                      |branch before completing.")))
    (workflow/step :docs-sync
                   (fn [_] "Sync specs and CLAUDE.md with the changed behavior")
                   :self
                   :depends-on [:implement]
-                  :attributes {"workflow/action-ref" "fix.docs-sync"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|The doc discipline, judged here and proven by the next
-                                   |gate: when shipped behavior changed, the relevant root
-                                   |spec in devflow/specs/ gets its delta, and CLAUDE.md stays
-                                   |in sync when the working surface moved. When nothing
-                                   |shipped changed, record that judgment explicitly in a note
-                                   |before completing — the judgment is recorded either way."))})
+                  :attributes {"workflow/action-ref" "fix.docs-sync"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|The doc discipline, judged here and proven by the next
+                      |gate: when shipped behavior changed, the relevant root
+                      |spec in devflow/specs/ gets its delta, and CLAUDE.md stays
+                      |in sync when the working surface moved. When nothing
+                      |shipped changed, record that judgment explicitly in a note
+                      |before completing — the judgment is recorded either way.")))
    (workflow/gate :docs-check
                   (fn [_] "Prove the docs gates green in the fix worktree")
                   :shell
@@ -134,18 +112,17 @@
                   :attributes {"workflow/action-ref" "fix.docs-check"
                                "shell/argv" ["make" "docs-check"]
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
-                               "shell/timeout-secs" 1200
-                               "workflow/instruction"
-                               (format-alpha/reflow
-                                "|Machine gate: `make docs-check` runs in the fix worktree —
-                                 |the AGENTS.md budget, regenerated api docs with no diff,
-                                 |and a clean docs-site build. A failure stamps `gate/error`
-                                 |with captured output: fix the docs, commit, then remove the
-                                 |stamp (`strand update <gate-id> --attributes
-                                 |'{\"gate/error\":null}'`) to re-run.")})
+                               "shell/timeout-secs" 1200}
+                  (format-alpha/reflow
+                   "|Machine gate: `make docs-check` runs in the fix worktree —
+                    |the AGENTS.md budget, regenerated api docs with no diff,
+                    |and a clean docs-site build. A failure stamps `gate/error`
+                    |with captured output: fix the docs, commit, then remove the
+                    |stamp (`strand update <gate-id> --attributes
+                    |'{\"gate/error\":null}') to re-run."))
    (workflow/step :validate-handoff
                   (fn [{:keys [branch]}] (str "Validate " branch " and hand off to review"))
                   :self
                   :depends-on [:docs-check]
-                  :attributes {"workflow/action-ref" "fix.validate-handoff"
-                               "workflow/instruction" fix-handoff-instruction})))
+                  :attributes {"workflow/action-ref" "fix.validate-handoff"}
+                  fix-handoff-instruction)))

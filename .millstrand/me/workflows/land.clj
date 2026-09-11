@@ -37,16 +37,14 @@
          #(every? #{:pr-number :subject :body} (keys %))))
 
 (def ^:private land-abort-reason-input
-  "Declared choice input for the land sign-off abort choice: a required
-  `:reason` recorded on the abort step (workflow.md §5). `choose!` fails loudly
-  before any mutation when it is omitted."
+  "Describe the sign-off abort input."
   {:spec ::land-abort-input
-   :doc "Why landing is being aborted; recorded on the abort step."})
+   :doc "Why landing is being aborted."})
 
 (def ^:private land-merge-input
-  "Declare the exact PR and squash message approved for landing."
+  "Describe the sign-off approval input."
   {:spec ::land-merge-input
-   :doc "Exact PR number, semantic squash subject, and squash commit body."})
+   :doc "The exact pull request and squash commit message approved for landing."})
 
 (defn- stage [name]
   {:attributes {"workflow/family" "land"
@@ -56,16 +54,14 @@
 (def ^:private retry-instruction
   (format-alpha/prose
    "
-     This machine gate pauses on failure. Inspect its output, repair the cause,
-     then clear `gate/error` to retry. A failed landing keeps its FIFO turn and
-     merge lock; do not requeue it at the back.
-
-     Sign-off authorizes repairs and focused review where changes warrant it.
-     If the work has changed substantially, abort and consult the user.
+     Inspect the failed gate's output, repair the cause, then clear `gate/error`
+     to retry. Keep the FIFO turn and merge lock; do not requeue at the back.
+     Obtain focused review for material repairs. For substantial changes,
+     withdraw safely and consult the user.
    " {}))
 
 (workflow/defworkflow land-abort
-  "Finish an intentional abort with visible, retryable bookkeeping."
+  "Record an aborted landing and leave the work available for follow-up."
   {:entrypoints #{:continue} :param-spec ::land-abort-params :defaults {}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Abort land: " branch))
@@ -74,42 +70,31 @@
                       "me.workflows.card-actions/rework!")
    (workflow/step :record-abort "Record the abort and hand over the work" :self
                   :depends-on [:return-card]
-                  :attributes {"land/abort-reason" (fn [{:keys [reason]}] reason)
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Record the abort reason on the work task. Leave the PR,
-                                  branch, and worktree available for follow-up. If major changes
-                                  prompted this abort, discuss them with the user.
-
-                                  Complete this record with `strand workflow complete <run-id>`.
-                                " {})})))
+                  :attributes {"land/abort-reason" (fn [{:keys [reason]}] reason)}
+                  (format-alpha/prose
+                   "
+                     Record the abort reason on the work task. Leave the PR, branch,
+                     and worktree available for follow-up. Discuss major changes
+                     with the user.
+                   " {}))))
 
 (workflow/defworkflow land-merge
-  (format-alpha/prose
-   "
-     Join the strict FIFO queue and land the approved branch automatically.
-
-     The merge turn covers updating the branch, validating its final HEAD,
-     merging the PR, and fast-forwarding canonical main. Housekeeping follows
-     release. Failures keep the turn until repaired or explicitly withdrawn.
-   " {})
+  "Land approved work in FIFO order."
   {:entrypoints #{:continue} :param-spec ::land-merge-params :defaults {}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Merge land: " branch))
    (stage "merge")
    (workflow/gate :take-turn "Join the queue and await the merge turn" :merge-turn
-                  :attributes {"workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Queue admission and acquisition are automatic. Await this run
-                                  with `strand workflow await <run-id>`. Inspect the queue with
-                                  `strand merge-queue status`.
+                  (format-alpha/prose
+                   "
+                     Queue admission and acquisition are automatic. Await this run
+                     with `strand workflow await <run-id>`; inspect its place with
+                     `strand merge-queue status`. Failures and timeouts retain the turn.
 
-                                  Timeouts retain your place. Any trusted agent may explicitly
-                                  withdraw a run with `strand merge-queue withdraw <entry-id>
-                                  --reason <reason>`; age alone never evicts a run.
-                                " {})})
+                     Any trusted agent may withdraw with `strand merge-queue withdraw
+                     <entry-id> --reason <reason>`. Withdrawal stops shell work first;
+                     a possibly submitted merge requires reconciliation instead.
+                   " {}))
    (support/shell-gate :prepare-merge "Update the branch and validate its final HEAD"
                        [:take-turn]
                        (fn [{:keys [branch]}]
@@ -126,8 +111,7 @@
                        ["sh" "-c" support/land-pull-main-script] 300 retry-instruction)
    (workflow/gate :release-turn "Release the merge turn before housekeeping" :merge-release
                   :depends-on [:pull-main]
-                  :attributes {"workflow/instruction"
-                               "The queue releases this run automatically. Failed bookkeeping remains visible and retryable."})
+                  "Release is automatic. On failure, repair the cause and clear gate/error to retry.")
    (workflow/gate :remove-branch-worktree "Remove the landed branch and worktree" :shell
                   :depends-on [:release-turn]
                   :attributes {"shell/argv"
@@ -135,63 +119,50 @@
                                  (support/land-cleanup-argv branch worktree pr-number))
                                "shell/cwd" (fn [{:keys [worktree]}]
                                              (support/canonical-worktree worktree))
-                               "shell/timeout-secs" 600
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Remove the landed branch and worktree from canonical checkout.
-                                  On failure, fix the cause and clear `gate/error`; cleanup is
-                                  repeatable even after worktree removal. The next landing may
-                                  already be running, so leave its resources alone.
-                                " {})})
+                               "shell/timeout-secs" 600}
+                  (format-alpha/prose
+                   "
+                     Cleanup is automatic and repeatable after worktree removal.
+                     On failure, repair the cause and clear `gate/error` to retry.
+                     The next landing may be running; leave its resources alone.
+                   " {}))
    (workflow/step :tidy-resources "Tidy resources created for this work" :self
                   :depends-on [:remove-branch-worktree]
-                  :attributes {"workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Tidy scratch files and named resources owned by this work.
-                                  Stop processes by recorded PID and sessions by exact name.
-                                  Leave shared or uncertain resources alone, and record anything
-                                  deliberately retained on the work task.
-                                " {})})
+                  (format-alpha/prose
+                   "
+                     Remove scratch files and named resources owned by this work.
+                     Stop processes by recorded PID and sessions by exact name.
+                     Leave shared or uncertain resources alone; note anything retained.
+                   " {}))
    (support/card-gate :finish-card "Finish the optional kanban card" [:tidy-resources]
                       "me.workflows.card-actions/finish!")))
 
 (workflow/defworkflow land
-  (format-alpha/prose
-   "
-     Merge reviewed work from an existing PR or a working branch.
-
-     Supply the branch and worktree for the work being landed; pr-number may
-     identify an existing draft or ready PR. Reuse its completed review. When
-     the request starts from a design, use the development and review workflows
-     to produce working, reviewed code before entering land.
-
-     Resolve or create the PR, then approve its exact number and squash message.
-     Approval authorizes queued rebase, final-HEAD validation, merge, and cleanup.
-     The agent may act on the user's existing instruction to land the work.
-   " {})
-  {:entrypoints #{:start} :param-spec ::land-params :defaults {}}
+  "Merge reviewed work from a PR or working branch. Coordinator-only."
+  {:entrypoints #{:start}
+   :param-spec ::land-params
+   :defaults {}
+   :param-docs {:feature "Work identity being landed."
+                :branch "Branch containing the reviewed change."
+                :worktree "Absolute path to the branch's worktree."
+                :card "Optional kanban card to finish after landing."
+                :pr-number "Existing draft or ready PR; omit to resolve from the branch."}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Land: " branch))
    (stage "ready")
    (workflow/step :resolve-pr "Confirm reviewed work and resolve its pull request" :self
-                  :attributes {"workflow/instruction"
-                               (fn [{:keys [pr-number]}]
-                                 (str
-                                  (when pr-number (str "Use PR #" pr-number ". "))
-                                  (format-alpha/prose
-                                   "
-                                     Inspect the work and its completed review. Resolve any
-                                     outstanding preparation through the development workflow
-                                     and `review`; reuse sufficient existing review evidence.
-                                     An approved proposal can be landed as reviewed work too.
+                  (fn [{:keys [pr-number]}]
+                    (str
+                     (when pr-number (str "Use PR #" pr-number ". "))
+                     (format-alpha/prose
+                      "
+                        Reuse sufficient completed review. Resolve missing preparation
+                        through development and `review`; an approved proposal can also
+                        be landed as reviewed work.
 
-                                     Push the clean working branch. Reuse its open PR, whether
-                                     draft or ready; create one only if none exists. Confirm the
-                                     PR names this branch and targets main. Complete this step,
-                                     then supply its exact number and squash message at sign-off.
-                                   " {})))})
+                        Push the clean branch. Reuse its open PR, draft or ready;
+                        create one only if absent. Confirm its branch and main target.
+                      " {}))))
    (support/card-gate :mark-ready "Mark the optional card ready for landing" [:resolve-pr]
                       "me.workflows.card-actions/review!")
    (workflow/checkpoint :signoff "Authorize this work to land" :depends-on [:mark-ready]
@@ -203,10 +174,10 @@
                         :attributes {"workflow/instruction"
                                      (format-alpha/prose
                                       "
-                                        Use `strand workflow choose <run-id> approved --input`
-                                        with pr-number, subject, and body. Act on the user's
-                                        existing authorization to land; no repeat approval is
-                                        needed. Approval covers the FIFO turn, rebase, repairs,
-                                        focused review, final validation, and automatic merge.
-                                        Major changes may justify aborting to consult the user.
+                                        Read `strand workflow choices <run-id>` for choice inputs.
+                                        Act on the user's existing authorization to land; no
+                                        repeat approval is needed. Approval covers the FIFO turn,
+                                        rebase, repairs, focused review, final validation, automatic
+                                        merge, and cleanup. Abort and consult the user if the work
+                                        has changed substantially.
                                       " {})})))

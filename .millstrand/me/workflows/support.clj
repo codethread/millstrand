@@ -83,9 +83,8 @@
   (workflow/gate id title :code
                  :depends-on dependencies
                  :attributes {"code/fn" callable
-                              "code/params" #(select-keys % [:card])
-                              "workflow/instruction"
-                              "This card update is automatic. On failure, fix the cause and clear gate/error to retry."}))
+                              "code/params" #(select-keys % [:card])}
+                 "This card update is automatic. On failure, fix the cause and clear gate/error to retry."))
 
 (defn shell-gate
   "Build a shell gate whose request is frozen with the worktree context."
@@ -94,5 +93,5 @@
                  :depends-on dependencies
                  :attributes {"shell/argv" argv
                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
-                              "shell/timeout-secs" timeout
-                              "workflow/instruction" instruction}))
+                              "shell/timeout-secs" timeout}
+                 instruction))

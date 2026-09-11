@@ -35,20 +35,15 @@
   [params]
   (str (format-alpha/prose
         "
-          Commit and push the validated branch, then start the shared final review
-          with `strand workflow start <new-review-run-id> --workflow review --params`
-          and the following JSON. Fill the task id, unique review id, and current
-          merge-base-to-HEAD range and changed files. Review targets a task, never
-          a kanban card. Review owns the full roster and final validation; land
-          owns merging and finishing the card. Complete the handoff step after
-          starting review.
+          Commit and push the validated branch. Read `strand workflow show review`
+          for its parameter contract, then start a new run with
+          `strand workflow start <run-id> --workflow review --params <json>`.
+          Complete this handoff after starting review.
+
+          Carry forward this work identity:
         " {})
        "\n\n"
-       (json/write-str
-        (merge (select-keys params [:feature :branch :worktree :card])
-               {:review-target "<task-id>" :review-id "<unique-review-id>"
-                :change-context {:commit-range "<base-sha>..<head-sha>"
-                                 :files ["<changed-file>"]}}))))
+       (json/write-str (select-keys params [:feature :branch :worktree :card]))))
 
 (defn- review-specs
   "Build and validate the gate-ready change-review specs for one review run."
@@ -85,16 +80,17 @@
   (get (:attrs item) key))
 
 (workflow/defworkflow review
-  (format-alpha/prose
-   "
-     Run the shared final review for implemented work before landing.
-
-     Story and fix hand committed, validated branches here. A pull request
-     is optional. This workflow owns the full change-review roster,
-     findings resolution, and validation of the resulting pushed HEAD. It
-     finishes with reviewed work; it does not itself authorize a merge.
-   " {})
-  {:entrypoints #{:start} :param-spec ::review-params :defaults {}}
+  "Review and validate implemented work without authorizing a merge."
+  {:entrypoints #{:start}
+   :param-spec ::review-params
+   :defaults {}
+   :param-docs {:feature "Work identity carried into landing."
+                :branch "Branch containing the committed change."
+                :worktree "Absolute path to the branch's worktree."
+                :card "Optional kanban card to move into review."
+                :review-target "Task strand receiving findings; never a kanban card."
+                :review-id "Unique identifier for this review pass."
+                :change-context "Current merge-base-to-HEAD range (full SHAs) and changed files."}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Review: " branch))
    {:attributes {"workflow/family" "review"}}
@@ -120,14 +116,8 @@
                                "panel/pass" (fn [{:keys [item]}]
                                               (item-attr item "panel/pass"))
                                "review/focus" (fn [{:keys [item]}]
-                                                (item-attr item "review/focus"))
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Machine gate: run one declared change-review seat and append its
-                                  findings to the review target.
-                                "
-                                {})})
+                                                (item-attr item "review/focus"))}
+                  "Await this reviewer's findings on the review task.")
    (workflow/gate :review-synthesis
                   "Synthesize the change review findings"
                   :subagent
@@ -143,25 +133,16 @@
                                "panel/pass" (fn [{:keys [item]}]
                                               (item-attr item "panel/pass"))
                                "panel/synthesis" (fn [{:keys [item]}]
-                                                   (item-attr item "panel/synthesis"))
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Machine gate: synthesize this pass's reviewer notes into one
-                                  verdict.
-                                "
-                                {})})
+                                                   (item-attr item "panel/synthesis"))}
+                  "Await the synthesis of this pass's reviewer findings.")
 
    (workflow/step :resolve-review "Resolve the review findings" :self
                   :depends-on [:review-synthesis]
-                  :attributes {"workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Read the synthesis on the review task, resolve its findings,
-                                  and commit and push repairs. Obtain focused follow-up review
-                                  where repairs materially change the reviewed code. Complete
-                                  this step when ready for final validation.
-                                " {})})
+                  (format-alpha/prose
+                   "
+                     Resolve the synthesis findings and commit and push repairs.
+                     Obtain focused follow-up review for material code changes.
+                   " {}))
    (support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
                        (fn [{:keys [branch]}]
                          (support/sh-gate support/land-quality-gate-script "land-quality" branch))
@@ -169,19 +150,17 @@
                        "Validate the actual pushed HEAD after review repairs. Fix failures and clear gate/error to retry.")
    (workflow/step :handoff-land "Hand the reviewed work to landing" :self
                   :depends-on [:final-ci-green]
-                  :attributes {"workflow/instruction"
-                               (fn [params]
-                                 (str
-                                  (format-alpha/prose
-                                   "
-                                     Record the resolved review and validation on the work task.
-                                     When the user's instruction includes landing, start
-                                     `strand workflow start <new-land-run-id> --workflow land
-                                     --params` with the JSON below. Land accepts an existing PR
-                                     or resolves one from the branch, and reuses this review.
-                                     Otherwise report the reviewed work for the user's decision.
-                                     Complete this review run after recording the handoff.
-                                   " {})
-                                  "\n\n"
-                                  (json/write-str
-                                   (select-keys params [:feature :branch :worktree :card]))))})))
+                  (fn [params]
+                    (str
+                     (format-alpha/prose
+                      "
+                        Record review and validation evidence on the work task.
+                        If the user authorized landing, read `strand workflow show land`
+                        and start `strand workflow start <run-id> --workflow land
+                        --params <json>`. Otherwise report the reviewed work.
+
+                        Carry forward this work identity:
+                      " {})
+                     "\n\n"
+                     (json/write-str
+                      (select-keys params [:feature :branch :worktree :card])))))))

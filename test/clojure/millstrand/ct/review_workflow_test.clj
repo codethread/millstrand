@@ -53,10 +53,18 @@
               instruction (attr-get (weaver/show rt (:id handoff)) :workflow/instruction)]
           (is (= "Hand the reviewed work to landing" (:title handoff)))
           (is (str/includes? instruction "--workflow land"))
+          (is (str/includes? instruction "strand workflow show land"))
           (is (= work (json/read-str (last (str/split instruction #"\n\n")) :key-fn keyword))))
         (advance)
         (is (workflow/done? run-id))
         (is (empty? (weaver/list rt [:= [:attr "kind"] "merge-queue-entry"] {})))))))
+
+(deftest review-handoff-preserves-identity-and-defers-parameter-discovery
+  (let [instruction (review/handoff-instruction
+                     (assoc work :card "card-id" :module "example"))]
+    (is (str/includes? instruction "strand workflow show review"))
+    (is (= (assoc work :card "card-id")
+           (json/read-str (last (str/split instruction #"\n\n")) :key-fn keyword)))))
 
 (deftest development-workflows-hand-off-to-shared-review
   (doseq [[definition params]

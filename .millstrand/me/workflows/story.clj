@@ -17,13 +17,16 @@
 (s/def ::worktree ::non-blank-string)
 (s/def ::card ::non-blank-string)
 
-;; story: the module-form refactor workflow (family `story`)
-;; ---------------------------------------------------------------------------
-
-;; The story family's param contract. The continuations inherit the story run's
-;; context, so they name the same required keys the parent does.
 (s/def ::module ::non-blank-string)
 (s/def ::reviewer-harness ::non-blank-string)
+
+(def ^:private story-param-docs
+  {:feature "Feature or card scope this story wave changes."
+   :module "One large module covered by this refactor wave."
+   :worktree "Absolute worktree path for the review gates."
+   :card "Optional existing kanban card id."
+   :reviewer-harness
+   "Harness outside the driver's model family for adversarial review gates."})
 
 (s/def ::story-params (s/keys :req-un [::feature ::module ::worktree]
                               :opt-un [::card ::reviewer-harness]))
@@ -31,93 +34,79 @@
                                            :opt-un [::card ::reviewer-harness]))
 
 (workflow/defworkflow story-fold
-  "Fold a story split back into one story-ordered file.
-
-  The continuation after the fold-decision checkpoint's `:fold-back` choice."
+  "Fold a story split back into one story-ordered file."
   {:entrypoints #{:continue}
    :param-spec ::story-continuation-params
-   :defaults {}}
+   :defaults {}
+   :param-docs story-param-docs}
   (workflow/workflow
    (fn [{:keys [module]}] (str "Story fold: " module))
    {:attributes {"workflow/family" "story"}}
    (workflow/step :fold
                   (fn [{:keys [module]}] (str "Fold " module " into one story-ordered file"))
                   :self
-                  :attributes {"workflow/action-ref" "story.fold"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Merge the concern files back into a single story-ordered
-                                   |alpha.clj: publics with real bodies first, section-commented
-                                   |private clusters in story order, leaf mechanics last, one
-                                   |declare block up top. The public-surface tests must pass
-                                   |unchanged through the fold. Then re-run the swift adversarial
-                                   |pass: folding loses namespace aliases, so hunt name
-                                   |collisions, misleading now-local names, surplus or stale
-                                   |declare entries, and section comments that no longer match
-                                   |their contents. Fix findings before completing."))})
+                  :attributes {"workflow/action-ref" "story.fold"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Merge the concern files back into a single story-ordered
+                      |alpha.clj: publics with real bodies first, section-commented
+                      |private clusters in story order, leaf mechanics last, one
+                      |declare block up top. The public-surface tests must pass
+                      |unchanged through the fold. Then re-run the swift adversarial
+                      |pass: folding loses namespace aliases, so hunt name
+                      |collisions, misleading now-local names, surplus or stale
+                      |declare entries, and section comments that no longer match
+                      |their contents. Fix findings before completing.")))
    (workflow/step :finish-validate
                   (fn [{:keys [module]}] (str "Validate and hand " module " to review"))
                   :self
                   :depends-on [:fold]
-                  :attributes {"workflow/action-ref" "story.finish"
-                               "workflow/instruction"
-                               (fn [{:keys [module] :as params}]
-                                 (str (format-alpha/reflow
-                                       (format
-                                        "|Delete `\"%s\"` from quality.api-form/pending when this is an API
-                                         |conversion; run the focused cold tests and `make fmt-check lint
-                                         |reflect-check docs-check`; `make api-docs` on docstring changes.
-                                         |Finish this wave before handing the whole change to review."
-                                        module))
-                                      "\n\n"
-                                      (review/handoff-instruction
-                                       (assoc params :branch "<branch>"))))})))
+                  :attributes {"workflow/action-ref" "story.finish"}
+                  (fn [{:keys [module] :as params}]
+                    (str (format-alpha/reflow
+                          (format
+                           "|Delete `\"%s\"` from quality.api-form/pending when this is an API
+                            |conversion; run the focused cold tests and `make fmt-check lint
+                            |reflect-check docs-check`; `make api-docs` on docstring changes.
+                            |Finish this wave before handing the whole change to review."
+                           module))
+                         "\n\n"
+                         (review/handoff-instruction
+                          (assoc params :branch "<branch>")))))))
 
 (workflow/defworkflow story-keep
-  "Keep a story split: the per-concern files are the deliverable.
-
-  The continuation after the fold-decision checkpoint's `:keep-split` choice."
+  "Keep a module's per-concern split."
   {:entrypoints #{:continue}
    :param-spec ::story-continuation-params
-   :defaults {}}
+   :defaults {}
+   :param-docs story-param-docs}
   (workflow/workflow
    (fn [{:keys [module]}] (str "Story keep-split: " module))
    {:attributes {"workflow/family" "story"}}
    (workflow/step :finish-validate
                   (fn [{:keys [module]}] (str "Validate the split and hand " module " to review"))
                   :self
-                  :attributes {"workflow/action-ref" "story.finish"
-                               "workflow/instruction"
-                               (fn [{:keys [module] :as params}]
-                                 (str (format-alpha/reflow
-                                       (format
-                                        "|The split stands: internal/<concern> files stay, named by meaning,
-                                         |gated dependency rules apply (internal never requires alpha; only
-                                         |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
-                                         |from quality.api-form/pending when this is an API conversion;
-                                         |focused cold tests; `make fmt-check lint reflect-check docs-check`;
-                                         |`make api-docs` on docstring changes. Finish this wave before
-                                         |handing the whole change to review."
-                                        module))
-                                      "\n\n"
-                                      (review/handoff-instruction
-                                       (assoc params :branch "<branch>"))))})))
+                  :attributes {"workflow/action-ref" "story.finish"}
+                  (fn [{:keys [module] :as params}]
+                    (str (format-alpha/reflow
+                          (format
+                           "|The split stands: internal/<concern> files stay, named by meaning,
+                            |gated dependency rules apply (internal never requires alpha; only
+                            |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
+                            |from quality.api-form/pending when this is an API conversion;
+                            |focused cold tests; `make fmt-check lint reflect-check docs-check`;
+                            |`make api-docs` on docstring changes. Finish this wave before
+                            |handing the whole change to review."
+                           module))
+                         "\n\n"
+                         (review/handoff-instruction
+                          (assoc params :branch "<branch>")))))))
 
 (workflow/defworkflow story
-  "Run the module-form STORY workflow (family \"story\").
-
-  The forcing function for writing module code: identify the changed
-  modules, make the overall changes, take an adversarial intent review
-  (table stakes), then run the refactor wave per chunky module — write
-  the per-concern split FIRST, test the public surface only, take a
-  swift adversarial pass while the boundaries are visible, measure the
-  folded size, and decide at a checkpoint: fold back to one
-  story-ordered file (roughly 500 lines or less) or keep the split.
-  Either branch validates and hands off to the shared review workflow. One run
-  covers one module wave; extra large modules take their own runs."
+  "Run one module-form refactor wave through validation and review handoff."
   {:entrypoints #{:start}
    :param-spec ::story-params
+   :param-docs story-param-docs
    ;; The engine cannot know which agent is driving, so the cross-vendor
    ;; invariant lives here: the pourer names a review seat OUTSIDE its own
    ;; model family, and this default is the one it overrides.
@@ -129,25 +118,23 @@
    (workflow/step :identify-modules
                   (fn [{:keys [feature]}] (str "Identify modules " feature " changes"))
                   :self
-                  :attributes {"workflow/action-ref" "story.identify"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Name every module this feature touches and record the list
-                                   |as a note on this step. For a form-conversion card this is
-                                   |the card's module; for feature work it is the modules the
-                                   |change will land in."))})
+                  :attributes {"workflow/action-ref" "story.identify"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Name every module this feature touches and record the list
+                      |as a note on this step. For a form-conversion card this is
+                      |the card's module; for feature work it is the modules the
+                      |change will land in.")))
    (workflow/step :overall-changes
                   (fn [{:keys [feature]}] (str "Make the overall changes for " feature))
                   :self
                   :depends-on [:identify-modules]
-                  :attributes {"workflow/action-ref" "story.changes"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Make the feature's behavior changes first - the refactor
-                                   |wave comes after, over the changed result. A pure form
-                                   |conversion records that there are none and completes."))})
+                  :attributes {"workflow/action-ref" "story.changes"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Make the feature's behavior changes first - the refactor
+                      |wave comes after, over the changed result. A pure form
+                      |conversion records that there are none and completes.")))
    (workflow/gate :intent-review
                   (fn [{:keys [feature]}] (str "Adversarial intent review for " feature))
                   :subagent
@@ -178,55 +165,51 @@
                   (fn [_] "Resolve intent-review findings")
                   :self
                   :depends-on [:intent-review]
-                  :attributes {"workflow/action-ref" "story.resolve-intent"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Read the gate's review note and verdict. Fix or explicitly
-                                   |adjudicate every finding - a reviewer run succeeds even
-                                   |when it finds problems, so this step is where the findings
-                                   |get faced. Record the resolution before completing."))})
+                  :attributes {"workflow/action-ref" "story.resolve-intent"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Read the gate's review note and verdict. Fix or explicitly
+                      |adjudicate every finding - a reviewer run succeeds even
+                      |when it finds problems, so this step is where the findings
+                      |get faced. Record the resolution before completing.")))
    (workflow/step :identify-large
                   (fn [_] "Identify large-change modules for refactor waves")
                   :self
                   :depends-on [:resolve-intent]
-                  :attributes {"workflow/action-ref" "story.identify-large"
-                               "workflow/instruction"
-                               (fn [{:keys [module]}]
-                                 (str (format-alpha/reflow
-                                       "|Separate LARGE module changes from small churn - only
-                                        |large ones earn a wave. This run's wave covers")
-                                      " `" module "`; "
-                                      (format-alpha/reflow
-                                       "|start one further `strand workflow start <id>
-                                        |--workflow story` run per additional large module.
-                                        |Record the classification.")))})
+                  :attributes {"workflow/action-ref" "story.identify-large"}
+                  (fn [{:keys [module]}]
+                    (str (format-alpha/reflow
+                          "|Separate LARGE module changes from small churn - only
+                           |large ones earn a wave. This run's wave covers")
+                         " `" module "`; "
+                         (format-alpha/reflow
+                          "|start one further `strand workflow start <id>
+                           |--workflow story` run per additional large module.
+                           |Record the classification."))))
    (workflow/step :split-refactor
                   (fn [{:keys [module]}] (str "Write the per-concern split for " module))
                   :self
                   :depends-on [:identify-large]
-                  :attributes {"workflow/action-ref" "story.split"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Write the split FIRST - the compiler exposes coupling that
-                                   |imagination fudges. alpha.clj public bodies compose the
-                                   |story (sequencing, fan-out, blocking joins visible; no
-                                   |forwarding husks) over internal/<concern>.clj files named by
-                                   |meaning. Follow the clojure skill's story-file section and
-                                   |SPEC-003.C19a. Delegating this step to a tracked worker run
-                                   |is encouraged; size it to one worker context."))})
+                  :attributes {"workflow/action-ref" "story.split"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Write the split FIRST - the compiler exposes coupling that
+                      |imagination fudges. alpha.clj public bodies compose the
+                      |story (sequencing, fan-out, blocking joins visible; no
+                      |forwarding husks) over internal/<concern>.clj files named by
+                      |meaning. Follow the clojure skill's story-file section and
+                      |SPEC-003.C19a. Delegating this step to a tracked worker run
+                      |is encouraged; size it to one worker context.")))
    (workflow/step :public-tests
                   (fn [{:keys [module]}] (str "Test " module " through its public surface"))
                   :self
                   :depends-on [:split-refactor]
-                  :attributes {"workflow/action-ref" "story.tests"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Write or keep tests against the public surface only - they
-                                   |are the behavior lock that survives any later fold. Cold
-                                   |run green before completing."))})
+                  :attributes {"workflow/action-ref" "story.tests"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Write or keep tests against the public surface only - they
+                      |are the behavior lock that survives any later fold. Cold
+                      |run green before completing.")))
    (workflow/gate :split-review
                   (fn [{:keys [module]}] (str "Swift adversarial review of the " module " split"))
                   :subagent
@@ -255,25 +238,23 @@
                   (fn [_] "Resolve split-review findings")
                   :self
                   :depends-on [:split-review]
-                  :attributes {"workflow/action-ref" "story.resolve-split"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Read the gate's review note and verdict; fix or explicitly
-                                   |adjudicate every finding and record the resolution before
-                                   |completing."))})
+                  :attributes {"workflow/action-ref" "story.resolve-split"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Read the gate's review note and verdict; fix or explicitly
+                      |adjudicate every finding and record the resolution before
+                      |completing.")))
    (workflow/step :measure
                   (fn [{:keys [module]}] (str "Measure the folded size of " module))
                   :self
                   :depends-on [:resolve-split]
-                  :attributes {"workflow/action-ref" "story.measure"
-                               "workflow/instruction"
-                               (fn [_]
-                                 (format-alpha/reflow
-                                  "|Approximate the single-file fold: total content lines across
-                                   |alpha and concern files minus per-file ns overhead. Record
-                                   |the number in notes; roughly 500 lines is the tipping
-                                   |point."))})
+                  :attributes {"workflow/action-ref" "story.measure"}
+                  (fn [_]
+                    (format-alpha/reflow
+                     "|Approximate the single-file fold: total content lines across
+                      |alpha and concern files minus per-file ns overhead. Record
+                      |the number in notes; roughly 500 lines is the tipping
+                      |point.")))
    (workflow/checkpoint :fold-decision
                         (fn [{:keys [module]}] (str "Fold " module " back, or keep the split?"))
                         :depends-on [:measure]
@@ -293,5 +274,3 @@
                                      |internal/<concern> files are the deliverable.")
                                    :next :story-keep}]
                         :attributes {"workflow/decision-point" "story-fold-decided"})))
-
-;; ---------------------------------------------------------------------------
