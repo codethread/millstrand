@@ -151,20 +151,21 @@ func validatePoolRestartRecord(record poolRestartRecord, fromDisk bool) error {
 			return errors.New("restarting pool restart record has contradictory host state")
 		}
 	case restartStateRunning:
-		if record.AdmittedHost == nil || len(record.PendingMembers) != 0 {
+		if record.AdmittedHost == nil {
 			return errors.New("running pool restart record has contradictory host state")
 		}
 		if record.PreviousHost == nil {
 			if record.OldGenerationStopped {
 				return errors.New("initial running pool restart record has contradictory transition state")
 			}
-			if record.Failure == nil && record.Probe != nil {
-				return errors.New("initial running pool restart record has contradictory transition state")
-			}
-			if record.Failure != nil && (record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success) {
+			if record.Failure == nil {
+				if record.Probe != nil || len(record.PendingMembers) != 0 {
+					return errors.New("initial running pool restart record has contradictory transition state")
+				}
+			} else if record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success {
 				return errors.New("running pool restart failure requires an unsuccessful probe")
 			}
-		} else if record.Probe == nil || !record.Probe.Success || !record.OldGenerationStopped {
+		} else if record.Probe == nil || !record.Probe.Success || !record.OldGenerationStopped || len(record.PendingMembers) != 0 {
 			return errors.New("replaced running pool restart record requires completed cutover")
 		} else if record.Failure != nil {
 			return errors.New("replaced running pool restart record cannot contain failure")
@@ -236,17 +237,16 @@ func validatePoolRestartSetRelations(record poolRestartRecord) error {
 		if !subset(admitted, registered) || !equalSets(pending, difference(registered, admitted)) {
 			return errors.New("pool restart admitted and pending members contradict registered_members")
 		}
+		return nil
 	}
 	if record.PreviousHost != nil {
 		previous := hostMemberSet(record.PreviousHost)
 		if !subset(previous, registered) || !equalSets(pending, difference(registered, previous)) {
 			return errors.New("pool restart previous and pending members contradict registered_members")
 		}
+		return nil
 	}
-	if record.AdmittedHost == nil && record.PreviousHost == nil {
-		return errors.New("pool restart record requires admitted_host or previous_host")
-	}
-	return nil
+	return errors.New("pool restart record requires admitted_host or previous_host")
 }
 
 func setOf(values []string) map[string]bool {
@@ -406,10 +406,49 @@ func decodePoolRestartHost(data json.RawMessage) (*poolRestartHost, error) {
 	if err := json.Unmarshal(data, &host); err != nil {
 		return nil, err
 	}
+	var memberValues []json.RawMessage
+	if err := json.Unmarshal(value["members"], &memberValues); err != nil {
+		return nil, fmt.Errorf("pool restart host members must be an array: %w", err)
+	}
+	host.Members = make([]poolRestartMember, 0, len(memberValues))
+	for index, memberValue := range memberValues {
+		member, err := decodePoolRestartMember(memberValue)
+		if err != nil {
+			return nil, fmt.Errorf("pool restart host member %d: %w", index, err)
+		}
+		host.Members = append(host.Members, member)
+	}
 	if err := validatePoolRestartHost(&host); err != nil {
 		return nil, err
 	}
 	return &host, nil
+}
+
+func decodePoolRestartMember(data json.RawMessage) (poolRestartMember, error) {
+	value, err := decodeObject(data, "pool restart member")
+	if err != nil {
+		return poolRestartMember{}, err
+	}
+	expected := map[string]bool{"config_dir": true, "weaver_id": true, "generation_id": true}
+	for key := range value {
+		if !expected[key] {
+			return poolRestartMember{}, fmt.Errorf("pool restart member contains unknown field %q", key)
+		}
+	}
+	for key := range expected {
+		field, ok := value[key]
+		if !ok {
+			return poolRestartMember{}, fmt.Errorf("pool restart member is missing field %q", key)
+		}
+		if bytes.Equal(bytes.TrimSpace(field), []byte("null")) {
+			return poolRestartMember{}, fmt.Errorf("pool restart member %s must not be null", key)
+		}
+	}
+	var member poolRestartMember
+	if err := json.Unmarshal(data, &member); err != nil {
+		return poolRestartMember{}, err
+	}
+	return member, nil
 }
 
 func decodePoolRestartProbe(data json.RawMessage) (*restartProbeResult, error) {

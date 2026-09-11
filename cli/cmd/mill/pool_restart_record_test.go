@@ -67,6 +67,32 @@ func TestPoolRestartRecordRoundTripsEveryState(t *testing.T) {
 	}
 }
 
+func TestPoolRestartRecordRoundTripsRunningTransitionOutcomes(t *testing.T) {
+	t.Run("successful replacement", func(t *testing.T) {
+		path, record := poolRestartFixture(t, restartStateRunning)
+		previous := *record.AdmittedHost
+		previous.HostID = "host-old"
+		previous.HostGeneration = "host-generation-old"
+		previous.Members = previous.Members[:1]
+		record.PreviousHost = &previous
+		record.Probe = &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: filepath.Join(t.TempDir(), "probe"), SourceWorkspace: record.RegisteredMembers[0], Completed: []string{"probe/complete"}, Diagnostics: []map[string]any{}, Log: filepath.Join(t.TempDir(), "probe.log")}
+		record.OldGenerationStopped = true
+		if err := writePoolRestartRecord(path, record); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("failed probe with pending newcomer", func(t *testing.T) {
+		path, record := poolRestartFixture(t, restartStateProbing)
+		record.State = restartStateRunning
+		record.Probe = &restartProbeResult{Success: false, Stage: "probe/failure", ProbeWorkspace: filepath.Join(t.TempDir(), "probe"), SourceWorkspace: record.RegisteredMembers[0], Completed: []string{"probe/basis"}, Diagnostics: []map[string]any{}, Log: filepath.Join(t.TempDir(), "probe.log")}
+		record.Failure = &restartFailure{Stage: "probe", Message: "candidate rejected"}
+		if err := writePoolRestartRecord(path, record); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 func TestPoolRestartRecordRejectsContradictionsAndClosedShapeViolations(t *testing.T) {
 	path, record := poolRestartFixture(t, restartStateRunning)
 	record.PendingMembers = []string{filepath.Join(filepath.Dir(filepath.Dir(path)), "pending", ".millstrand")}
@@ -82,6 +108,7 @@ func TestPoolRestartRecordRejectsContradictionsAndClosedShapeViolations(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	validData := append([]byte(nil), data...)
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
@@ -99,6 +126,36 @@ func TestPoolRestartRecordRejectsContradictionsAndClosedShapeViolations(t *testi
 	}
 	if _, _, err := readPoolRestartRecord(filepath.Join(filepath.Dir(validPath), "wrong.json"), "backend"); err == nil {
 		t.Fatal("path mismatch was accepted")
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"unknown member field", func(member map[string]any) { member["extra"] = true }},
+		{"missing member field", func(member map[string]any) { delete(member, "generation_id") }},
+		{"null member field", func(member map[string]any) { member["weaver_id"] = nil }},
+		{"wrong member field type", func(member map[string]any) { member["config_dir"] = 42 }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var nested map[string]any
+			if err := json.Unmarshal(validData, &nested); err != nil {
+				t.Fatal(err)
+			}
+			host := nested["admitted_host"].(map[string]any)
+			member := host["members"].([]any)[0].(map[string]any)
+			test.mutate(member)
+			encoded, err := json.Marshal(nested)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(validPath, encoded, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := readPoolRestartRecord(validPath, "backend"); err == nil {
+				t.Fatal("invalid nested member was accepted")
+			}
+		})
 	}
 }
 
