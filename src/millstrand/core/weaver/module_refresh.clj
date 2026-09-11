@@ -1046,6 +1046,7 @@
                 (candidate-projection backends (:candidates staged))
                 old-generation (:old-generation/baseline opts)
                 _ (when (and (:probe? opts)
+                             (some? old-generation)
                              (not (s/valid? :millstrand.weaver-start/old-generation-baseline
                                             old-generation)))
                     (fail! "Fresh probe requires an admitted old-generation baseline"
@@ -1057,9 +1058,10 @@
                    opts :candidate/staged :completed
                    {:candidate-registries candidate-projection
                     :old-generation/diff
-                    (assoc (semantic-diff (:projection old-generation)
-                                          candidate-projection)
-                           :baseline-status (:status old-generation))})
+                    (when old-generation
+                      (assoc (semantic-diff (:projection old-generation)
+                                            candidate-projection)
+                             :baseline-status (:status old-generation)))})
                 _ (publication/validate-op-candidates! backends (:candidates staged))
                 _ (publication/validate-kind-candidates!
                    runtime backends (:candidates staged))

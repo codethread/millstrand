@@ -302,10 +302,10 @@
   ((requiring-resolve 'millstrand.core.weaver.module-refresh/collect-lifecycle!)
    effect-id declaration))
 
-(defn refresh-modules!
+(defn- refresh-modules-isolated!
   "Run the internal full or targeted live-module refresh coordinator."
   ([runtime]
-   (refresh-modules! runtime {}))
+   (refresh-modules-isolated! runtime {}))
   ([runtime opts]
    (let [running (:generation-basis runtime)
          boundary? (and running
@@ -330,6 +330,17 @@
      (or candidate-result
          ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
           runtime (module-coordinator-context runtime) opts)))))
+
+(defn refresh-modules!
+  "Refresh one runtime, delegating pooled members to their host coordinator."
+  ([runtime]
+   (refresh-modules! runtime {}))
+  ([runtime opts]
+   (if (and (:pool-host runtime)
+            (not (:pool-refreshing? opts)))
+     ((requiring-resolve 'millstrand.core.weaver.pool/refresh!)
+      (:pool-host runtime) opts)
+     (refresh-modules-isolated! runtime opts))))
 
 (defn module-status
   "Return offline joined state for the internal live-module coordinator."
@@ -568,7 +579,8 @@
   [db-file {:keys [world name publish? storage probe? diagnostic!
                    generation-basis
                    expected-version old-generation-baseline
-                   pre-publication-claim]
+                   pre-publication-claim defer-publication?
+                   weaver-id generation-id member-generation-basis pool-metadata]
             :or {publish? true}}]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Weaver startup requires a valid generation basis"
@@ -598,8 +610,8 @@
                      (nrepl/start-server :bind loopback-host :port 0
                                          :handler (runtime-nrepl-handler runtime-state)))
             port (some-> server :port)
-            nonce (metadata/new-nonce)
-            generation-id (str (java.util.UUID/randomUUID))
+            nonce (or weaver-id (metadata/new-nonce))
+            generation-id (or generation-id (str (java.util.UUID/randomUUID)))
             meta (metadata/metadata-shape {:pid (current-pid)
                                            :version version
                                            :host loopback-host
@@ -612,7 +624,13 @@
                                            :basis-fingerprint basis-fingerprint
                                            :world world
                                            :name (or name (default-name world))
-                                           :started-at (str (Instant/now))})
+                                           :started-at (str (Instant/now))
+                                           :jvm-pool (:jvm-pool pool-metadata)
+                                           :host-id (:host-id pool-metadata)
+                                           :host-generation-id
+                                           (:host-generation-id pool-metadata)
+                                           :member-basis-fingerprint
+                                           (:member-basis-fingerprint pool-metadata)})
             op-store (core-registry/backed-registry :ops)
             query-store (core-registry/backed-registry :queries)
             pattern-store (core-registry/backed-registry :patterns)
@@ -631,6 +649,8 @@
                           :help-transform-slot (atom nil)
                           :generation-id generation-id
                           :generation-basis generation-basis
+                          :member-generation-basis (or member-generation-basis
+                                                       generation-basis)
                           :basis-fingerprint basis-fingerprint
                           :generation-classloader
                           (:classloader generation-basis)
@@ -641,7 +661,8 @@
                           :module-refresh-lock (Object.)
                           :spool-state (atom {})
                           :server server
-                          :metadata meta}
+                          :metadata meta
+                          :pre-publication-claim pre-publication-claim}
             runtime-base (start-event-system! runtime-base (not probe?))
             _ (reset! runtime-state runtime-base)]
         (try
@@ -672,15 +693,17 @@
                 (scheduler/rearm! runtime))
               (let [published-runtime (if probe?
                                         runtime
-                                        (let [metadata-file (metadata/publish! meta)]
+                                        (let [metadata-file (when-not defer-publication?
+                                                              (metadata/publish! meta))]
                                           ;; Release before the hook: publication's
                                           ;; nonce now owns the artifacts, and a
                                           ;; hook may stop or start this world.
                                           ;; Keeping the pre-publication claim
                                           ;; through that hook would make safe
                                           ;; teardown conservatively skip deletion.
-                                          (metadata/release-pre-publication-artifacts!
-                                           world pre-publication-claim)
+                                          (when-not defer-publication?
+                                            (metadata/release-pre-publication-artifacts!
+                                             world pre-publication-claim))
                                           (when *after-metadata-publish!*
                                             (*after-metadata-publish!* meta))
                                           (assoc runtime :metadata-file metadata-file)))]
@@ -736,7 +759,7 @@
       (finally
         ;; Startup keeps the local token through setup but never holds the
         ;; artifact monitor over storage, userland, or endpoint work.
-        (when-not probe?
+        (when (and (not probe?) (not defer-publication?))
           (metadata/release-pre-publication-artifacts!
            world pre-publication-claim))))))
 
@@ -959,6 +982,23 @@
   [runtime]
   (:metadata runtime))
 
+(defn publish-deferred!
+  "Publish a pooled runtime's metadata after collective activation.
+
+  A runtime started with defer-publication? owns a pre-publication claim until
+  this function is called. The returned runtime carries the published metadata
+  file while retaining its member-specific runtime state."
+  [runtime]
+  (when-not (:pre-publication-claim runtime)
+    (throw (ex-info "Runtime is not awaiting deferred metadata publication"
+                    {:generation-id (:generation-id runtime)})))
+  (let [world {:state-dir (get-in runtime [:metadata :state-dir])}
+        metadata-file (metadata/publish! (:metadata runtime))]
+    (metadata/release-pre-publication-artifacts!
+     world (:pre-publication-claim runtime))
+    (assoc runtime :metadata-file metadata-file
+           :pre-publication-claim nil)))
+
 (defn stop!
   "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
@@ -1000,6 +1040,9 @@
          ;; have been asked to close, and stale handles cannot unlink successors.
     (attempt! :artifacts/delete
               #(reset! artifacts (metadata/delete-owned! (:metadata runtime) world)))
+    (attempt! :artifacts/claim-release
+              #(when-let [claim (:pre-publication-claim runtime)]
+                 (metadata/release-pre-publication-artifacts! world claim)))
     (if-let [failure @primary]
       (throw failure)
       (cond-> {:stopped true}

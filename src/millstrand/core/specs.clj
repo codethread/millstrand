@@ -539,6 +539,13 @@
          #(= :admitted (:status %))
          #(s/valid? :millstrand.registry-projection/registry (:projection %))))
 
+(s/def :millstrand.weaver-start/defer-publication? boolean?)
+(s/def :millstrand.weaver-start/weaver-id non-blank-string?)
+(s/def :millstrand.weaver-start/generation-id non-blank-string?)
+(s/def :millstrand.weaver-start/member-generation-basis
+  :millstrand.core.specs/generation-basis)
+(s/def :millstrand.weaver-start/pool-metadata map?)
+
 ;; JVM-pool boundaries are deliberately closed.  The host and probe workers
 ;; receive these maps from Mill, so an extra or misspelled field must fail
 ;; before a runtime, loader, or endpoint is opened.
@@ -779,10 +786,17 @@
                           :millstrand.weaver-start/diagnostic!
                           :millstrand.weaver-start/generation-basis
                           :millstrand.weaver-start/expected-version
-                          :millstrand.weaver-start/old-generation-baseline])
+                          :millstrand.weaver-start/old-generation-baseline
+                          :millstrand.weaver-start/defer-publication?
+                          :millstrand.weaver-start/weaver-id
+                          :millstrand.weaver-start/generation-id
+                          :millstrand.weaver-start/member-generation-basis
+                          :millstrand.weaver-start/pool-metadata])
          #(every? #{:world :name :publish? :storage :probe?
                     :diagnostic! :generation-basis :expected-version
-                    :old-generation-baseline}
+                    :old-generation-baseline :defer-publication?
+                    :weaver-id :generation-id :member-generation-basis
+                    :pool-metadata}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))

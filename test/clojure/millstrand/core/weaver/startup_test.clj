@@ -3,6 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [nrepl.core :as nrepl]
@@ -12,6 +13,7 @@
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
+            [millstrand.core.weaver.pool :as pool]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.weaver.scheduler :as scheduler]
             [millstrand.core.db :as db]
@@ -64,6 +66,63 @@
 
 (defn- runtime-coordinate []
   {:local/root (.getCanonicalPath (io/file "."))})
+
+(defn- pool-member [root name]
+  (let [config (io/file root name "config")
+        state (io/file root name "state")
+        data (io/file root name "data")]
+    (.mkdirs config)
+    (spit (io/file config "deps.edn") "{:paths []}\n")
+    {:config-dir (.getCanonicalPath config)
+     :source-cwd (.getCanonicalPath config)
+     :state-dir (.getCanonicalPath state)
+     :data-dir (.getCanonicalPath data)
+     :name name
+     :weaver-id (str "weaver-" name)
+     :generation-id (str "generation-" name)
+     :dependency-diagnostic
+     (.getCanonicalPath (io/file state "dependency.json"))}))
+
+(defn- pool-manifest [root]
+  {:format "millstrand.jvm-pool-launch/v1"
+   :jvm-pool "backend"
+   :host-id "host-test"
+   :host-generation-id "host-generation-test"
+   :membership-revision "membership-test"
+   :millstrand-source (.getCanonicalPath (io/file "."))
+   :millstrand-version "dev"
+   :members [(pool-member root "a") (pool-member root "b")]})
+
+(defn- pooled-probe-manifest [root]
+  (let [member (fn [name baseline]
+                 (let [original (io/file root name "original")
+                       probe (io/file root name "probe")
+                       state (io/file root name "state")
+                       data (io/file root name "data")
+                       diagnostic (io/file root name "diagnostic.edn")]
+                   (.mkdirs probe)
+                   (spit (io/file probe "deps.edn") "{:paths []}\n")
+                   {:original-config-dir (.getCanonicalPath original)
+                    :original-source-cwd (.getCanonicalPath original)
+                    :probe-config-dir (.getCanonicalPath probe)
+                    :probe-state-dir (.getCanonicalPath state)
+                    :probe-data-dir (.getCanonicalPath data)
+                    :member-diagnostic (.getCanonicalPath diagnostic)
+                    :name name
+                    :candidate-weaver-id (str "candidate-weaver-" name)
+                    :candidate-generation-id (str "candidate-generation-" name)
+                    :old-member-baseline baseline}))]
+    {:format "millstrand.jvm-pool-probe/v1"
+     :jvm-pool "backend"
+     :probe-id "probe-test"
+     :candidate-host-id "candidate-host-test"
+     :candidate-host-generation-id "candidate-generation-host-test"
+     :probe-root (.getCanonicalPath root)
+     :millstrand-source (.getCanonicalPath (io/file "."))
+     :result (.getCanonicalPath (io/file root "result.json"))
+     :collective-diagnostic (.getCanonicalPath (io/file root "collective.edn"))
+     :members [(member "a" nil)
+               (member "b" {:status :admitted :projection {}})]}))
 
 (defn- start-runtime! [db-file opts]
   (let [world (:world opts)]
@@ -236,6 +295,78 @@
                             (start-runtime! nil {:world world :publish? false :storage :postgres})))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pooled-host-publishes-members-collectively-with-independent-runtime-state
+  (let [root (java.io.File/createTempFile "pool" "")]
+    (.delete root)
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)]
+      (try
+        (let [runtimes (:runtimes host)
+              metadata (mapv :metadata runtimes)]
+          (is (= 2 (count runtimes)))
+          (is (= 1 (count (set (map :generation-classloader runtimes)))))
+          (is (= 2 (count (set (map #(get-in % [:storage :storage-label])
+                                    runtimes)))))
+          (is (= 2 (count (set (map :socket-path metadata)))))
+          (is (= 2 (count (set (map #(get-in % [:endpoint :port]) metadata)))))
+          (is (= ["weaver-a" "weaver-b"] (mapv :nonce metadata)))
+          (is (nil? @weaver-runtime/current-runtime))
+          (is (.isFile (io/file (:ready-file host))))
+          (is (every? metadata/valid-metadata? metadata)))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root)))
+      (is (not (.exists (io/file (pool/ready-file manifest))))))))
+
+(deftest pooled-host-failure-removes-all-unready-artifacts
+  (let [root (io/file "/tmp" (str "pool-failure-" (java.util.UUID/randomUUID)))]
+    (.delete root)
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          original-start! weaver-runtime/start!
+          calls (atom 0)]
+      (try
+        (with-redefs [weaver-runtime/start!
+                      (fn [db-file opts]
+                        (if (= 1 (swap! calls inc))
+                          (original-start! db-file opts)
+                          (throw (ex-info "member startup failed" {:member :b}))))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"member startup failed"
+                                (pool/start! manifest))))
+        (is (nil? @weaver-runtime/current-runtime))
+        (is (not (.exists (io/file (pool/ready-file manifest)))))
+        (is (every? #(not (.exists (metadata/json-metadata-file
+                                    {:state-dir (:state-dir %)})))
+                    (:members manifest)))
+        (finally
+          (delete-tree! root))))))
+
+(deftest pooled-probe-uses-private-state-and-retains-result-root
+  (let [root (io/file "/tmp" (str "pool-probe-" (java.util.UUID/randomUUID)))]
+    (.delete root)
+    (.mkdirs root)
+    (try
+      (let [manifest (pooled-probe-manifest root)
+            result (pool/probe! manifest)]
+        (is (true? (:success result)))
+        (is (= "probe/complete" (:stage result)))
+        (is (s/valid? :millstrand.jvm-pool/probe-result result))
+        (is (= [:newcomer :live]
+               (mapv :baseline-kind (:members result))))
+        (is (every? #(= :validated (:status %)) (:members result)))
+        (is (nil? (get-in result [:members 0 :registry-diff])))
+        (is (map? (get-in result [:members 1 :registry-diff])))
+        (is (.isFile (io/file (:result manifest))))
+        (is (.isFile (io/file (:collective-diagnostic manifest))))
+        (is (nil? @weaver-runtime/current-runtime))
+        (is (not (.exists (metadata/json-metadata-file
+                           {:state-dir (:probe-state-dir
+                                        (first (:members manifest)))})))))
+      (finally
+        (delete-tree! root)))))
 
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)
