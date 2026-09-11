@@ -35,6 +35,7 @@ type weaverHost struct {
 	Pool             string
 	HostID           string
 	HostGenerationID string
+	BasisFingerprint string
 	MembershipRev    string
 	cmd              *exec.Cmd
 	PID              int

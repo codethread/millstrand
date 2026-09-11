@@ -203,7 +203,13 @@ func validateMillStatusProjection(status map[string]any, details bool) error {
 func millStatusProjection(status map[string]any) map[string]any {
 	state, _ := status["state"].(string)
 	if restartState, _ := status["restart_state"].(string); restartState != "" {
-		state = restartState
+		// Pooled host transitions are projected onto pending and stopped
+		// members. Those lifecycle states do not carry a member generation,
+		// so they must not be promoted into a restart projection merely because
+		// the shared host record has a running transition state.
+		if map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
+			state = restartState
+		}
 	}
 	if !map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
 		return nil

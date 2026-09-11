@@ -59,18 +59,15 @@ type poolRestartSummaryCacheEntry struct {
 }
 
 func poolRestartRecordPath(stateRoot, pool string) (string, error) {
-	hostDir, err := jvmpool.PoolHostDir(stateRoot, pool)
+	canonicalRoot, err := canonicalProbePath(stateRoot)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize JVM pool state root %s: %w", stateRoot, err)
+	}
+	hostDir, err := jvmpool.PoolHostDir(canonicalRoot, pool)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(hostDir, poolRestartRecordFile), nil
-}
-
-func poolRestartRecordPathForHost(host *weaverHost) string {
-	if host == nil {
-		return ""
-	}
-	return host.PoolRestartPath
 }
 
 func validatePoolRestartRecordForWrite(record poolRestartRecord) error {
@@ -237,13 +234,18 @@ func validatePoolRestartSetRelations(record poolRestartRecord) error {
 		if !subset(admitted, registered) || !equalSets(pending, difference(registered, admitted)) {
 			return errors.New("pool restart admitted and pending members contradict registered_members")
 		}
-		return nil
 	}
 	if record.PreviousHost != nil {
 		previous := hostMemberSet(record.PreviousHost)
-		if !subset(previous, registered) || !equalSets(pending, difference(registered, previous)) {
+		if !subset(previous, registered) {
+			return errors.New("pool restart previous members contradict registered_members")
+		}
+		if record.AdmittedHost == nil && !equalSets(pending, difference(registered, previous)) {
 			return errors.New("pool restart previous and pending members contradict registered_members")
 		}
+		return nil
+	}
+	if record.AdmittedHost != nil {
 		return nil
 	}
 	return errors.New("pool restart record requires admitted_host or previous_host")

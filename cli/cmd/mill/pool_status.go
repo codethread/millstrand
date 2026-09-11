@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/jvmpool"
 )
@@ -10,7 +13,7 @@ func (s *server) poolStatusForMember(host *weaverHost, configDir string) map[str
 		if member.World.ConfigDir != configDir {
 			continue
 		}
-		status, stale := readStatus(member.World)
+		status, stale := readRuntimeStatus(member.World)
 		if status == nil || stale {
 			status = baseStatus(member.World, "running")
 			status["pid"] = host.PID
@@ -30,12 +33,13 @@ func (s *server) poolStatusForMember(host *weaverHost, configDir string) map[str
 		status["pending_members"] = []string{}
 		status["restart_required"] = false
 		status["member_basis_fingerprint"] = member.MemberBasis
+		status["pool_restart_path"] = host.PoolRestartPath
 		return status
 	}
 	return nil
 }
 
-func poolStatusForRegistered(world config.World, pool string, snapshot jvmpool.PoolSnapshot) map[string]any {
+func poolStatusForRegistered(world config.World, pool string, snapshot jvmpool.PoolSnapshot) (map[string]any, error) {
 	status := baseStatus(world, "stopped")
 	registered := make([]string, 0, len(snapshot.Members))
 	for _, member := range snapshot.Members {
@@ -46,7 +50,12 @@ func poolStatusForRegistered(world config.World, pool string, snapshot jvmpool.P
 	status["live_members"] = []string{}
 	status["pending_members"] = []string{}
 	status["restart_required"] = false
-	return status
+	path, err := poolRestartRecordPathForPool(pool)
+	if err != nil {
+		return nil, fmt.Errorf("resolve JVM pool %q restart record: %w", pool, err)
+	}
+	status["pool_restart_path"] = path
+	return status, nil
 }
 
 func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, error) {
@@ -106,6 +115,7 @@ func (s *server) poolStatusForWorldRaw(world config.World) (map[string]any, bool
 			}
 			status := baseStatus(world, "pending")
 			status["jvm_pool"] = recordedPool
+			status["pool_restart_path"] = host.PoolRestartPath
 			status["live_members"] = poolConfigDirs(host.Members)
 			addPoolPending(status, host, snapshot)
 			return status, true, nil
@@ -142,42 +152,17 @@ func (s *server) poolStatusForWorldRaw(world config.World) (map[string]any, bool
 		}
 		status := baseStatus(world, "pending")
 		status["jvm_pool"] = pool
+		status["pool_restart_path"] = host.PoolRestartPath
 		status["live_members"] = poolConfigDirs(host.Members)
 		addPoolPending(status, host, snapshot)
 		return status, true, nil
 	}
-	return poolStatusForRegistered(world, pool, snapshot), true, nil
+	status, err := poolStatusForRegistered(world, pool, snapshot)
+	return status, true, err
 }
 
-func (s *server) mergePooledCompactRestartStatus(world config.World, status map[string]any) map[string]any {
-	record, ok, err := s.readRestartRecordSummaryCached(world)
-	if err != nil {
-		status["state"] = "stale"
-		status["stale_reason"] = err.Error()
-		return status
-	}
-	if !ok || record.State == restartStateRunning {
-		if ok && record.State == restartStateRunning {
-			mergeRestartRecordCompactStatus(status, record)
-		}
-		return status
-	}
-	compact := record.compactStatus(world)
-	if status["state"] != "pending" {
-		status["state"] = compact["state"]
-	}
-	for _, key := range []string{"generation_id", "previous_generation_id", "transition_id", "old_generation_stopped", "restart_failure"} {
-		if value, present := compact[key]; present {
-			status[key] = value
-		} else {
-			delete(status, key)
-		}
-	}
-	return status
-}
-
-func (s *server) mergePooledDetailedRestartStatus(world config.World, status map[string]any) map[string]any {
-	record, ok, err := readRestartRecordDetailed(world)
+func (s *server) mergePooledCompactRestartStatus(_ config.World, status map[string]any) map[string]any {
+	record, ok, err := s.readPooledRestartRecordSummaryCached(status)
 	if err != nil {
 		status["state"] = "stale"
 		status["stale_reason"] = err.Error()
@@ -186,14 +171,82 @@ func (s *server) mergePooledDetailedRestartStatus(world config.World, status map
 	if !ok {
 		return status
 	}
+	mergePoolRestartRecordStatus(status, record, false)
+	return status
+}
+
+func (s *server) mergePooledDetailedRestartStatus(_ config.World, status map[string]any) map[string]any {
+	record, ok, err := s.readPooledRestartRecordDetailed(status)
+	if err != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = err.Error()
+		return status
+	}
+	if !ok {
+		return status
+	}
+	mergePoolRestartRecordStatus(status, record, true)
+	return status
+}
+
+func poolRestartRecordPathForPool(pool string) (string, error) {
+	root, err := config.StateRoot()
+	if err != nil {
+		return "", err
+	}
+	canonicalRoot, err := canonicalProbePath(root)
+	if err != nil {
+		return "", err
+	}
+	return poolRestartRecordPath(canonicalRoot, pool)
+}
+
+func pooledRestartRecordCoordinates(status map[string]any) (string, string, error) {
+	pool, poolOK := status["jvm_pool"].(string)
+	if !poolOK || strings.TrimSpace(pool) == "" {
+		return "", "", fmt.Errorf("pooled status has invalid jvm_pool %#v", status["jvm_pool"])
+	}
+	path, pathOK := status["pool_restart_path"].(string)
+	if !pathOK || strings.TrimSpace(path) == "" {
+		return "", "", fmt.Errorf("pooled status has invalid pool_restart_path %#v", status["pool_restart_path"])
+	}
+	return pool, path, nil
+}
+
+func (s *server) readPooledRestartRecordSummaryCached(status map[string]any) (poolRestartRecord, bool, error) {
+	pool, path, err := pooledRestartRecordCoordinates(status)
+	if err != nil {
+		return poolRestartRecord{}, false, err
+	}
+	return s.readPoolRestartRecordSummaryCached(path, pool)
+}
+
+func (s *server) readPooledRestartRecordDetailed(status map[string]any) (poolRestartRecord, bool, error) {
+	pool, path, err := pooledRestartRecordCoordinates(status)
+	if err != nil {
+		return poolRestartRecord{}, false, err
+	}
+	return readPoolRestartRecord(path, pool)
+}
+
+func mergePoolRestartRecordStatus(status map[string]any, record poolRestartRecord, details bool) {
 	currentState, _ := status["state"].(string)
-	preservePending := currentState == "pending"
-	preserveStoppedProbe := record.State == restartStateRunning && (currentState == "stopped" || currentState == "none")
-	if !preservePending && !preserveStoppedProbe {
+	if currentState != "pending" && record.State != restartStateRunning {
 		status["state"] = record.State
 	}
-	mergeRestartRecordStatus(status, record)
-	return status
+	status["restart_state"] = record.State
+	status["transition_id"] = record.TransitionID
+	status["old_generation_stopped"] = record.OldGenerationStopped
+	if details && record.Probe != nil {
+		status["probe"] = *record.Probe
+	}
+	if record.Failure != nil {
+		status["restart_failure"] = *record.Failure
+		status["diagnostics"] = []map[string]any{{
+			"stage": record.Failure.Stage, "status": "failed",
+			"data": map[string]any{"message": record.Failure.Message, "log_path": record.Failure.LogPath},
+		}}
+	}
 }
 
 func poolConfigDirsFromSnapshot(snapshot jvmpool.PoolSnapshot) []string {

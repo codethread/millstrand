@@ -30,6 +30,22 @@ func TestJVMPoolLifecycleAcceptance(t *testing.T) {
 	initPoolMember(t, h, workspaceA, pool, "A")
 	initPoolMember(t, h, workspaceB, pool, "B")
 	h.initWorld(t, workspaceC)
+	h.initWorld(t, workspaceD)
+	isolatedD := h.startExistingWorld(t, workspaceD)
+	isolatedDGeneration := requiredString(t, isolatedD, "generation_id")
+	restartedD, err := h.run("weaver", "restart", "--workspace", workspaceD)
+	if err != nil {
+		t.Fatalf("isolated newcomer restart failed: %v\n%s", err, restartedD)
+	}
+	restartedDStatus := decodeObject(t, restartedD)
+	if restartedDStatus["state"] != "running" || requiredString(t, restartedDStatus, "generation_id") == isolatedDGeneration {
+		t.Fatalf("isolated newcomer restart did not publish a new generation: old=%s result=%#v", isolatedDGeneration, restartedDStatus)
+	}
+	if stoppedD, stopErr := h.run("weaver", "stop", "--workspace", workspaceD); stopErr != nil {
+		t.Fatalf("isolated newcomer stop failed: %v\n%s", stopErr, stoppedD)
+	} else if decodeObject(t, stoppedD)["state"] != "stopped" {
+		t.Fatalf("isolated newcomer stop did not report stopped: %s", stoppedD)
+	}
 
 	// Registration is durable membership, not a start request. No member has
 	// a metadata file before the first explicit lifecycle command.

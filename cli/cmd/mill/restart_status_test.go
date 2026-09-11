@@ -238,6 +238,18 @@ func TestRestartStatusRejectsMalformedResponse(t *testing.T) {
 	}
 }
 
+func TestMillStatusProjectionKeepsPendingPoolMemberState(t *testing.T) {
+	status := map[string]any{
+		"state":         "pending",
+		"config_dir":    "/tmp/pending/.millstrand",
+		"restart_state": restartStateRunning,
+		"transition_id": "pool-transition",
+	}
+	if projection := millStatusProjection(status); projection != nil {
+		t.Fatalf("pending pooled member became a running restart projection: %#v", projection)
+	}
+}
+
 func BenchmarkRestartPolling(b *testing.B) {
 	s, world := restartStatusFixture(b)
 	detailedWorld, err := resolveLifecycleWorld(world)

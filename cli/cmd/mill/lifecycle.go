@@ -556,6 +556,7 @@ func (s *server) weaverList() ([]map[string]any, error) {
 			live[member.World.ConfigDir] = true
 			if status := s.poolStatusForMember(host, member.World.ConfigDir); status != nil {
 				addPoolPending(status, host, snapshot)
+				status = s.mergePooledCompactRestartStatus(member.World, status)
 				rows = append(rows, status)
 			}
 			seen[member.World.StateDir] = true
@@ -577,6 +578,8 @@ func (s *server) weaverList() ([]map[string]any, error) {
 			status["live_members"] = poolConfigDirs(host.Members)
 			status["pending_members"] = pending
 			status["restart_required"] = true
+			status["pool_restart_path"] = host.PoolRestartPath
+			status = s.mergePooledCompactRestartStatus(world, status)
 			rows = append(rows, status)
 			seen[world.StateDir] = true
 		}

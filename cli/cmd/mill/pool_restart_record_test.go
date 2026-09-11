@@ -73,12 +73,16 @@ func TestPoolRestartRecordRoundTripsRunningTransitionOutcomes(t *testing.T) {
 		previous := *record.AdmittedHost
 		previous.HostID = "host-old"
 		previous.HostGeneration = "host-generation-old"
-		previous.Members = previous.Members[:1]
+		previous.Members = append([]poolRestartMember(nil), previous.Members[:1]...)
 		record.PreviousHost = &previous
 		record.Probe = &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: filepath.Join(t.TempDir(), "probe"), SourceWorkspace: record.RegisteredMembers[0], Completed: []string{"probe/complete"}, Diagnostics: []map[string]any{}, Log: filepath.Join(t.TempDir(), "probe.log")}
 		record.OldGenerationStopped = true
 		if err := writePoolRestartRecord(path, record); err != nil {
 			t.Fatal(err)
+		}
+		record.PreviousHost.Members[0].ConfigDir = filepath.Join(t.TempDir(), "unregistered", ".millstrand")
+		if err := writePoolRestartRecord(path, record); err == nil {
+			t.Fatal("unregistered previous member was accepted")
 		}
 	})
 
@@ -238,5 +242,43 @@ func TestPoolAdmissionUsesFreshMetadataAlongsideRetainedIsolatedRecord(t *testin
 	poolAdmissionStatus = func(weaverIdentity) (map[string]any, error) { return status, nil }
 	if err := validatePoolAdmission(host, marker, map[string]map[string]any{world.ConfigDir: status}); err != nil {
 		t.Fatalf("fresh pooled metadata was rejected due to isolated history: %v", err)
+	}
+}
+
+func TestPooledStatusRejectsPartialHostRecordCoordinates(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
+	for _, status := range []map[string]any{
+		{"state": "pending", "jvm_pool": "backend"},
+		{"state": "pending", "jvm_pool": 42, "pool_restart_path": "/tmp/restart.json"},
+		{"state": "pending", "jvm_pool": "backend", "pool_restart_path": false},
+	} {
+		merged := (&server{}).mergePooledDetailedRestartStatus(world, status)
+		if merged["state"] != "stale" || merged["stale_reason"] == nil {
+			t.Fatalf("partial pooled coordinates did not fail loudly: %#v", merged)
+		}
+	}
+}
+
+func TestPooledStatusProjectsHostRecordOverMemberHistory(t *testing.T) {
+	path, record := poolRestartFixture(t, restartStateRunning)
+	if err := writePoolRestartRecord(path, record); err != nil {
+		t.Fatal(err)
+	}
+	memberState := t.TempDir()
+	world := config.World{ConfigDir: record.RegisteredMembers[0], StateDir: memberState}
+	if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "isolated-history", Failure: &restartFailure{Stage: "launch", Message: "unrelated"}}); err != nil {
+		t.Fatal(err)
+	}
+	status := map[string]any{
+		"state":             "pending",
+		"jvm_pool":          record.JVMPool,
+		"pool_restart_path": path,
+	}
+	merged := (&server{}).mergePooledDetailedRestartStatus(world, status)
+	if merged["state"] != "pending" || merged["restart_state"] != restartStateRunning || merged["transition_id"] != record.TransitionID {
+		t.Fatalf("pooled status lost host transition: %#v", merged)
+	}
+	if failure, ok := merged["restart_failure"]; ok && failure != nil {
+		t.Fatalf("pooled status projected unrelated member history: %#v", merged)
 	}
 }
