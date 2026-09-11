@@ -160,11 +160,7 @@ Registered by the modules under `.millstrand/me/workflows/` and `.millstrand/me/
 | **Coordinator** | The agent that plans the work, delegates it, verifies the result, and closes it. Only a coordinator drives **land**. | Orchestrator, manager, parent agent, lead |
 | **Worker** | A delegated agent doing one slice of work. Workers stop at implemented and committed; they do not land. | Subagent, agent, child, slave |
 
-The agreed landing contract validates the final branch HEAD incorporating current
-main, and requires that exact PR head at merge. Squashing changes commit identity;
-canonical main does not receive a duplicate quality run. The merge turn serializes
-cooperating landings until main is fast-forwarded. See [the landing workflow](workflows/land.md)
-for retry, withdrawal and activation behavior.
+The agreed landing contract validates the final branch HEAD incorporating current main, and requires that exact PR head at merge. Squashing changes commit identity; canonical main does not receive a duplicate quality run. The merge turn serializes cooperating landings until main is fast-forwarded. The workflow's own instructions describe retry and withdrawal behavior.
 
 ## Relationships
 
