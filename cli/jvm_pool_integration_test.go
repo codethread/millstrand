@@ -315,7 +315,11 @@ func TestJVMPoolProbeFailureAcceptance(t *testing.T) {
 		}
 		failureStatus := h.status(t, workspaceA)
 		failureStatusB := h.status(t, workspaceB)
-		for label, status := range map[string]map[string]any{"A": failureStatus, "B": failureStatusB} {
+		for label, status := range map[string]map[string]any{
+			"A": failureStatus, "B": failureStatusB,
+			"A detailed": h.statusDetails(t, workspaceA),
+			"B detailed": h.statusDetails(t, workspaceB),
+		} {
 			if status["state"] != "failed" || status["generation_id"] != nil || status["old_generation_stopped"] != true {
 				t.Fatalf("post-cutover failure status for %s admitted a partial generation or lost cutover truth: %#v", label, status)
 			}
