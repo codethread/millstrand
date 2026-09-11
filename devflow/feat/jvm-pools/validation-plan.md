@@ -13,13 +13,22 @@ these checks.
 
 ## Current validation record
 
-Configuration, lifecycle, refresh, host publication, identity, and custody
-implementation slices are present. The full Clojure suite passed before
-bootstrap with 759 tests and 4,711 assertions. Focused post-bootstrap checks
-passed with 72 tests and 383 assertions. One real serving host and one positive
-probe have been verified. Public CLI acceptance is still in progress, so this
-plan does not claim complete acceptance, a shipped feature, a release, or
-measured memory savings.
+This commit records implementation evidence, not a landing result. The full
+Clojure suite passed before bootstrap with 759 tests and 4,711 assertions.
+Focused post-bootstrap checks passed with 72 tests and 383 assertions. One real
+two-member serving host and one positive probe have been verified. The
+coordinator's public `TestJVMPoolLifecycleAcceptance` at `683d5243` passed in
+18.28 seconds; its output is recorded in
+`/tmp/jvm-pool-fixture-correction-verification.log`. It covered A and B in one
+pool, isolated C, pending D and its admission during collective replacement,
+endpoint and REPL runtime targeting, native child custody across Weaver
+replacement, cancel/ack before Mill shutdown, collective stop/start, and
+durable membership through Mill restart.
+
+The failure-status worker `vazn6/gjdqg` is still running. Its checks are not
+claimed here, and this record does not claim that the full landing gate passed.
+The root plan remains Active. This record makes no feature-shipped, release, or
+measured-memory-savings claim.
 
 ## Smallest test set
 
@@ -65,7 +74,7 @@ automatic-start registry.
 
 ### One host, several worlds
 
-Add a tagged process acceptance test in package `cli_test`, preferably
+The tagged process acceptance test is `TestJVMPoolLifecycleAcceptance` in
 `cli/jvm_pool_integration_test.go` with `//go:build integration`. Reuse the
 `restartProcessHarness` ownership pattern in
 `cli/restart_integration_test.go`: build `bin/mill` and `bin/strand`, start one
@@ -118,8 +127,13 @@ through built public binaries. With A/B serving:
 5. Repeat start while the pool is already live. It must reuse the generation,
    not create another host or duplicate member metadata.
 
-The response shape should name selected workspace, pool, live members, pending
-members, host PID, and generation. Assertions should compare exact sets of
+Keep response-shape assertions separate by operation. The existing compact
+restart result may contain `operation`, `workspace`, `state`, `generation_id`,
+`transition_id`, and `diagnostics`, with the optional fields present only when
+the lifecycle state allows them. Pooled `status` and `list` projections carry
+the full pool fields: `jvm_pool`, canonical `registered_members`,
+`live_members`, `pending_members`, and `restart_required`, plus their running
+member and host identity fields. Assertions should compare exact sets of
 canonical workspace paths, not basenames or untrusted display names.
 
 ### Refresh and isolated compatibility
@@ -161,30 +175,33 @@ should only require the selected runtime's registry and state to stay separate.
 
 ### Custody and failed replacement probe
 
-Extend the `cli/cmd/mill` process-control unit tests for grouped admission:
-`TestAdmitGroupedWeaverIdentitiesByOneHostPID` should admit each member's
-identity under the one supervised host PID, reject an unproven PID or inherited
-launch token, and keep custody lookup scoped by canonical workspace/member.
+Extend the `cli/cmd/mill` process-control unit tests for grouped admission.
+`TestPoolCustodyRequiresExactMemberIdentityAndToken` admits each member's
+identity under the one supervised host PID, rejects an unproven PID or
+inherited launch token, and keeps custody lookup scoped by canonical
+workspace/member.
 Keep the existing `cli/internal/process` tests as the owner-level regression
 for launch-key idempotence, terminal retention, cancellation, descendant
 termination, and uncertain stop evidence. Add only a group-specific case if
 the new host changes a public custody boundary.
 
-In the tagged `cli_test` acceptance, launch one long-lived owned child from A
-and one from B through the real process-control path before restarting the
-pool. Verify the custody records remain addressable by their workspace owner
-and handle, and that pool teardown does not confuse the host PID with either
-child PID. On replacement, require exact-PID cleanup and an explicit wait for
-the old host before removing state or sockets.
+In `TestJVMPoolLifecycleAcceptance`, launch one long-lived owned child from A
+and one from B through the real process-control path, then replace the Weaver
+within the same Mill. Verify the custody records remain addressable by their
+workspace owner and handle, and that replacement does not confuse the host PID
+with either child PID. Cancel and acknowledge both children before Mill
+shutdown; this does not claim child retention through Mill shutdown. On
+replacement, require exact-PID cleanup and an explicit wait for the old host
+before removing state or sockets.
 
-Add two probe failures based on the current `TestDisposableWeaverRestartAcceptance`
-fixtures: (1) one pooled member has a missing source/module, so the old pooled
-host keeps serving and the newcomer stays pending with retained stage,
-workspace, and log diagnostics; (2) candidate startup fails after the probe,
-so the pool reports failed replacement, does not admit a partial member set,
-and does not silently resume the old host after cutover. A retry after fixing
-the fixture must start exactly one complete pool. Assert that A/B old metadata,
-new metadata, and all diagnostic paths are distinct and complete.
+`TestJVMPoolProbeFailureAcceptance` covers two probe failures: (1) one pooled
+member has a missing source/module, so the old pooled host keeps serving and the
+newcomer stays pending with retained stage, workspace, and log diagnostics; (2)
+candidate startup fails after the probe, so the pool reports failed replacement,
+does not admit a partial member set, and does not silently resume the old host
+after cutover. A retry after fixing the fixture must start exactly one complete
+pool. Assert that A/B old metadata, new metadata, and all diagnostic paths are
+distinct and complete.
 
 ## Isolation and process-count procedure
 
