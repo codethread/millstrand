@@ -149,7 +149,7 @@ Registered by the modules under `.millstrand/me/workflows/` and `.millstrand/me/
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **review** | The repository-owned final review of implemented work: full change-review roster, findings resolution, and validation of the pushed HEAD. Story, fix, and Ralph hand off here before landing. A PR is optional; completing review does not authorize merging. | Landing, proposal review, card review |
+| **review** | The repository-owned final review of implemented work: full change-review roster, findings resolution, and validation of the pushed HEAD. Story and fix work hand off here before landing. A PR is optional; completing review does not authorize merging. | Landing, proposal review, card review |
 | **land** | Merge reviewed work from a draft or ready PR, or resolve a PR from a working branch. Sign-off authorizes FIFO admission, rebase, final-HEAD validation, squash merge and canonical-main fast-forward. Release the turn before cleanup and card completion. | Deploy, release, publish |
 | **Merge lock** | The exclusion acquired by the FIFO head and held through rebase, final-HEAD validation, merge and canonical-main fast-forward. Failures retain it for repair; successful completion or explicit safe withdrawal releases it. | Branch protection, mutex, freeze |
 | **Merge queue** | Strict FIFO reservations for approved land runs. A failed head keeps its position; timeouts never evict or requeue it. Any trusted agent may explicitly withdraw a reservation with a reason after stopping its merge work. | Auto-merge, approval queue, scheduler |

@@ -35,7 +35,7 @@ The delivery ends with released or immutable commits for the authorized sibling 
 | PLAN-Sad-001.AA3 | Millhouse Workflow, Chime, Cron, executors, Kanban, and Millstrand-workflows roots | Generate the domain families, adopt Cron's symbol/doc/job grammar, migrate every publisher, and replace declaration-Var `collect-entry!` adapters with typed use forms. |
 | PLAN-Sad-001.AA4 | agent-harness roots and repository workspace modules | Migrate core, lifecycle, Workflow, and plural domain forms; update its Kondo export and Millhouse dependency. |
 | PLAN-Sad-001.AA5 | devflow library and Kanban-adapter roots | Migrate workflow, query, op, and adapter declarations; update Workflow coordinates and its release contract while consuming the published external Kanban v26 pin. |
-| PLAN-Sad-001.AA6 | codethread agents, devflow-setup, and Ralph roots | Migrate the remaining bin, workflow, and lifecycle declarations and raise authorized sibling requirements. |
+| PLAN-Sad-001.AA6 | codethread agents and devflow-setup roots | Migrate the remaining bin, workflow, and lifecycle declarations and raise authorized sibling requirements. |
 | PLAN-Sad-001.AA7 | Selected Millstrand workspace and release records | Pin the coherent authorized set and annotated Kanban v26, prove a fresh generation, then restart and smoke-check affected weavers. |
 
 ## PLAN-Sad-001.P4 Contract and migration impact

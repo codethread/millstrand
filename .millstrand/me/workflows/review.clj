@@ -89,8 +89,8 @@
    "
      Run the shared final review for implemented work before landing.
 
-     Story, fix, and Ralph hand committed, validated branches here. A pull
-     request is optional. This workflow owns the full change-review roster,
+     Story and fix hand committed, validated branches here. A pull request
+     is optional. This workflow owns the full change-review roster,
      findings resolution, and validation of the resulting pushed HEAD. It
      finishes with reviewed work; it does not itself authorize a merge.
    " {})

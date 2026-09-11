@@ -5,7 +5,6 @@
             [clojure.test :refer [deftest is]]
             [ct.spools.delegation :as agents]
             [me.workflows.fix :as fix]
-            [me.workflows.ralph :as ralph]
             [me.workflows.review :as review]
             [me.workflows.story :as story]
             [millhouse.spools.workflow :as workflow]
@@ -63,8 +62,7 @@
   (doseq [[definition params]
           [[story/story-fold (assoc work :module "example")]
            [story/story-keep (assoc work :module "example")]
-           [fix/fix (assoc work :subject "Fix the behavior" :card "card-id")]
-           [ralph/ralph-iterate {:epic "epic-id"}]]]
+           [fix/fix (assoc work :subject "Fix the behavior" :card "card-id")]]]
     (let [compiled (workflow/compile definition params {:run-id "review-handoff"})
           instructions (keep #(get-in % [:attributes "workflow/instruction"])
                              (:strands compiled))]

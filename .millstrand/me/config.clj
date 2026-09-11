@@ -11,7 +11,6 @@
             [me.workflows.land :as land]
             [me.workflows.card-actions]
             [me.workflows.merge-queue :as merge-queue]
-            [me.workflows.ralph :as ralph]
             [me.workflows.review :as review]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
@@ -38,7 +37,6 @@
 (workflow/use-workflow! land/land-merge)
 (workflow/use-workflow! land/land)
 (workflow/use-workflow! review/review)
-(lifecycle/use-seed! ralph/review-handoff)
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
 (workflow/use-workflow! story/story)

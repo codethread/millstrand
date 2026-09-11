@@ -65,4 +65,4 @@ Outcome: full locked suite at queue acceptance (delta ~neutral vs study-note bas
 
 ## PLAN-Itr-001.P8 Task context
 
-- **PLAN-Itr-001.TC1:** Worked directly by the coordinator (ralph iteration); slices are sequential in one worktree, no parallel task fan-out (single-file-heavy edits across a shared test-support seam make sibling mutators risky).
+- **PLAN-Itr-001.TC1:** Worked directly by the coordinator; slices are sequential in one worktree, no parallel task fan-out (single-file-heavy edits across a shared test-support seam make sibling mutators risky).

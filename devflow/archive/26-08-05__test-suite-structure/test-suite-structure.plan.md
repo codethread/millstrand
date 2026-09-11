@@ -122,7 +122,7 @@ Outcome: `r9hg0` promotes the staged testing spec to `devflow/specs/testing.md` 
 
 ### PLAN-Tst-001.DN4 Epic health gates — 2026-08-05
 
-- Human follow-up added two P2 review features to the Ralph sequence. `vxihm` checks progress after the fixture and scheduler foundations. `p3tnh` checks delivered outcomes before closeout. The task and feature graphs both enforce the gates so card-driven and broad task scheduling cannot run them early.
+- Human follow-up added two P2 review features to the coordination sequence. `vxihm` checks progress after the fixture and scheduler foundations. `p3tnh` checks delivered outcomes before closeout. The task and feature graphs both enforce the gates so card-driven and broad task scheduling cannot run them early.
 
 ### PLAN-Tst-001.DN5 Finalisation — 2026-08-05
 

@@ -240,18 +240,18 @@ Keep repository-specific policy in workspace `:file` modules. They are loaded fr
 .millstrand/
   init.clj
   workflows/
-    ralph.clj
+    example.clj
 ```
 
 ```clojure
-;; workflows/ralph.clj
-(ns acme.workflows.ralph)
+;; workflows/example.clj
+(ns acme.workflows.example)
 ```
 
 ```clojure
 ;; init.clj
-(runtime/module! runtime :workflows.ralph
-  {:file "workflows/ralph.clj"})
+(runtime/module! runtime :workflows.example
+  {:file "workflows/example.clj"})
 ```
 
 The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.millstrand` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.

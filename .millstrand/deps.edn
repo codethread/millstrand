@@ -2,7 +2,6 @@
  :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
         codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/config"}
-        codethread/ralph {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/ralph"}
         ct.spools/agent-cli {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "agent-cli"}
         ct.spools/bench {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "bench"}
         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "3604419e406b3c426acd738bc2f0033cdb4edb25" :deps/root "spools/workflow"}

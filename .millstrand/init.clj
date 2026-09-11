@@ -120,20 +120,14 @@
                           :millstrand/spools-kanban
                           :millhouse/spools-chime
                           :millhouse/spools-cron
-                          :codethread/ralph
                           :codethread/config]
-                  :required? true})
-
-(runtime/module! runtime :codethread/ralph
-                 {:ns 'ct.spools.codethread.ralph
-                  :after [:millhouse/spools-workflow]
                   :required? true})
 
 ;; Activate the consolidated providers after every workflow definition so the
 ;; executors' initial scans can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
-                  :after [:millhouse/spools-workflow :me/config :codethread/ralph]
+                  :after [:millhouse/spools-workflow :me/config]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
@@ -142,5 +136,5 @@
 (runtime/module! runtime :millstrand/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :after [:millstrand/spools-shuttle :millhouse/spools-workflow
-                          :codethread/config :me/config :codethread/ralph]
+                          :codethread/config :me/config]
                   :required? true})
