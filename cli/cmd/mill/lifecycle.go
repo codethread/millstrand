@@ -863,6 +863,14 @@ func readStatus(world config.World) (map[string]any, bool) {
 	return readStatusWithRestartRecord(world, readRestartRecordDetailed)
 }
 
+// readRuntimeStatus reads only the currently published Weaver metadata.
+// Restart records describe a lifecycle transition; they cannot prove which
+// process currently owns a runtime endpoint. Pool admission and host
+// rediscovery therefore use this undecorated path.
+func readRuntimeStatus(world config.World) (map[string]any, bool) {
+	return readStatusWithRestartRecord(world, nil)
+}
+
 func readStatusWithRestartRecord(world config.World, readRestart func(config.World) (restartRecord, bool, error)) (map[string]any, bool) {
 	metadataPath := filepath.Join(world.StateDir, "weaver.json")
 	b, err := os.ReadFile(metadataPath)
@@ -881,6 +889,9 @@ func readStatusWithRestartRecord(world config.World, readRestart func(config.Wor
 		return st, true
 	}
 	status := statusFromMetadata(m, "running")
+	if readRestart == nil {
+		return status, false
+	}
 	if record, ok, recordErr := readRestart(world); recordErr != nil {
 		status["state"] = "stale"
 		status["stale_reason"] = recordErr.Error()
@@ -940,6 +951,7 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		status["jvm_pool"] = m.JVMPool
 		status["host_id"] = m.HostID
 		status["host_generation_id"] = m.HostGenerationID
+		status["pool_restart_path"] = m.PoolRestartPath
 		status["member_basis_fingerprint"] = m.MemberBasisFingerprint
 	}
 	return status
@@ -957,6 +969,9 @@ func validateMetadata(world config.World, m client.Metadata) string {
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {
 		return err.Error()
+	}
+	if m.JVMPool != "" && (m.PoolRestartPath == "" || !filepath.IsAbs(m.PoolRestartPath) || filepath.Clean(m.PoolRestartPath) != m.PoolRestartPath) {
+		return "malformed weaver metadata: pooled runtime is missing a canonical pool_restart_path"
 	}
 	if m.DatabaseKind != "sqlite-file" {
 		return fmt.Sprintf("mill supervises file-backed weavers; unsupported storage kind %q", m.DatabaseKind)

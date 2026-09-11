@@ -120,6 +120,7 @@
      :pool-metadata {:jvm-pool (:jvm-pool manifest)
                      :host-id (:host-id manifest)
                      :host-generation-id (:host-generation-id manifest)
+                     :pool-restart-path (:pool-restart-path manifest)
                      :member-basis-fingerprint (:fingerprint member-basis)}}))
 
 (defn- ready-marker

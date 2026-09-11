@@ -166,7 +166,7 @@
   Product `version` must conform to `:millstrand.release/version`."
   [{:keys [pid version host port storage-kind storage-label canonical-db-path nonce generation-id
            basis-fingerprint started-at world name jvm-pool host-id host-generation-id
-           member-basis-fingerprint]
+           pool-restart-path member-basis-fingerprint]
     :as shape}]
   (let [socket-path (.getPath (socket-file world))
         name (or name (.getName (io/file (:config-dir world))))]
@@ -195,6 +195,7 @@
       jvm-pool (assoc :jvm-pool jvm-pool
                       :host-id host-id
                       :host-generation-id host-generation-id
+                      :pool-restart-path pool-restart-path
                       :member-basis-fingerprint member-basis-fingerprint))))
 
 (defn- json-metadata-shape
@@ -222,6 +223,7 @@
            (merge {"jvm_pool" (:jvm-pool metadata)
                    "host_id" (:host-id metadata)
                    "host_generation_id" (:host-generation-id metadata)
+                   "pool_restart_path" (:pool-restart-path metadata)
                    "member_basis_fingerprint" (:member-basis-fingerprint metadata)}))))
 
 (defn- write-atomic!
@@ -392,10 +394,12 @@
               (string? (:host-id metadata))
               (string? (:host-generation-id metadata))
               (s/valid? :millstrand.core.specs/basis-fingerprint
-                        (:member-basis-fingerprint metadata)))
+                        (:member-basis-fingerprint metadata))
+              (s/valid? :millstrand.jvm-pool/pool-restart-path
+                        (:pool-restart-path metadata)))
          (not-any? #(contains? metadata %)
                    [:host-id :host-generation-id
-                    :member-basis-fingerprint]))))
+                    :pool-restart-path :member-basis-fingerprint]))))
 
 (defn stale-or-missing?
   "Return true when metadata is absent, malformed, unsupported, or points at a dead process."

@@ -9,6 +9,7 @@
   {:jvm-pool "backend"
    :host-id "host-1"
    :host-generation-id "generation-1"
+   :pool-restart-path "/state/jvm-pools/hosts/pool/restart.json"
    :member-basis-fingerprint
    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 

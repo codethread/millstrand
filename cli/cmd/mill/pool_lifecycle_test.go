@@ -231,7 +231,7 @@ func TestRestartPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testi
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	oldManifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: []poolLaunchMember{{ConfigDir: world.ConfigDir, SourceCWD: source, StateDir: world.StateDir, DataDir: world.DataDir, Name: "member", WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, DependencyDiagnostic: dependencyDiagnosticPath(world)}}}
+	oldManifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, PoolRestartPath: filepath.Join(hostDir, poolRestartRecordFile), MillstrandSource: source, MillstrandVersion: config.Version, Members: []poolLaunchMember{{ConfigDir: world.ConfigDir, SourceCWD: source, StateDir: world.StateDir, DataDir: world.DataDir, Name: "member", WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, DependencyDiagnostic: dependencyDiagnosticPath(world)}}}
 	if err := writePoolLaunchManifest(filepath.Join(hostDir, "launch-host-1.json"), oldManifest); err != nil {
 		t.Fatal(err)
 	}
@@ -771,7 +771,7 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: members}
+	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, PoolRestartPath: filepath.Join(hostDir, poolRestartRecordFile), MillstrandSource: source, MillstrandVersion: config.Version, Members: members}
 	manifestPath := filepath.Join(hostDir, "launch-"+hostID+".json")
 	if err := writePoolLaunchManifest(manifestPath, manifest); err != nil {
 		t.Fatal(err)
@@ -855,7 +855,15 @@ func writePooledMemberMetadata(t *testing.T, world config.World, pid int, weaver
 		t.Fatal(err)
 	}
 	databasePath := world.DBPath
-	metadata := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: config.Version, PID: pid, DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &databasePath, DaemonID: weaverID, GenerationID: generationID, BasisFingerprint: poolTestBasis, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGenerationID, MemberBasisFingerprint: poolTestBasis, ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: filepath.Base(world.ConfigDir), SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "2026-09-11T00:00:00Z"}
+	stateRoot, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostDir, err := jvmpool.PoolHostDir(stateRoot, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: config.Version, PID: pid, DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &databasePath, DaemonID: weaverID, GenerationID: generationID, BasisFingerprint: poolTestBasis, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGenerationID, MemberBasisFingerprint: poolTestBasis, PoolRestartPath: filepath.Join(hostDir, poolRestartRecordFile), ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: filepath.Base(world.ConfigDir), SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "2026-09-11T00:00:00Z"}
 	metadata.NREPL.Host = "127.0.0.1"
 	metadata.NREPL.Port = 4100
 	b, err := json.Marshal(metadata)

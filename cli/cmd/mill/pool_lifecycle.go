@@ -35,8 +35,9 @@ func poolHostFromSnapshot(snapshot jvmpool.PoolSnapshot, source string, root str
 		return poolLaunchManifest{}, nil, err
 	}
 	hostID, hostGeneration := newOpaqueID("host"), newOpaqueID("host-generation")
-	host := &weaverHost{Pool: snapshot.Pool, HostID: hostID, HostGenerationID: hostGeneration, MembershipRev: snapshot.Revision, LaunchToken: newOpaqueID("launch"), Admission: &sync.RWMutex{}, ReadyPath: filepath.Join(hostDir, "ready.json"), ManifestPath: filepath.Join(hostDir, "launch-"+hostID+".json"), LogPath: filepath.Join(hostDir, "host.log"), Allowances: map[string]config.World{}}
-	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: snapshot.Pool, HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version}
+	poolRestartPath := filepath.Join(hostDir, poolRestartRecordFile)
+	host := &weaverHost{Pool: snapshot.Pool, HostID: hostID, HostGenerationID: hostGeneration, MembershipRev: snapshot.Revision, LaunchToken: newOpaqueID("launch"), Admission: &sync.RWMutex{}, ReadyPath: filepath.Join(hostDir, "ready.json"), ManifestPath: filepath.Join(hostDir, "launch-"+hostID+".json"), LogPath: filepath.Join(hostDir, "host.log"), PoolRestartPath: poolRestartPath, Allowances: map[string]config.World{}}
+	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: snapshot.Pool, HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, PoolRestartPath: poolRestartPath, MillstrandSource: source, MillstrandVersion: config.Version}
 	for _, registered := range snapshot.Members {
 		world, err := config.RuntimeWorld(registered.ConfigDir)
 		if err != nil {
@@ -235,7 +236,7 @@ func waitForPoolReady(host *weaverHost, done <-chan error, waitDone <-chan struc
 			statuses := map[string]map[string]any{}
 			valid := true
 			for _, member := range host.Members {
-				status, stale := readStatus(member.World)
+				status, stale := readRuntimeStatus(member.World)
 				if status == nil || stale {
 					valid = false
 					break
@@ -432,18 +433,22 @@ func (s *server) discoverPoolHost(pool string) (*weaverHost, error) {
 	if manifest.HostID == "" {
 		return nil, errors.New("running JVM pool host has no matching launch manifest")
 	}
+	expectedRestartPath := filepath.Join(hostDir, poolRestartRecordFile)
+	if manifest.PoolRestartPath != expectedRestartPath {
+		return nil, fmt.Errorf("running JVM pool host has mismatched pool restart path %q", manifest.PoolRestartPath)
+	}
 	process, err := os.FindProcess(marker.PID)
 	if err != nil {
 		return nil, err
 	}
-	host := &weaverHost{Pool: pool, HostID: marker.HostID, HostGenerationID: marker.HostGenerationID, MembershipRev: marker.MembershipRevision, PID: marker.PID, cmd: &exec.Cmd{Process: process}, Admission: &sync.RWMutex{}, ReadyPath: filepath.Join(hostDir, "ready.json"), ManifestPath: filepath.Join(hostDir, filepath.Base(launchPaths[0])), LogPath: filepath.Join(hostDir, "host.log"), Live: true, Allowances: map[string]config.World{}}
+	host := &weaverHost{Pool: pool, HostID: marker.HostID, HostGenerationID: marker.HostGenerationID, MembershipRev: marker.MembershipRevision, PID: marker.PID, cmd: &exec.Cmd{Process: process}, Admission: &sync.RWMutex{}, ReadyPath: filepath.Join(hostDir, "ready.json"), ManifestPath: filepath.Join(hostDir, filepath.Base(launchPaths[0])), LogPath: filepath.Join(hostDir, "host.log"), PoolRestartPath: manifest.PoolRestartPath, Live: true, Allowances: map[string]config.World{}}
 	statuses := map[string]map[string]any{}
 	for _, expected := range manifest.Members {
 		world, worldErr := config.RuntimeWorld(expected.ConfigDir)
 		if worldErr != nil {
 			return nil, worldErr
 		}
-		status, stale := readStatus(world)
+		status, stale := readRuntimeStatus(world)
 		if status == nil || stale {
 			return nil, fmt.Errorf("JVM pool member %s is not ready", expected.ConfigDir)
 		}

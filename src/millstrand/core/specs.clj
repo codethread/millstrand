@@ -556,8 +556,10 @@
 (s/def :millstrand.jvm-pool/host-generation-id non-blank-string?)
 (s/def :millstrand.jvm-pool/member-basis-fingerprint
   :millstrand.core.specs/basis-fingerprint)
+(s/def :millstrand.jvm-pool/pool-restart-path canonical-absolute-path?)
 (def ^:private pool-start-metadata-keys
-  #{:jvm-pool :host-id :host-generation-id :member-basis-fingerprint})
+  #{:jvm-pool :host-id :host-generation-id :member-basis-fingerprint
+    :pool-restart-path})
 (s/def :millstrand.weaver-start/pool-metadata
   (s/and
    (s/keys :req-un [:millstrand.jvm-pool/jvm-pool
@@ -577,7 +579,7 @@
     :generation-id :dependency-diagnostic})
 (def ^:private launch-manifest-keys
   #{:format :jvm-pool :host-id :host-generation-id :membership-revision
-    :millstrand-source :millstrand-version :members})
+    :pool-restart-path :millstrand-source :millstrand-version :members})
 (def ^:private probe-member-keys
   #{:original-config-dir :original-source-cwd :probe-config-dir
     :probe-state-dir :probe-data-dir :member-diagnostic :name
@@ -731,7 +733,7 @@
 (def ^:private pooled-status-keys
   #{:jvm-pool :registered-members :live-members :pending-members
     :restart-required :host-id :host-generation-id
-    :member-basis-fingerprint})
+    :member-basis-fingerprint :pool-restart-path})
 (defn- pooled-status? [value]
   (and (map? value)
        (every? pooled-status-keys (keys value))
@@ -750,20 +752,25 @@
            (pool-member-id? (:host-generation-id value)))
        (or (not (contains? value :member-basis-fingerprint))
            (s/valid? :millstrand.core.specs/basis-fingerprint
-                     (:member-basis-fingerprint value)))))
+                     (:member-basis-fingerprint value)))
+       (or (not (contains? value :pool-restart-path))
+           (s/valid? :millstrand.jvm-pool/pool-restart-path
+                     (:pool-restart-path value)))))
 (s/def :millstrand.jvm-pool/status-projection pooled-status?)
 (s/def :millstrand.core.specs/jvm-pool-status-projection
   :millstrand.jvm-pool/status-projection)
 (s/def :millstrand.jvm-pool/member-metadata
   (s/and map?
          #(= #{:jvm-pool :host-id :host-generation-id
-               :member-basis-fingerprint}
+               :pool-restart-path :member-basis-fingerprint}
              (set (keys %)))
          #(pool-id? (:jvm-pool %))
          #(pool-member-id? (:host-id %))
          #(pool-member-id? (:host-generation-id %))
          #(s/valid? :millstrand.core.specs/basis-fingerprint
-                    (:member-basis-fingerprint %))))
+                    (:member-basis-fingerprint %))
+         #(s/valid? :millstrand.jvm-pool/pool-restart-path
+                    (:pool-restart-path %))))
 (s/def :millstrand.core.specs/jvm-pool-member-metadata
   :millstrand.jvm-pool/member-metadata)
 
