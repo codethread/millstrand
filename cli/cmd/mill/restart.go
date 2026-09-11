@@ -214,6 +214,23 @@ func millStatusProjection(status map[string]any) map[string]any {
 			projection[key] = value
 		}
 	}
+	// Compact status intentionally omits retained probe detail. A failed
+	// restart still needs the closed status projection's required diagnostic;
+	// expose only the small durable failure explanation at this wire boundary.
+	if state == restartStateFailed {
+		if _, ok := projection["diagnostics"]; !ok {
+			if failure, ok := status["restart_failure"].(restartFailure); ok {
+				projection["diagnostics"] = []map[string]any{{
+					"stage":  failure.Stage,
+					"status": "failed",
+					"data": map[string]any{
+						"message":  failure.Message,
+						"log_path": failure.LogPath,
+					},
+				}}
+			}
+		}
+	}
 	return projection
 }
 
@@ -400,8 +417,11 @@ func validateRestartRecord(record restartRecord, mode restartRecordValidationMod
 	if record.PreviousWeaver != "" && strings.TrimSpace(record.PreviousWeaver) == "" {
 		return errors.New("restart record previous_weaver_id must be non-blank")
 	}
-	if record.OldGenerationStopped && (strings.TrimSpace(record.GenerationID) == "" || record.Probe == nil || !record.Probe.Success) {
-		return errors.New("stopped generation requires a successful probe and generation_id")
+	if record.OldGenerationStopped && (record.Probe == nil || !record.Probe.Success) {
+		return errors.New("stopped generation requires a successful probe")
+	}
+	if record.OldGenerationStopped && record.State != restartStateFailed && strings.TrimSpace(record.GenerationID) == "" {
+		return errors.New("stopped non-failed generation requires generation_id")
 	}
 	if record.State == restartStateProbing && (strings.TrimSpace(record.GenerationID) == "" || record.Probe != nil || record.Failure != nil || record.OldGenerationStopped) {
 		return errors.New("probing restart record has contradictory fields")

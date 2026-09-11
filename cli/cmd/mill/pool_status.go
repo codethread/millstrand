@@ -50,6 +50,21 @@ func poolStatusForRegistered(world config.World, pool string, snapshot jvmpool.P
 }
 
 func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, error) {
+	return s.poolStatusForWorldWithDetails(world, false)
+}
+
+func (s *server) poolStatusForWorldWithDetails(world config.World, details bool) (map[string]any, bool, error) {
+	status, pooled, err := s.poolStatusForWorldRaw(world)
+	if err != nil || !pooled || status == nil {
+		return status, pooled, err
+	}
+	if details {
+		return s.mergePooledDetailedRestartStatus(world, status), true, nil
+	}
+	return s.mergePooledCompactRestartStatus(world, status), true, nil
+}
+
+func (s *server) poolStatusForWorldRaw(world config.World) (map[string]any, bool, error) {
 	s.mu.Lock()
 	host := poolHostForConfigLocked(s, world.ConfigDir)
 	s.mu.Unlock()
@@ -132,6 +147,50 @@ func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, e
 		return status, true, nil
 	}
 	return poolStatusForRegistered(world, pool, snapshot), true, nil
+}
+
+func (s *server) mergePooledCompactRestartStatus(world config.World, status map[string]any) map[string]any {
+	record, ok, err := s.readRestartRecordSummaryCached(world)
+	if err != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = err.Error()
+		return status
+	}
+	if !ok || record.State == restartStateRunning {
+		if ok && record.State == restartStateRunning {
+			mergeRestartRecordCompactStatus(status, record)
+		}
+		return status
+	}
+	compact := record.compactStatus(world)
+	if status["state"] != "pending" {
+		status["state"] = compact["state"]
+	}
+	for _, key := range []string{"generation_id", "previous_generation_id", "transition_id", "old_generation_stopped", "restart_failure"} {
+		if value, present := compact[key]; present {
+			status[key] = value
+		} else {
+			delete(status, key)
+		}
+	}
+	return status
+}
+
+func (s *server) mergePooledDetailedRestartStatus(world config.World, status map[string]any) map[string]any {
+	record, ok, err := readRestartRecordDetailed(world)
+	if err != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = err.Error()
+		return status
+	}
+	if !ok {
+		return status
+	}
+	if status["state"] != "pending" {
+		status["state"] = record.State
+	}
+	mergeRestartRecordStatus(status, record)
+	return status
 }
 
 func poolConfigDirsFromSnapshot(snapshot jvmpool.PoolSnapshot) []string {

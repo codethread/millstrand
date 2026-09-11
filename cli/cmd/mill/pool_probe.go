@@ -502,7 +502,10 @@ func executePooledProbe(manifest poolProbeManifest) (poolProbeResult, error) {
 	}
 	result, err := poolProbeRuntime(manifest)
 	if err != nil {
-		return poolProbeResult{}, err
+		// A validated failed probe carries the private root, completed stages,
+		// and log path needed by the restart status record. Preserve it across
+		// the error boundary; transport failures still return the zero result.
+		return result, err
 	}
 	if err := validatePoolProbeResult(result, manifest); err != nil {
 		return poolProbeResult{}, err

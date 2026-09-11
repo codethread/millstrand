@@ -431,7 +431,7 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
-	if pooled, ok, poolErr := s.poolStatusForWorld(world); poolErr != nil {
+	if pooled, ok, poolErr := s.poolStatusForWorldWithDetails(world, req.Details); poolErr != nil {
 		return nil, poolErr
 	} else if ok {
 		return pooled, nil

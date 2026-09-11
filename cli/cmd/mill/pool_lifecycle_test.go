@@ -66,6 +66,58 @@ func TestPooledRestartResultUsesClosedRouteEnvelope(t *testing.T) {
 	}
 }
 
+func TestPooledRestartProbeResultRetainsObservedFailureOnly(t *testing.T) {
+	manifest := poolProbeTestManifest()
+	result := poolProbeTestResult(manifest)
+	result.Success = false
+	result.Stage = "probe/failure"
+	result.Completed = []string{"probe/basis", "member/A"}
+	result.Members[0].Status = "failed"
+	probe := pooledRestartProbeResult(manifest, result, errors.New("candidate source missing"))
+	if err := probe.validate(); err != nil {
+		t.Fatalf("pooled probe result was not a valid restart probe: %v", err)
+	}
+	if !reflect.DeepEqual(probe.Completed, result.Completed) {
+		t.Fatalf("pooled probe changed observed completed stages: got=%v want=%v", probe.Completed, result.Completed)
+	}
+	if len(probe.Diagnostics) != 1 || probe.Diagnostics[0]["stage"] != "probe/failure" {
+		t.Fatalf("pooled probe did not retain one honest failure summary: %#v", probe.Diagnostics)
+	}
+	data := probe.Diagnostics[0]["data"].(map[string]any)
+	if _, ok := data["members"]; !ok || data["message"] != "candidate source missing" {
+		t.Fatalf("pooled probe summary lost structured result evidence: %#v", data)
+	}
+	for _, row := range probe.Diagnostics {
+		if row["stage"] == "evaluate" || row["stage"] == "staged" {
+			t.Fatalf("pooled probe fabricated isolated lifecycle stage: %#v", row)
+		}
+	}
+}
+
+func TestPooledRestartRecordsRetainCutoverTruthAndPendingDiagnostics(t *testing.T) {
+	oldWorld := config.World{ConfigDir: filepath.Join(t.TempDir(), "old", ".millstrand"), StateDir: filepath.Join(t.TempDir(), "old-state")}
+	pendingWorld := config.World{ConfigDir: filepath.Join(t.TempDir(), "pending", ".millstrand"), StateDir: filepath.Join(t.TempDir(), "pending-state")}
+	probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "/tmp/probe", SourceWorkspace: oldWorld.ConfigDir, Completed: []string{"probe/complete"}, Diagnostics: []map[string]any{}, Log: "/tmp/probe.log"}
+	failure := &restartFailure{Stage: "launch", Message: "replacement startup failed", LogPath: "/tmp/host.log"}
+	old := poolMember{World: oldWorld, WeaverID: "old-weaver", GenerationID: "old-generation"}
+	if err := writePooledRestartRecords([]poolMember{old}, pendingWorld, restartStateFailed, "transition-1", probe, failure, true); err != nil {
+		t.Fatal(err)
+	}
+	record, ok, err := readRestartRecordDetailed(oldWorld)
+	if err != nil || !ok || record.State != restartStateFailed || record.GenerationID != "" || !record.OldGenerationStopped || record.PreviousGeneration != "old-generation" || record.PreviousWeaver != "old-weaver" {
+		t.Fatalf("cutover record lost old-generation truth: record=%#v ok=%v err=%v", record, ok, err)
+	}
+	pendingRecord, ok, err := readRestartRecordDetailed(pendingWorld)
+	if err != nil || !ok || pendingRecord.State != restartStateFailed || pendingRecord.GenerationID != "" {
+		t.Fatalf("pending initiator record admitted a generation: record=%#v ok=%v err=%v", pendingRecord, ok, err)
+	}
+	status := map[string]any{"state": "pending"}
+	merged := (&server{}).mergePooledDetailedRestartStatus(pendingWorld, status)
+	if merged["state"] != "pending" || merged["probe"] == nil || merged["restart_failure"] == nil {
+		t.Fatalf("pending status lost initiator diagnostics or state: %#v", merged)
+	}
+}
+
 func TestPooledStartDoesNotRediscoverMembershipAfterProbe(t *testing.T) {
 	source := tempSource(t)
 	cfgA := tempConfig(t, source)

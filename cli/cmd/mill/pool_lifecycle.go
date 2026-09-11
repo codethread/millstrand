@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -195,6 +196,9 @@ func (s *server) startPooledWeaverFromSnapshot(req client.MillWorldRequest, worl
 		s.poolMembers[host.Members[i].World.ConfigDir] = host
 	}
 	s.mu.Unlock()
+	if err := clearPooledRestartRecords(host.Members); err != nil {
+		return nil, fmt.Errorf("pooled host started but restart state cleanup failed: %w", err)
+	}
 	statusResult := s.poolStatusForMember(host, selected.ConfigDir)
 	addPoolPending(statusResult, host, snapshot)
 	return statusResult, nil
@@ -478,6 +482,7 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 	if pool == "" {
 		pool = host.Pool
 	}
+	transitionID := newOpaqueID("transition")
 	snapshot, err := s.poolSnapshot(pool)
 	if err != nil {
 		return nil, err
@@ -500,8 +505,32 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 	result, err := executePooledProbe(manifest)
 	if err != nil {
 		status := s.poolStatusForMember(host, world.ConfigDir)
+		if status == nil {
+			status = baseStatus(world, "pending")
+			status["jvm_pool"] = host.Pool
+			status["live_members"] = poolConfigDirs(host.Members)
+		}
 		addPoolPending(status, host, snapshot)
-		return status, err
+		probe := pooledRestartProbeResult(manifest, result, err)
+		if logErr := retainPooledProbeLog(probe, err); logErr != nil {
+			return status, fmt.Errorf("%v; retain pooled probe log: %w", err, logErr)
+		}
+		if recordErr := writePooledRestartRecords(host.Members, world, restartStateRunning, transitionID, probe, &restartFailure{Stage: "probe", Message: err.Error(), LogPath: probe.Log}, false); recordErr != nil {
+			return status, fmt.Errorf("%v; retain pooled probe failure: %w", err, recordErr)
+		}
+		status["probe_error"] = err.Error()
+		status["restart_state"] = restartStateFailed
+		status["diagnostics"] = []map[string]any{{
+			"stage":  "probe",
+			"status": "failed",
+			"data": map[string]any{
+				"message":       err.Error(),
+				"generation_id": status["generation_id"],
+				"transition_id": transitionID,
+			},
+		}}
+		restartBoundaryStatus(world, status)
+		return status, nil
 	}
 	// Persist the validated result before private-root cleanup and cutover. A
 	// caller can inspect this artifact if the subsequent replacement fails.
@@ -529,9 +558,125 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 	s.removePoolHost(host)
 	replacement, err := s.startPooledWeaverFromSnapshot(req, world, pool, nil, snapshot)
 	if err != nil {
+		probe := pooledRestartProbeResult(manifest, result, err)
+		failure := &restartFailure{Stage: "launch", Message: err.Error(), LogPath: host.LogPath}
+		if recordErr := writePooledRestartRecords(host.Members, world, restartStateFailed, transitionID, probe, failure, true); recordErr != nil {
+			return replacement, fmt.Errorf("%v; retain pooled replacement failure: %w", err, recordErr)
+		}
 		return replacement, err
 	}
 	return pooledRestartResult(world, replacement), nil
+}
+
+func pooledRestartProbeResult(manifest poolProbeManifest, result poolProbeResult, err error) *restartProbeResult {
+	probeRoot := result.ProbeRoot
+	if strings.TrimSpace(probeRoot) == "" {
+		probeRoot = manifest.ProbeRoot
+	}
+	sourceWorkspace := result.SourceWorkspace
+	if strings.TrimSpace(sourceWorkspace) == "" && len(manifest.Members) > 0 {
+		sourceWorkspace = manifest.Members[0].OriginalConfigDir
+	}
+	logPath := result.Log
+	if strings.TrimSpace(logPath) == "" {
+		logPath = filepath.Join(manifest.ProbeRoot, "pool-probe.log")
+	}
+	completed := result.Completed
+	if completed == nil {
+		completed = []string{}
+	}
+	diagnostics := pooledRestartProbeFailureDiagnostics(result, err)
+	stage := "probe/failure"
+	if result.Success {
+		stage = "probe/complete"
+	}
+	return &restartProbeResult{Success: result.Success, Stage: stage, ProbeWorkspace: probeRoot, SourceWorkspace: sourceWorkspace, Completed: completed, Diagnostics: diagnostics, Log: logPath}
+}
+
+func pooledRestartProbeFailureDiagnostics(result poolProbeResult, err error) []map[string]any {
+	if result.Success {
+		return []map[string]any{}
+	}
+	stage := result.Stage
+	if strings.TrimSpace(stage) == "" {
+		stage = "probe/transport"
+	}
+	data := map[string]any{"completed": append([]string(nil), result.Completed...)}
+	if strings.TrimSpace(result.CollectiveDiagnostic) != "" {
+		data["collective_diagnostic"] = result.CollectiveDiagnostic
+	}
+	if err != nil {
+		data["message"] = err.Error()
+	}
+	members := make([]map[string]any, 0, len(result.Members))
+	for _, member := range result.Members {
+		members = append(members, map[string]any{
+			"workspace":     member.OriginalConfigDir,
+			"baseline_kind": member.BaselineKind,
+			"status":        member.Status,
+			"diagnostic":    member.MemberDiagnostic,
+		})
+	}
+	data["members"] = members
+	return []map[string]any{{"stage": stage, "status": "failed", "data": data}}
+}
+
+func retainPooledProbeLog(probe *restartProbeResult, failure error) error {
+	if probe == nil || strings.TrimSpace(probe.Log) == "" {
+		return errors.New("pooled probe log path is blank")
+	}
+	if _, err := os.Stat(probe.Log); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(probe.Log), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(probe.Log, []byte(failure.Error()+"\n"), 0o644)
+}
+
+func writePooledRestartRecords(members []poolMember, selected config.World, state, transitionID string, probe *restartProbeResult, failure *restartFailure, oldGenerationStopped bool) error {
+	recordMembers := append([]poolMember(nil), members...)
+	selectedPresent := false
+	for _, member := range members {
+		if member.World.ConfigDir == selected.ConfigDir {
+			selectedPresent = true
+			break
+		}
+	}
+	if !selectedPresent {
+		recordMembers = append(recordMembers, poolMember{World: selected})
+	}
+	for _, member := range recordMembers {
+		recordState := state
+		record := restartRecord{State: recordState, TransitionID: transitionID, Probe: probe, Failure: failure, OldGenerationStopped: oldGenerationStopped}
+		if member.GenerationID != "" {
+			record.PreviousGeneration = member.GenerationID
+			record.PreviousWeaver = member.WeaverID
+		}
+		if state == restartStateRunning {
+			record.GenerationID = member.GenerationID
+			if record.GenerationID == "" {
+				recordState = restartStateFailed
+				record.State = recordState
+			}
+		}
+		if err := writeRestartRecordFn(member.World, record); err != nil {
+			return fmt.Errorf("workspace %s: %w", member.World.ConfigDir, err)
+		}
+	}
+	return nil
+}
+
+func clearPooledRestartRecords(members []poolMember) error {
+	for _, member := range members {
+		err := os.Remove(restartRecordPath(member.World))
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("workspace %s: %w", member.World.ConfigDir, err)
+		}
+	}
+	return nil
 }
 
 // pooledRestartResult adapts ordinary pool status to the closed restart
