@@ -48,4 +48,4 @@ If A and B are initialized without automatic start, neither starts immediately. 
 
 This work does not add member-only stop, live membership mutation, hot classpath extension, transparent isolation of Clojure globals, a release commitment, or speculative recovery machinery.
 
-The implementation must preserve current isolated behaviour and the established probe-before-cutover and process-custody guarantees. The detailed cross-language boundary is in the [implementation contract](implementation-contract.md), and the product contract is in the [Draft proposal](proposal.md).
+The implementation must preserve current isolated behaviour and the established probe-before-cutover and process-custody guarantees. The detailed cross-language boundary is in the [implementation contract](implementation-contract.md), and the product contract is in the [Approved proposal](proposal.md).

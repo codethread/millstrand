@@ -69,9 +69,9 @@ Owner boundary: Mill host lifecycle, forwarding, restart/probe, record/status, p
 
 Owner boundary: init command, Mill request wiring, status projection, and automatic-start grouping. Consume PH1 and PH5 APIs. This phase is sequential after PH5 and may edit `cli/cmd/mill/main.go` for request handling, status, and automatic-start wiring. Outcome: `--auto-start` composes with pool registration, groups one launch per pool, never replaces a live host, and returns the declared running/pending/stopped projections. Existing non-pooled lifecycle and config paths remain covered by their current tests.
 
-### PLAN-Jvp-001.PH7 Process acceptance and promotion preparation
+### PLAN-Jvp-001.PH7 Process acceptance and promotion
 
-Owner boundary: tagged public-binary acceptance and feature-local documentation. Outcome: disposable A/B/C/D workspaces prove one host PID with distinct member identities and endpoint routing, pending admission, collective stop/restore, failed probe and failed cutover boundaries, canonical artifacts and member custody untouched by probe success/failure, and isolated compatibility. After critique and implementation, the staged deltas can be promoted to the root specs; this Draft plan does not claim that review.
+Owner boundary: tagged public-binary acceptance and feature-local documentation. Outcome: the implementation and focused tests cover the pooled host/member boundary, pending admission, collective lifecycle, refresh preflight, and isolated compatibility. The staged CLI, Weaver runtime, and REPL API deltas are promoted to the root specs. Public CLI acceptance remains in progress, so this plan stays Active and does not claim a release or measured memory savings.
 
 ## PLAN-Jvp-001.P6 Validation strategy
 
@@ -85,7 +85,7 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 - **PLAN-Jvp-001.R1:** Shared namespaces, Vars, classes, and Java static state can affect every member. The plan makes this visible through owner-managed compatibility, shared-basis status, host refresh serialization, and no compatibility debugger.
 - **PLAN-Jvp-001.R2:** A failed managed refresh can leave JVM-global effects after a partial outcome. Candidate probes protect the admitted host; actual replacement and refresh report completed/skipped members and use restart as the clean recovery boundary.
 - **PLAN-Jvp-001.R3:** Grouped identity proof is stricter than current one-child admission. Readiness must validate the host marker, every member artifact, every endpoint, the exact PID, and the ordered manifest before any route opens.
-- **PLAN-Jvp-001.Q1:** The ubiquitous-language entry for “Weaver generation” currently describes one process and classloader. Before promotion, the glossary needs a durable distinction between pool host generation and member runtime generation. This does not block the implementation contract or the staged deltas.
+- **PLAN-Jvp-001.Q1:** Resolved by promoting separate glossary terms for pool host generation and member runtime generation. The host generation identifies the shared process/classloader lifetime; the member generation identifies one runtime within that host.
 - **PLAN-Jvp-001.Q2:** The first implementation uses sequential member startup and refresh, one membership file, one ready marker, and an explicit targeted-refresh rejection. No parallel activation, rollback journal, dependency solver, or speculative recovery is in scope.
 
 ## PLAN-Jvp-001.P8 Task context
@@ -98,8 +98,8 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 
 ### PLAN-Jvp-001.DN1 Task 61xyr: initial Draft plan and staged deltas — 2026-09-11
 
-- The architecture contract was incorporated after the initial baseline read. The plan remains Draft pending critique; no review or approval is claimed.
-- Material unresolved issue: promote a host-generation/member-generation distinction into the ubiquitous language before root-spec promotion.
+- The architecture contract was incorporated after the initial baseline read. The historical draft state was superseded by the reviewed and approved implementation plan.
+- The host-generation/member-generation distinction is now in the ubiquitous language and root specs.
 
 ### PLAN-Jvp-001.DN2 Coordinator review disposition — 2026-09-11
 

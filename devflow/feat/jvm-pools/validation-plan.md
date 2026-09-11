@@ -11,6 +11,16 @@ that two logical weavers share one host PID or that a built `mill` supervises
 that host. Do not use the shared `.millstrand` coordination world in any of
 these checks.
 
+## Current validation record
+
+Configuration, lifecycle, refresh, host publication, identity, and custody
+implementation slices are present. The full Clojure suite passed before
+bootstrap with 759 tests and 4,711 assertions. Focused post-bootstrap checks
+passed with 72 tests and 383 assertions. One real serving host and one positive
+probe have been verified. Public CLI acceptance is still in progress, so this
+plan does not claim complete acceptance, a shipped feature, a release, or
+measured memory savings.
+
 ## Smallest test set
 
 ### Configuration and registration

@@ -3,7 +3,7 @@
 **Document ID:** `DELTA-Jvp-002`
 **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
 **Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
+**Status:** Implemented and promoted to [Weaver runtime root spec](../../../specs/daemon-runtime.md#spec-004p10f-jvm-pool-host)
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jvp-002.P1 Summary
@@ -39,4 +39,12 @@ This delta adds a host boundary around several independent Weaver runtimes. It d
 
 ## DELTA-Jvp-002.P4 Open questions
 
-- **DELTA-Jvp-002.Q1:** Before promotion, the ubiquitous-language glossary needs separate terms for host generation and member runtime generation. No implementation choice is blocked.
+- **DELTA-Jvp-002.Q1:** Resolved by promoting separate host-generation and member-runtime-generation terms to the ubiquitous-language glossary and root specs.
+
+## DELTA-Jvp-002.P5 Promotion record
+
+The implemented clauses were promoted to the Weaver runtime root spec under
+`SPEC-004.P10f`. Stable clause addresses remain `SPEC-004.C1`, `C4`–`C14`,
+`C43`–`C45`, `C50`, `C57`, `C91`, `C96`, and `C113`–`C122`. The feature remains
+Active pending coordinator landing; this delta does not claim release or full
+public acceptance.

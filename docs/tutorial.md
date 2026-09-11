@@ -57,6 +57,20 @@ mill init --auto-start
 
 `--auto-start` writes `"autoStart": true` to the shared `config.json`, records the workspace, and starts its Weaver immediately. If no Mill is running, the command returns the Mill transport error and does not register the workspace. The setting is not available in `config.local.json`.
 
+To opt this workspace into a named JVM pool, use a non-blank pool name:
+
+```sh
+mill init --jvm-pool backend
+```
+
+This writes `"JVMPool":"backend"` only to the machine-local `config.local.json` and durably registers the workspace. It does not start a host. Add `--auto-start` when a running Mill should register and start the stopped pool during init:
+
+```sh
+mill init --jvm-pool backend --auto-start
+```
+
+Pool membership is separate from automatic-start registration. Start, stop, and restart through any registered member affect every registered member in that pool. A member added while a pool is live remains pending until `mill weaver restart`; automatic start does not replace the live host. A workspace with omitted or `null` `JVMPool` remains an isolated Weaver. See [Customising your workspace](./spools/customisation.md#jvm-pools) for endpoint targeting, shared-code boundaries, and refresh behavior.
+
 Unknown keys in either config file are ignored for compatibility. Weaver startup reports them in the Mill log by file and key; status and invoke reads do not log the retained warnings. Wrong types for known keys still fail, and `config.local.json` rejects the known misplaced `configFormat` key. A local `autoStart` key is unknown, so it is ignored with the startup warning and cannot enable remembered startup.
 
 Without `--workspace`, commands resolve the canonical Git repository root and select its `.millstrand` or `.ms` directory. Linked worktrees therefore share one default workspace. Conflicting, invalid, or unsupported legacy markers fail with remediation instead of being guessed or migrated. Outside a supported Git worktree, no-flag selection also fails.

@@ -3,7 +3,7 @@
 **Document ID:** `DELTA-Jvp-001`
 **Root spec:** [cli.md](../../../specs/cli.md)
 **Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
+**Status:** Implemented and promoted to [CLI root spec](../../../specs/cli.md#spec-002p4a-jvm-pools)
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jvp-001.P1 Summary
@@ -37,3 +37,11 @@ This delta adds the opt-in `JVMPool` configuration, local-only pool selection du
 ## DELTA-Jvp-001.P4 Open questions
 
 - **DELTA-Jvp-001.Q1:** None blocks implementation. The host/member generation vocabulary still needs a later ubiquitous-language promotion, recorded in `PLAN-Jvp-001.Q1`.
+
+## DELTA-Jvp-001.P5 Promotion record
+
+The implemented clauses were promoted to the CLI root spec under
+`SPEC-002.P4a`. Stable clause addresses remain `SPEC-002.C2`, `C2a`, `C14a`,
+`C20`, `C20a`, `C56`, `C59`, `C61`, `C62`, and `C63`. The feature remains
+Active pending coordinator landing; this delta does not claim release or full
+public acceptance.
