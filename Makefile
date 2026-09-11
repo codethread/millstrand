@@ -8,7 +8,7 @@ help:
 		'  make land-quality       Build and run the local landing quality DAG' \
 		'    LAND_QUALITY_HEAVY_LIMIT=N sets its positive heavy-job cap (default 2)' \
 		'  make test-go            Run Go tests in every Go module' \
-		'  make test-restart-acceptance  Run the built-binary disposable Weaver restart acceptance' \
+		'  make test-restart-acceptance  Run built-binary restart and JVM-pool acceptance' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \
 		'  make lint               Run Clojure, convention, and Go linters' \
@@ -121,21 +121,23 @@ fmt-check-go:
 test-go:
 	bash scripts/go-quality test
 
-# The restart acceptance controls real Mill and Weaver processes and exercises
-# caller convergence over a gated probe. Keep it out of the normal Go suite,
-# but make its explicit land-quality invocation mandatory.
+# The restart and JVM-pool acceptances control real Mill and Weaver processes.
+# Keep them out of the normal Go suite, but make their explicit land-quality
+# invocation mandatory.
 test-restart-acceptance: build
 	@output=$$(mktemp); \
 	trap 'rm -f "$$output"' EXIT; \
-	if ! (cd cli && go test -json -tags=integration -count=1 -run '^TestDisposableWeaverRestartAcceptance$$' ./...) >"$$output"; then \
+	if ! (cd cli && go test -json -tags=integration -count=1 -run '^(TestDisposableWeaverRestartAcceptance|TestJVMPoolLifecycleAcceptance|TestJVMPoolProbeFailureAcceptance)$$' ./...) >"$$output"; then \
 		cat "$$output"; \
 		exit 1; \
 	fi; \
 	cat "$$output"; \
-	if ! grep -F '"Action":"pass"' "$$output" | grep -F '"Test":"TestDisposableWeaverRestartAcceptance"' >/dev/null; then \
-		echo 'test-restart-acceptance: TestDisposableWeaverRestartAcceptance did not run and pass' >&2; \
-		exit 1; \
-	fi
+	for test_name in TestDisposableWeaverRestartAcceptance TestJVMPoolLifecycleAcceptance TestJVMPoolProbeFailureAcceptance; do \
+		if ! grep -F '"Action":"pass"' "$$output" | grep -F "\"Test\":\"$$test_name\"" >/dev/null; then \
+			echo "test-restart-acceptance: $$test_name did not run and pass" >&2; \
+			exit 1; \
+		fi; \
+	done
 
 test-e2e:
 	clojure -M:e2e
