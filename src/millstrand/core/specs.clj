@@ -13,6 +13,12 @@
 (defn- non-blank-string? [x]
   (and (string? x) (not (str/blank? x))))
 
+(defn- canonical-absolute-path? [x]
+  (and (non-blank-string? x)
+       (let [file (File. ^String x)]
+         (and (.isAbsolute file)
+              (= x (.getCanonicalPath file))))))
+
 (defn- json-compatible? [value]
   (cond
     (or (nil? value) (string? value) (number? value) (boolean? value)) true
@@ -148,6 +154,41 @@
   (s/and
    (s/keys :opt-un [:millstrand.generation-basis/dependency-source-workspace])
    #(every? #{:dependency-source-workspace} (keys %))))
+
+(s/def :millstrand.pool-basis/config-dir canonical-absolute-path?)
+(s/def :millstrand.pool-basis/generation-basis
+  :millstrand.core.specs/generation-basis)
+(s/def :millstrand.pool-basis/member
+  (s/and
+   (s/keys :req-un [:millstrand.pool-basis/config-dir
+                    :millstrand.pool-basis/generation-basis])
+   #(= #{:config-dir :generation-basis} (set (keys %)))
+   #(s/valid? :millstrand.core.specs/generation-basis
+              (:generation-basis %))))
+(s/def :millstrand.pool-basis/name non-blank-string?)
+(s/def :millstrand.pool-basis/host-id non-blank-string?)
+(s/def :millstrand.pool-basis/host-generation-id non-blank-string?)
+(s/def :millstrand.pool-basis/membership-revision non-blank-string?)
+(s/def :pool/name :millstrand.pool-basis/name)
+(s/def :host/id :millstrand.pool-basis/host-id)
+(s/def :host/generation-id :millstrand.pool-basis/host-generation-id)
+(s/def :membership/revision :millstrand.pool-basis/membership-revision)
+(s/def :millstrand.pool-basis/classpath-roots
+  (s/coll-of canonical-absolute-path? :kind vector?))
+(s/def :millstrand.core.specs/pool-basis
+  (s/and
+   (s/keys :req [:pool/name :host/id :host/generation-id
+                 :membership/revision]
+           :req-un [:millstrand.pool-basis/classpath-roots
+                    :millstrand.basis/fingerprint
+                    :millstrand.basis/classloader])
+   #(= #{:pool/name :host/id :host/generation-id :membership/revision
+         :members :classpath-roots :fingerprint :classloader}
+       (set (keys %)))
+   #(vector? (:members %))
+   #(every? (fn [member]
+              (s/valid? :millstrand.pool-basis/member member))
+            (:members %))))
 
 (s/def :millstrand.weaver-start/runtime-coordinate
   (s/and map?
@@ -497,6 +538,217 @@
          #(= #{:status :projection} (set (keys %)))
          #(= :admitted (:status %))
          #(s/valid? :millstrand.registry-projection/registry (:projection %))))
+
+;; JVM-pool boundaries are deliberately closed.  The host and probe workers
+;; receive these maps from Mill, so an extra or misspelled field must fail
+;; before a runtime, loader, or endpoint is opened.
+(def ^:private launch-member-keys
+  #{:config-dir :source-cwd :state-dir :data-dir :name :weaver-id
+    :generation-id :dependency-diagnostic})
+(def ^:private launch-manifest-keys
+  #{:format :jvm-pool :host-id :host-generation-id :membership-revision
+    :millstrand-source :millstrand-version :members})
+(def ^:private probe-member-keys
+  #{:original-config-dir :original-source-cwd :probe-config-dir
+    :probe-state-dir :probe-data-dir :member-diagnostic :name
+    :candidate-weaver-id :candidate-generation-id :old-member-baseline})
+(def ^:private probe-manifest-keys
+  #{:format :jvm-pool :probe-id :candidate-host-id
+    :candidate-host-generation-id :probe-root :millstrand-source :result
+    :collective-diagnostic :members})
+(def ^:private probe-result-member-keys
+  #{:original-config-dir :probe-config-dir :candidate-weaver-id
+    :candidate-generation-id :baseline-kind :status :registry-projection
+    :registry-diff :member-diagnostic})
+(def ^:private probe-result-keys
+  #{:format :probe-id :success :stage :probe-root :source-workspace
+    :completed :members :collective-diagnostic :log})
+(def ^:private ready-member-keys
+  #{:config-dir :weaver-id :generation-id :socket-path :nrepl-host
+    :nrepl-port})
+(def ^:private ready-marker-keys
+  #{:format :jvm-pool :host-id :host-generation-id :pid
+    :membership-revision :basis-fingerprint :members})
+
+(defn- closed-map? [allowed value]
+  (and (map? value) (= allowed (set (keys value)))))
+
+(defn- pool-id? [x]
+  (and (non-blank-string? x) (not (str/blank? (str/trim x)))))
+
+(defn- pool-member-id? [x]
+  (and (non-blank-string? x) (not (str/blank? (str/trim x)))))
+
+(defn- launch-member? [value]
+  (and (closed-map? launch-member-keys value)
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:config-dir :source-cwd :state-dir
+                                         :data-dir :dependency-diagnostic])))
+       (every? pool-member-id?
+               (vals (select-keys value [:name :weaver-id :generation-id])))))
+
+(defn- launch-manifest? [value]
+  (and (closed-map? launch-manifest-keys value)
+       (= "millstrand.jvm-pool-launch/v1" (:format value))
+       (pool-id? (:jvm-pool value))
+       (every? pool-member-id?
+               (vals (select-keys value [:host-id :host-generation-id
+                                         :membership-revision
+                                         :millstrand-source
+                                         :millstrand-version])))
+       (canonical-absolute-path? (:millstrand-source value))
+       (vector? (:members value))
+       (seq (:members value))
+       (every? launch-member? (:members value))))
+
+(defn- probe-baseline? [value]
+  (or (nil? value)
+      (and (closed-map? #{:status :projection} value)
+           (= :admitted (:status value))
+           (s/valid? :millstrand.registry-projection/registry
+                     (:projection value)))))
+
+(defn- probe-member? [value]
+  (and (closed-map? probe-member-keys value)
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:original-config-dir
+                                         :original-source-cwd :probe-config-dir
+                                         :probe-state-dir :probe-data-dir
+                                         :member-diagnostic])))
+       (every? pool-member-id?
+               (vals (select-keys value [:name :candidate-weaver-id
+                                         :candidate-generation-id])))
+       (probe-baseline? (:old-member-baseline value))))
+
+(defn- probe-manifest? [value]
+  (and (closed-map? probe-manifest-keys value)
+       (= "millstrand.jvm-pool-probe/v1" (:format value))
+       (every? pool-member-id?
+               (vals (select-keys value [:jvm-pool :probe-id
+                                         :candidate-host-id
+                                         :candidate-host-generation-id])))
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:probe-root :millstrand-source :result
+                                         :collective-diagnostic])))
+       (vector? (:members value))
+       (seq (:members value))
+       (every? probe-member? (:members value))))
+
+(defn- registry-diff? [value]
+  (and (closed-map? #{:added :removed :changed} value)
+       (every? #(s/valid? :millstrand.registry-projection/registry
+                          (get value %))
+               [:added :removed :changed])))
+
+(defn- probe-result-member? [value]
+  (and (closed-map? probe-result-member-keys value)
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:original-config-dir :probe-config-dir
+                                         :member-diagnostic])))
+       (every? pool-member-id?
+               (vals (select-keys value [:candidate-weaver-id
+                                         :candidate-generation-id])))
+       (#{:live :newcomer} (:baseline-kind value))
+       (#{:validated :failed} (:status value))
+       (s/valid? :millstrand.registry-projection/registry
+                 (:registry-projection value))
+       (if (= :newcomer (:baseline-kind value))
+         (nil? (:registry-diff value))
+         (registry-diff? (:registry-diff value)))))
+
+(defn- probe-result? [value]
+  (and (closed-map? probe-result-keys value)
+       (= "millstrand.jvm-pool-probe-result/v1" (:format value))
+       (pool-member-id? (:probe-id value))
+       (boolean? (:success value))
+       (if (:success value)
+         (= "probe/complete" (:stage value))
+         (= "probe/failure" (:stage value)))
+       (canonical-absolute-path? (:probe-root value))
+       (canonical-absolute-path? (:source-workspace value))
+       (vector? (:completed value))
+       (every? non-blank-string? (:completed value))
+       (vector? (:members value))
+       (every? probe-result-member? (:members value))
+       (or (not (:success value))
+           (every? #(= :validated (:status %)) (:members value)))
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:collective-diagnostic :log])))))
+
+(defn- ready-member? [value]
+  (and (closed-map? ready-member-keys value)
+       (every? canonical-absolute-path?
+               (vals (select-keys value [:config-dir :socket-path])))
+       (every? pool-member-id?
+               (vals (select-keys value [:weaver-id :generation-id
+                                         :nrepl-host])))
+       (pos-int? (:nrepl-port value))))
+
+(defn- ready-marker? [value]
+  (and (closed-map? ready-marker-keys value)
+       (= "millstrand.jvm-pool-ready/v1" (:format value))
+       (every? pool-member-id?
+               (vals (select-keys value [:jvm-pool :host-id
+                                         :host-generation-id
+                                         :membership-revision])))
+       (pos-int? (:pid value))
+       (s/valid? :millstrand.core.specs/basis-fingerprint
+                 (:basis-fingerprint value))
+       (vector? (:members value))
+       (seq (:members value))
+       (every? ready-member? (:members value))))
+
+(def ^:private pooled-status-keys
+  #{:jvm-pool :registered-members :live-members :pending-members
+    :restart-required :host-id :host-generation-id
+    :member-basis-fingerprint})
+(defn- pooled-status? [value]
+  (and (map? value)
+       (every? pooled-status-keys (keys value))
+       (every? #(contains? value %) [:jvm-pool :registered-members
+                                     :live-members :pending-members
+                                     :restart-required])
+       (pool-id? (:jvm-pool value))
+       (every? #(and (vector? %)
+                     (every? canonical-absolute-path? %))
+               (map value [:registered-members :live-members
+                           :pending-members]))
+       (boolean? (:restart-required value))
+       (or (not (contains? value :host-id))
+           (pool-member-id? (:host-id value)))
+       (or (not (contains? value :host-generation-id))
+           (pool-member-id? (:host-generation-id value)))
+       (or (not (contains? value :member-basis-fingerprint))
+           (s/valid? :millstrand.core.specs/basis-fingerprint
+                     (:member-basis-fingerprint value)))))
+(s/def :millstrand.jvm-pool/status-projection pooled-status?)
+(s/def :millstrand.core.specs/jvm-pool-status-projection
+  :millstrand.jvm-pool/status-projection)
+(s/def :millstrand.jvm-pool/member-metadata
+  (s/and map?
+         #(= #{:jvm-pool :host-id :host-generation-id
+               :member-basis-fingerprint}
+             (set (keys %)))
+         #(pool-id? (:jvm-pool %))
+         #(pool-member-id? (:host-id %))
+         #(pool-member-id? (:host-generation-id %))
+         #(s/valid? :millstrand.core.specs/basis-fingerprint
+                    (:member-basis-fingerprint %))))
+(s/def :millstrand.core.specs/jvm-pool-member-metadata
+  :millstrand.jvm-pool/member-metadata)
+
+(s/def :millstrand.jvm-pool/launch-manifest launch-manifest?)
+(s/def :millstrand.jvm-pool/probe-manifest probe-manifest?)
+(s/def :millstrand.jvm-pool/probe-result probe-result?)
+(s/def :millstrand.jvm-pool/ready-marker ready-marker?)
+(s/def :millstrand.core.specs/jvm-pool-launch-manifest
+  :millstrand.jvm-pool/launch-manifest)
+(s/def :millstrand.core.specs/jvm-pool-probe-manifest
+  :millstrand.jvm-pool/probe-manifest)
+(s/def :millstrand.core.specs/jvm-pool-probe-result
+  :millstrand.jvm-pool/probe-result)
+(s/def :millstrand.core.specs/jvm-pool-ready-marker
+  :millstrand.jvm-pool/ready-marker)
 
 (s/def ::fresh-runtime-probe-options
   (s/and

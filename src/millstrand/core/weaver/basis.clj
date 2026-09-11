@@ -280,7 +280,12 @@
                 (io/file workspace-path root))))))
         classpath-roots))
 
-(defn- generation-classloader
+(defn create-classloader
+  "Create one classloader with `classpath-roots` in the supplied order.
+
+  Roots are expected to be canonical absolute paths. The caller owns the
+  resulting loader and may share it across independently constructed runtimes.
+  No dependency or namespace compatibility checks are performed here."
   [classpath-roots]
   (let [loader (DynamicClassLoader. (.getContextClassLoader
                                      (Thread/currentThread)))]
@@ -360,7 +365,7 @@
                      :fingerprint (basis-fingerprint
                                    (fingerprint-value sources aliases
                                                       basis-projection))
-                     :classloader (generation-classloader
+                     :classloader (create-classloader
                                    (:classpath-roots basis-projection))}]
          (when-not (s/valid? :millstrand.core.specs/generation-basis result)
            (throw (ex-info "constructed generation basis violates its contract"

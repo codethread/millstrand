@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millstrand.core.weaver.basis :as basis]))
+            [millstrand.core.weaver.basis :as basis]
+            [millstrand.core.weaver.pool-basis :as pool-basis]))
 
 (defn- inspect-basis!
   [workspace & arguments]
@@ -284,3 +285,154 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"outside the canonical EDN domain"
                         (basis/canonical-edn (java.util.UUID/randomUUID)))))
+
+(defn- launch-manifest
+  [members source]
+  {:format "millstrand.jvm-pool-launch/v1"
+   :jvm-pool "backend"
+   :host-id "host-1"
+   :host-generation-id "host-generation-1"
+   :membership-revision "membership-1"
+   :millstrand-source (.getCanonicalPath source)
+   :millstrand-version "dev"
+   :members (mapv (fn [[config-dir source-cwd name]]
+                    {:config-dir (.getCanonicalPath config-dir)
+                     :source-cwd (.getCanonicalPath source-cwd)
+                     :state-dir (.getCanonicalPath (io/file config-dir "state"))
+                     :data-dir (.getCanonicalPath (io/file config-dir "data"))
+                     :name name
+                     :weaver-id (str "weaver-" name)
+                     :generation-id (str "generation-" name)
+                     :dependency-diagnostic
+                     (.getCanonicalPath (io/file config-dir "dependency.json"))})
+                  members)})
+
+(deftest pool-basis-keeps-member-relative-resolution-and-root-order
+  (let [source (workspace! {} nil)
+        member-a (workspace! {:deps {'demo/a {:local/root "member-a-root"}}} nil)
+        member-b (workspace! {:deps {'demo/b {:local/root "member-b-root"}}} nil)
+        captured (atom [])
+        manifest (launch-manifest [[member-a source "a"]
+                                   [member-b source "b"]]
+                                  source)
+        root-a (.getCanonicalPath (io/file source "root-a"))
+        root-b (.getCanonicalPath (io/file source "root-b"))
+        shared (.getCanonicalPath (io/file source "shared"))
+        created
+        (binding [basis/*create-basis*
+                  (fn [options]
+                    (swap! captured conj options)
+                    {:libs {:demo/a {:mvn/version "1"}}
+                     :classpath-roots (if (= (.getCanonicalPath member-a)
+                                             (:dir options))
+                                        [root-a shared shared]
+                                        [shared root-b])
+                     :argmap {}})]
+          (pool-basis/create-pool-basis manifest
+                                        {:local/root (.getCanonicalPath source)}))]
+    (is (= [(.getCanonicalPath member-a) (.getCanonicalPath member-b)]
+           (mapv :dir @captured)))
+    (is (every? #(= (.getCanonicalPath
+                     (io/file source
+                              (if (= (:dir %) (.getCanonicalPath member-a))
+                                "member-a-root"
+                                "member-b-root")))
+                    (get-in % [:project :deps (if (= (:dir %) (.getCanonicalPath member-a))
+                                                'demo/a
+                                                'demo/b) :local/root]))
+                @captured))
+    (is (= [root-a shared root-b] (:classpath-roots created)))
+    (is (nil? (:libs created))
+        "the pool basis never presents a merged dependency map")
+    (is (= {:mvn/version "1"}
+           (get-in created [:members 0 :generation-basis :basis :libs :demo/a])))
+    (is (instance? ClassLoader (:classloader created)))
+    (is (= 2 (count (:members created))))
+    (is (not= (get-in created [:members 0 :generation-basis :classloader])
+              (get-in created [:members 1 :generation-basis :classloader])))))
+
+(deftest pool-basis-fingerprint-includes-members-and-member-roots
+  (let [source (workspace! {} nil)
+        member-a (workspace! {} nil)
+        member-b (workspace! {} nil)
+        manifest (launch-manifest [[member-a source "a"]
+                                   [member-b source "b"]]
+                                  source)
+        roots (atom {(.getCanonicalPath member-a) ["/root/a"]
+                     (.getCanonicalPath member-b) ["/root/b"]})
+        make-basis (fn [candidate]
+                     (binding [basis/*create-basis*
+                               (fn [{:keys [dir]}]
+                                 {:libs {}
+                                  :classpath-roots (@roots dir)
+                                  :argmap {}})]
+                       (pool-basis/create-pool-basis
+                        candidate {:local/root (.getCanonicalPath source)})))
+        original (make-basis manifest)
+        changed-root (do (swap! roots update (.getCanonicalPath member-b)
+                                conj "/root/changed")
+                         (make-basis manifest))]
+    (is (not= (:fingerprint original) (:fingerprint changed-root)))
+    (is (not= (:fingerprint original)
+              (:fingerprint
+               (make-basis (assoc-in manifest [:members 1 :name]
+                                     "changed")))))
+    (is (not= (:fingerprint original)
+              (:fingerprint
+               (make-basis
+                (assoc manifest :members (vec (reverse (:members manifest))))))))))
+
+(deftest pool-manifests-are-closed
+  (let [source (workspace! {} nil)
+        member (workspace! {} nil)
+        manifest (launch-manifest [[member source "a"]] source)]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"closed contract"
+         (pool-basis/validate-launch-manifest
+          (assoc manifest :unexpected true))))))
+
+(deftest probe-basis-uses-private-config-and-original-source-authority
+  (let [source (workspace! {} nil)
+        original-root (workspace! {} nil)
+        probe-root (workspace! {:deps {'demo/local {:local/root "original-lib"}}}
+                               nil)
+        captured (atom nil)
+        manifest {:format "millstrand.jvm-pool-probe/v1"
+                  :jvm-pool "backend"
+                  :probe-id "probe-1"
+                  :candidate-host-id "probe-host-1"
+                  :candidate-host-generation-id "probe-generation-1"
+                  :probe-root (.getCanonicalPath (io/file probe-root "root"))
+                  :millstrand-source (.getCanonicalPath source)
+                  :result (.getCanonicalPath (io/file probe-root "result.json"))
+                  :collective-diagnostic
+                  (.getCanonicalPath (io/file probe-root "collective.jsonl"))
+                  :members [{:original-config-dir (.getCanonicalPath original-root)
+                             :original-source-cwd (.getCanonicalPath source)
+                             :probe-config-dir (.getCanonicalPath probe-root)
+                             :probe-state-dir
+                             (.getCanonicalPath (io/file probe-root "state"))
+                             :probe-data-dir
+                             (.getCanonicalPath (io/file probe-root "data"))
+                             :member-diagnostic
+                             (.getCanonicalPath (io/file probe-root "member.jsonl"))
+                             :name "a"
+                             :candidate-weaver-id "probe-weaver-a"
+                             :candidate-generation-id "probe-generation-a"
+                             :old-member-baseline nil}]}
+        result
+        (binding [basis/*create-basis*
+                  (fn [options]
+                    (reset! captured options)
+                    {:libs {}
+                     :classpath-roots []
+                     :argmap {}})]
+          (pool-basis/create-probe-pool-basis
+           manifest {:local/root (.getCanonicalPath source)}))]
+    (is (= (.getCanonicalPath probe-root) (:dir @captured)))
+    (is (= (.getCanonicalPath (io/file source "original-lib"))
+           (get-in @captured [:project :deps 'demo/local :local/root])))
+    (is (= (.getCanonicalPath original-root)
+           (get-in result [:members 0 :config-dir])))
+    (is (instance? ClassLoader (:classloader result)))))
