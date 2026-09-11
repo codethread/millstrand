@@ -1,8 +1,8 @@
 # JVM pools proposal
 
 - **Document ID:** `PROP-Jvp-001`
-- **Status:** Draft
-- **Approved:** —
+- **Status:** Approved
+- **Approved:** 2026-09-11, by the user's instruction to proceed to implementation
 - **Related RFCs:** None
 - **Related root specs:** [CLI](../../specs/cli.md) (SPEC-002), [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver runtime](../../specs/daemon-runtime.md) (SPEC-004)
 
