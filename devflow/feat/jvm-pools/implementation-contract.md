@@ -40,7 +40,7 @@ Registration and automatic start are independent. A live pool is not replaced as
 
 Add `JVMPool *string` to Go's loaded configuration. `nil` records omitted or effective `null`; the loader must retain an internal presence bit while applying the local overlay so local `null` can clear a base string. Reject strings for which `strings.TrimSpace(value) == ""`.
 
-Add `JVMPool *string` with JSON key `jvm_pool,omitempty` to `MillWorldRequest`. Absence means “do not edit configuration”. Presence must contain the already validated non-blank flag value. JSON `null` is not a command-line override; local opt-out is expressed by configuration or a future explicit command, not by overloading an absent flag.
+Add `JVMPool *string` with JSON key `jvm_pool,omitempty` to `MillWorldRequest`. Go's standard pointer decoding maps both an omitted key and a JSON `null` to `nil`; both mean “do not edit configuration”. A non-nil pointer must contain the already validated non-blank flag value. A config-file `JVMPool: null` remains an explicit local opt-out and is distinct from this init-wire rule. Do not add a wrapper whose only purpose is to reject wire `null`.
 
 The init flag writer performs an atomic read-modify-write of `config.local.json`, preserving unrelated keys. It never writes `JVMPool` into `config.json` and never rewrites an existing base setting during plain init.
 
@@ -245,9 +245,75 @@ Automatic start groups eligible records by effective pool name and submits at mo
 
 Use one pool-scoped restart record beneath the host directory. Extend the current probe-before-cutover state machine with old and candidate host identities and ordered live, registered, and pending sets. Do not write competing per-member restart records for one transition.
 
-The disposable replacement probe is one candidate pool JVM. It resolves and composes every member basis, starts every probe runtime with disposable storage and no canonical metadata, collects all startup and module declarations, and produces per-member diagnostics. A successful probe is stopped before cutover. A failed probe retains diagnostics and leaves old admission open. After admission closes and the old host is confirmed stopped, replacement failure records `failed`; it does not re-admit the old host.
+The disposable replacement probe is one candidate pool JVM. It uses a separate `millstrand.jvm-pool-probe/v1` manifest and result format; it must reject the serving `millstrand.jvm-pool-launch/v1` manifest and ready paths. Mill derives the probe manifest from the exact registered replacement set and gives each member a fresh candidate Weaver and generation identity. Each member record maps its original canonical `config_dir` and `source_cwd` to private `config`, `state`, `data`, and diagnostic paths below one private pool probe root. The original config and source roots are retained only for dependency/source resolution. Original state, data, metadata, socket, ready-marker, and custody paths are never passed to probe runtime startup.
 
-Host logs and pool transition diagnostics live beneath the pool host directory. Per-member dependency diagnostics remain at the manifest paths because they are attributable to one workspace.
+The probe resolves each copied member basis, then composes one candidate pool classloader from all member bases before starting any member. It must not call the single-member basis helper independently in a way that creates one loader per member. Each member starts through the existing effect-free [`fresh-runtime-probe!`](../../../src/millstrand/core/weaver/runtime.clj#L837-L915) staging path with `:storage :sqlite-memory`, `:publish? false`, and `:probe? true`, not ordinary serving startup. Probe mode has no scheduler or event lane, lifecycle apply, process custody, canonical metadata, canonical ready marker, serving endpoint admission, launch custody secret, or Mill admission record. It collects startup and module declarations, stages and validates candidate registries, and stops every probe runtime before a successful replacement cutover.
+
+For every member already in the admitted host, the manifest carries an old baseline with `status: "admitted"` and that member's complete redacted `registry_projection`, keyed by original `config_dir`. A registered newcomer carries `old_member_baseline: null`; null is valid only for that explicit newcomer case. The probe validates a newcomer from its complete candidate projection and declarations but reports no old-generation diff. It never substitutes an empty baseline. The exact probe manifest is:
+
+```json
+{
+  "format": "millstrand.jvm-pool-probe/v1",
+  "jvm_pool": "backend",
+  "probe_id": "probe-<opaque-uuid>",
+  "candidate_host_id": "probe-host-<opaque-uuid>",
+  "candidate_host_generation_id": "probe-host-generation-<opaque-uuid>",
+  "probe_root": "/private/pool-probes/<probe-id>",
+  "millstrand_source": "/canonical/millstrand/source",
+  "result": "/private/pool-probes/<probe-id>/result.json",
+  "collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
+  "members": [
+    {
+      "original_config_dir": "/canonical/A/.millstrand",
+      "original_source_cwd": "/canonical/A",
+      "probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
+      "probe_state_dir": "/private/pool-probes/<probe-id>/members/A/state",
+      "probe_data_dir": "/private/pool-probes/<probe-id>/members/A/data",
+      "member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl",
+      "name": "A",
+      "candidate_weaver_id": "probe-weaver-<opaque-uuid>",
+      "candidate_generation_id": "probe-generation-<opaque-uuid>",
+      "old_member_baseline": {
+        "status": "admitted",
+        "projection": {}
+      }
+    }
+  ]
+}
+```
+
+The probe launch has no launch token and does not register a process-custody allowance. The exact result is one closed `millstrand.jvm-pool-probe-result/v1` object written to the manifest's private result path:
+
+```json
+{
+  "format": "millstrand.jvm-pool-probe-result/v1",
+  "probe_id": "probe-<opaque-uuid>",
+  "success": true,
+  "stage": "probe/complete",
+  "probe_root": "/private/pool-probes/<probe-id>",
+  "source_workspace": "/canonical/A/.millstrand",
+  "completed": ["basis/compose", "member/A", "member/B"],
+  "members": [
+    {
+      "original_config_dir": "/canonical/A/.millstrand",
+      "probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
+      "candidate_weaver_id": "probe-weaver-<opaque-uuid>",
+      "candidate_generation_id": "probe-generation-<opaque-uuid>",
+      "baseline_kind": "live",
+      "status": "validated",
+      "registry_projection": {},
+      "registry_diff": {"added": {}, "removed": {}, "changed": {}},
+      "member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl"
+    }
+  ],
+  "collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
+  "log": "/private/pool-probes/<probe-id>/probe.log"
+}
+```
+
+`success: false` uses `stage: "probe/failure"`, retains the same closed fields, and records the structured failure context in the collective diagnostic. Each `members` entry contains the original mapping, candidate identities, `baseline_kind` (`live` or `newcomer`), `status` (`validated` or `failed`), `registry_projection`, `registry_diff` (a redacted added/removed/changed diff for `live`, `null` for `newcomer`), and `member_diagnostic`. A successful result is stopped and its entire probe root is removed; a failed result is stopped best-effort and retains the probe root, result, per-member diagnostics, collective diagnostics, and log. After a successful probe, Mill atomically closes old admission and records `restarting`; a failed probe leaves old admission open. After old-host stop, replacement failure records `failed` and never re-admits the old host.
+
+Host logs and pool transition diagnostics live beneath the pool host directory. Serving per-member dependency diagnostics remain at serving manifest paths. Probe diagnostics remain only below the private probe root and are never written to serving paths. The lifecycle Done-when must prove that a successful or failed probe leaves every canonical member database, metadata, ready marker, socket, state/data artifact, and member custody record untouched; only the probe root may be cleaned up or retained.
 
 ## Status contract
 
@@ -359,7 +425,7 @@ The first implementation intentionally uses one global atomic membership file, o
 
 ## Worker split and Done-when
 
-These tasks are ordered where a later task consumes an earlier contract. Their owned files do not overlap.
+These tasks are ordered where a later task consumes an earlier contract. Concurrently active ownership is disjoint. A sequential follow-on may edit a prior phase's seam when the consumed contract requires it; no side registry or adapter is introduced only to preserve permanent file disjointness.
 
 ### W1 — Configuration model
 
@@ -387,21 +453,21 @@ Done when tests prove two runtimes share one loader but have distinct storage, r
 
 ### W5 — Declaration scoping and pool refresh
 
-Own `src/millstrand/core/weaver/module_refresh.clj`, `src/millstrand/core/weaver/module_graph.clj`, `src/millstrand/api/runtime/alpha.clj`, `test/clojure/millstrand/core/weaver/modules_test.clj`, and `test/clojure/millstrand/api/runtime/alpha_test.clj`. Consume the host context added by W4 without editing W4 files.
+Own `src/millstrand/core/weaver/module_refresh.clj`, `src/millstrand/core/weaver/module_graph.clj`, `src/millstrand/api/runtime/alpha.clj`, `test/clojure/millstrand/core/weaver/modules_test.clj`, and `test/clojure/millstrand/api/runtime/alpha_test.clj`. Consume the host context added by W4. This phase is sequential after W4 and may edit an earlier runtime or pool dispatch seam when the refresh contract requires it.
 
 Done when tests prove same-symbol declarations remain scoped per runtime, a full refresh returns per-member outcomes, membership or basis change returns `:restart-required` before source evaluation, pooled `:only` fails with `:pool/targeted-refresh-unsupported`, raw reload reports shared effects, and isolated refresh is unchanged.
 
 ### W6 — Mill host lifecycle and custody
 
-Own `cli/cmd/mill/lifecycle.go`, `forward.go`, `restart.go`, `restart_process.go`, `restart_probe.go`, `restart_record.go`, `process_control.go`, new pool-host helpers, `lifecycle_test.go`, `forward_test.go`, `restart_test.go`, `restart_status_test.go`, `process_control_test.go`, and a new `pool_lifecycle_test.go`. Consume W2 and the manifest/ready contracts without editing configuration or CLI request files.
+Own `cli/cmd/mill/main.go`, `lifecycle.go`, `forward.go`, `restart.go`, `restart_process.go`, `restart_probe.go`, `restart_record.go`, `process_control.go`, new pool-host helpers, `lifecycle_test.go`, `forward_test.go`, `restart_test.go`, `restart_status_test.go`, `process_control_test.go`, and a new `pool_lifecycle_test.go`. Consume W2 and the manifest, probe, and ready contracts without editing configuration or CLI request files. W6 owns the server host maps, claims, gates, and their initialization in `main.go` so the lifecycle model is buildable.
 
-Done when `TestAdmitGroupedWeaverIdentitiesByOneHostPID` passes; package tests also prove one host claim and gate, exact all-member readiness, pending start without a child launch, collective stop, restart through a pending member, failed probe preservation, failed post-cutover admission, and member-scoped custody.
+Done when `TestAdmitGroupedWeaverIdentitiesByOneHostPID` passes; package tests also prove one host claim and gate, exact all-member readiness, pending start without a child launch, collective stop, restart through a pending member, the exact separate probe manifest/result contract with shared candidate loader, live and newcomer baselines, failed probe preservation, failed post-cutover admission, member-scoped custody, and canonical database/artifact/custody paths untouched by probe success or failure.
 
 ### W7 — CLI and automatic-start integration
 
-Own `cli/internal/client/mill.go`, `cli/internal/client/client.go`, their existing tests, `cli/cmd/mill/main.go`, `subcommands.go`, `autostart.go`, `subcommands_test.go`, `autostart_test.go`, and `autostart_queue_test.go`. Wire the flag, request presence, status fields, pool grouping, and W6 lifecycle helpers.
+Own `cli/internal/client/mill.go`, `cli/internal/client/client.go`, their existing tests, `cli/cmd/mill/subcommands.go`, `autostart.go`, `subcommands_test.go`, `autostart_test.go`, and `autostart_queue_test.go`. After W6 completes, W7 may also edit `cli/cmd/mill/main.go` for request handling, status, and automatic-start wiring. Wire the flag, pointer presence semantics, status fields, pool grouping, and W6 lifecycle helpers; null and omission on the init wire both mean no flag override, while a supplied flag is non-blank.
 
-Done when focused tests prove init writes only the local pool key, registration does not imply launch, plain init honours effective configuration, automatic start deduplicates a pool and never replaces a live host, and status returns the exact running, pending, and stopped projections.
+Done when focused tests prove init writes only the local pool key, registration does not imply launch, plain init honours effective configuration, wire null and omission both leave configuration unchanged, a supplied flag rejects blank values, automatic start deduplicates a pool and never replaces a live host, and status returns the exact running, pending, and stopped projections.
 
 ### W8 — Process acceptance
 
