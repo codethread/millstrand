@@ -25,10 +25,10 @@ endpoint and REPL runtime targeting, native child custody across Weaver
 replacement, cancel/ack before Mill shutdown, collective stop/start, and
 durable membership through Mill restart.
 
-The failure-status worker `vazn6/gjdqg` is still running. Its checks are not
-claimed here, and this record does not claim that the full landing gate passed.
-The root plan remains Active. This record makes no feature-shipped, release, or
-measured-memory-savings claim.
+Failure-path acceptance and final landing results are recorded on task `05ryv`
+and coordinator root `9fg30`. The evidence above covers the lifecycle check;
+it does not establish failure-path acceptance or final landing. The root plan
+remains Active. Memory savings have not been measured.
 
 ## Smallest test set
 

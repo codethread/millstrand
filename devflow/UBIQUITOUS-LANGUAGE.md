@@ -167,7 +167,7 @@ Registered by the modules under `.millstrand/me/workflows/` and `.millstrand/me/
 - A **note** is a closed strand attached by the `notes` battery. Its text is write-once and cannot be rewritten, archived, or deleted on any mutation path.
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
 - A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
-- One real weaver process publishes exactly one **ambient runtime**.
+- An isolated weaver publishes one **ambient runtime** by default. A **pool host** publishes none; each member uses an explicit runtime binding.
 - A **weaver generation** mints one generation basis and classloader at boot. A **basis change** requires a replacement generation; workspace-relative source changes can refresh live in the current basis.
 - An **op** is the only thing the **`strand` CLI** can invoke. There are no builtin subcommands, so every command name came from a spool.
 - A **workflow run** has one root at a time, and that root moves as **stages** advance.
