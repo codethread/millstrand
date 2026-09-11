@@ -141,6 +141,171 @@
     (instance? clojure.lang.IDeref (:host-context host)) @(:host-context host)
     :else host))
 
+(defn- pool-state-root
+  [manifest]
+  (let [state-dir (some-> manifest :members first :state-dir io/file .getCanonicalFile)
+        state-root (some-> state-dir .getParentFile .getParentFile)]
+    (when-not state-root
+      (throw (ex-info "Pool member state directory has no state root"
+                      {:manifest manifest})))
+    state-root))
+
+(defn- membership-file
+  [manifest]
+  (io/file (pool-state-root manifest) "jvm-pools" "membership.json"))
+
+(defn- read-membership
+  "Read the durable membership document used for pooled refresh preflight."
+  [manifest]
+  (let [file (membership-file manifest)]
+    (when-not (.exists file)
+      (throw (ex-info "Pooled refresh requires a durable membership document"
+                      {:reason :pool/membership-unavailable
+                       :file (.getPath file)})))
+    (try
+      (let [value (json/read-str
+                   (slurp file)
+                   :key-fn #(keyword (str/replace % "_" "-")))]
+        (when-not (and (= "millstrand.jvm-pool-membership/v1" (:format value))
+                       (string? (:revision value))
+                       (vector? (:members value)))
+          (throw (ex-info "Pooled membership document has an invalid shape"
+                          {:reason :pool/membership-invalid
+                           :file (.getPath file)
+                           :value value})))
+        value)
+      (catch clojure.lang.ExceptionInfo throwable
+        (throw throwable))
+      (catch Throwable throwable
+        (throw (ex-info "Pooled membership document cannot be read"
+                        {:reason :pool/membership-invalid
+                         :file (.getPath file)}
+                        throwable))))))
+
+(defn- filtered-membership
+  [manifest membership]
+  (->> (:members membership)
+       (filter #(= (:jvm-pool %) (:jvm-pool manifest)))
+       (map #(select-keys % [:config-dir :source-cwd :jvm-pool]))
+       (sort-by :config-dir)
+       vec))
+
+(defn- manifest-membership
+  [manifest]
+  (->> (:members manifest)
+       (map #(assoc (select-keys % [:config-dir :source-cwd])
+                    :jvm-pool (:jvm-pool manifest)))
+       (sort-by :config-dir)
+       vec))
+
+(defn- member-basis-signature
+  [generation-basis]
+  {:fingerprint (:fingerprint generation-basis)
+   :classpath-roots (get-in generation-basis [:basis :classpath-roots])
+   :aliases (:aliases generation-basis)
+   :reserved-deps (:reserved-deps generation-basis)})
+
+(defn- basis-signature
+  [pool-basis]
+  {:fingerprint (:fingerprint pool-basis)
+   :classpath-roots (:classpath-roots pool-basis)
+   :members (mapv (fn [{:keys [config-dir generation-basis]}]
+                    (assoc (member-basis-signature generation-basis)
+                           :config-dir config-dir))
+                  (:members pool-basis))})
+
+(defn- throwable-data
+  [^Throwable throwable]
+  {:message (ex-message throwable)
+   :class (str (class throwable))
+   :data (ex-data throwable)})
+
+(defn- restart-required-result
+  [host reason members]
+  {:status :restart-required
+   :jvm-pool (get-in host [:manifest :jvm-pool])
+   :host-generation-id (get-in host [:manifest :host-generation-id])
+   :members members
+   :reason reason})
+
+(defn- restart-members
+  [host reason data]
+  (into (sorted-map)
+        (map (fn [member]
+               [(:config-dir member)
+                (merge {:status :restart-required
+                        :reason reason}
+                       data)]))
+        (:members (:manifest host))))
+
+(defn- membership-drift-result
+  [host expected actual]
+  (restart-required-result
+   host :pool/membership-changed
+   (into (sorted-map)
+         (map (fn [member]
+                [(:config-dir member)
+                 {:status :restart-required
+                  :reason :pool/membership-changed
+                  :expected (some #(when (= (:config-dir %) (:config-dir member)) %)
+                                  expected)
+                  :actual (some #(when (= (:config-dir %) (:config-dir member)) %)
+                                actual)}])
+              (sort-by :config-dir (distinct (concat expected actual)))))))
+
+(defn- basis-drift-result
+  [host candidate]
+  (let [manifest (:manifest host)]
+    (restart-required-result
+     host :pool/basis-changed
+     (into (sorted-map)
+           (map (fn [member]
+                  (let [config-dir (:config-dir member)
+                        current (some #(when (= config-dir (:config-dir %)) %)
+                                      (:members (:pool-basis host)))
+                        candidate-member
+                        (some #(when (= config-dir (:config-dir %)) %)
+                              (:members candidate))]
+                    [config-dir
+                     {:status :restart-required
+                      :reason :pool/basis-changed
+                      :current (some-> current :generation-basis
+                                       member-basis-signature)
+                      :candidate (some-> candidate-member :generation-basis
+                                         member-basis-signature)}])))
+           (:members manifest)))))
+
+(defn- preflight-refresh
+  [host]
+  (let [manifest (:manifest host)
+        membership-result (try
+                            {:membership (read-membership manifest)}
+                            (catch clojure.lang.ExceptionInfo throwable
+                              {:failure throwable}))]
+    (if-let [failure (:failure membership-result)]
+      (let [reason (or (:reason (ex-data failure)) :pool/membership-invalid)]
+        (restart-required-result
+         host reason
+         (restart-members host reason {:error (throwable-data failure)})))
+      (let [membership (:membership membership-result)
+            expected (manifest-membership manifest)
+            actual (filtered-membership manifest membership)]
+        (if-not (= expected actual)
+          (membership-drift-result host expected actual)
+          (let [basis-result (try
+                               {:candidate (pool-basis/create-pool-basis manifest)}
+                               (catch Throwable throwable
+                                 {:failure throwable}))]
+            (if-let [failure (:failure basis-result)]
+              (restart-required-result
+               host :pool/basis-changed
+               (restart-members host :pool/basis-changed
+                                {:error (throwable-data failure)}))
+              (let [candidate (:candidate basis-result)]
+                (when-not (= (basis-signature (:pool-basis host))
+                             (basis-signature candidate))
+                  (basis-drift-result host candidate))))))))))
+
 (defn start-host!
   "Construct, collectively publish, and ready one pooled host.
 
@@ -250,39 +415,60 @@
    #_{:splint/disable [lint/locking-object]}
    (let [host (host-runtime-view host)]
      (locking (:refresh-lock host)
-       (when (contains? opts :only)
-         (throw (ex-info "Targeted refresh is unsupported for a pooled host"
-                         {:reason :pool/targeted-refresh-unsupported
-                          :jvm-pool (get-in host [:manifest :jvm-pool])})))
-       (let [manifest (:manifest host)
-             candidate (pool-basis/create-pool-basis manifest)]
-         (if (not= (:fingerprint candidate)
-                   (get-in host [:pool-basis :fingerprint]))
-           {:status :restart-required
-            :jvm-pool (:jvm-pool manifest)
-            :host-generation-id (:host-generation-id manifest)
-            :members (into {}
-                           (map (fn [member]
-                                  [(:config-dir member)
-                                   {:status :restart-required}])
-                                (:members manifest)))}
-           (let [results (mapv (fn [member]
-                                 (let [member-runtime
-                                       (get-in host [:runtimes-by-config
-                                                     (:config-dir member)])]
-                                   [(:config-dir member)
-                                    (runtime/refresh-modules!
-                                     member-runtime
-                                     {:pool-refreshing? true
-                                      :startup? true})]))
-                               (:members manifest))]
-             {:status (if (some #(= :applied (get-in % [1 :status]))
-                                results)
-                        :applied
-                        :unchanged)
-              :jvm-pool (:jvm-pool manifest)
-              :host-generation-id (:host-generation-id manifest)
-              :members (into {} results)})))))))
+       (let [finish-result (fn [result]
+                             (if (:dry-run? opts)
+                               (assoc result
+                                      :dry-run? true
+                                      :caveat "Collection may evaluate module source code.")
+                               result))]
+         (when (contains? opts :only)
+           (throw (ex-info "Targeted refresh is unsupported for a pooled host"
+                           {:reason :pool/targeted-refresh-unsupported
+                            :jvm-pool (get-in host [:manifest :jvm-pool])})))
+         (if-let [preflight-result (preflight-refresh host)]
+           (finish-result preflight-result)
+           (let [manifest (:manifest host)
+                 member-results
+                 (loop [remaining (:members manifest)
+                        completed []]
+                   (if-let [member (first remaining)]
+                     (let [config-dir (:config-dir member)
+                           member-runtime (get-in host [:runtimes-by-config config-dir])
+                           step (try
+                                  {:result (runtime/refresh-modules!
+                                            member-runtime
+                                            {:pool-refreshing? true
+                                             :startup? true
+                                             :dry-run? (:dry-run? opts)})}
+                                  (catch Throwable throwable
+                                    {:failure throwable}))]
+                       (if-let [throwable (:failure step)]
+                         (into completed
+                               (concat
+                                [[config-dir
+                                  {:status :failed
+                                   :reason :pool/member-refresh-failed
+                                   :restart-required true
+                                   :error (throwable-data throwable)}]]
+                                (map (fn [skipped]
+                                       [(:config-dir skipped)
+                                        {:status :skipped
+                                         :reason :pool/member-refresh-skipped
+                                         :restart-required true}])
+                                     (next remaining))))
+                         (recur (next remaining)
+                                (conj completed [config-dir (:result step)]))))
+                     completed))]
+             (finish-result
+              {:status (cond
+                         (some #(#{:failed :skipped} (:status (second %)))
+                               member-results) :partial
+                         (some #(= :applied (get-in % [1 :status])) member-results)
+                         :applied
+                         :else :unchanged)
+               :jvm-pool (:jvm-pool manifest)
+               :host-generation-id (:host-generation-id manifest)
+               :members (into (sorted-map) member-results)}))))))))
 
 (defn probe!
   "Run a private pooled replacement probe and retain its private root."

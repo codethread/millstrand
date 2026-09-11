@@ -367,49 +367,64 @@
 (defn reload-basis-lib!
   "Reload loaded namespaces backed by source paths for `lib` in the running basis.
 
+  A pooled member selects roots from its own member basis, takes the host
+  refresh lock, and reports that the reloaded definitions are shared.
+
   Returns the closed result owned by
   `:millstrand.api.runtime.alpha/reload-code-result` (SPEC-003.C24)."
   [runtime lib]
-  (let [coordinate (get-in runtime [:generation-basis :basis :libs lib])]
-    (when-not coordinate
-      (throw (ex-info "Library is absent from the running generation basis"
-                      {:lib lib :stage :lookup})))
-    (let [roots (->> (:paths coordinate)
-                     (map #(-> % io/file .getCanonicalPath))
-                     vec)]
-      (when-not (seq roots)
-        (throw (ex-info "Library has no source-backed classpath entry"
-                        {:lib lib :stage :source-paths})))
-      (let [source-files (fn [namespace]
-                           (->> (ns-interns namespace)
-                                vals
-                                (keep (comp :file meta))
-                                distinct))
-            loader (:generation-classloader runtime)
-            namespaces
-            (->> (all-ns)
-                 (keep (fn [namespace]
-                         (when (some (fn [file]
-                                       (when-let [resource (.getResource ^ClassLoader loader file)]
-                                         (when (= "file" (.getProtocol resource))
-                                           (let [path (-> resource .toURI io/file
-                                                          .getCanonicalPath)]
-                                             (some #(or (= path %)
-                                                        (str/starts-with?
-                                                         path
-                                                         (str % java.io.File/separator)))
-                                                   roots)))))
-                                     (source-files namespace))
-                           (ns-name namespace))))
-                 (sort-by str)
-                 vec)]
-        (with-runtime-and-generation-classloader
-          runtime
-          #(doseq [namespace namespaces]
-             (require namespace :reload)))
-        {:lib lib
-         :status (if (seq namespaces) :reloaded :unchanged)
-         :namespaces namespaces}))))
+  (let [host (when (:pool-host runtime)
+               (if (instance? clojure.lang.IDeref (:pool-host runtime))
+                 @(:pool-host runtime)
+                 (:pool-host runtime)))
+        reload! (fn []
+                  (let [basis (or (:member-generation-basis runtime)
+                                  (:generation-basis runtime))
+                        coordinate (get-in basis [:basis :libs lib])]
+                    (when-not coordinate
+                      (throw (ex-info "Library is absent from the running generation basis"
+                                      {:lib lib :stage :lookup})))
+                    (let [roots (->> (:paths coordinate)
+                                     (map #(-> % io/file .getCanonicalPath))
+                                     vec)]
+                      (when-not (seq roots)
+                        (throw (ex-info "Library has no source-backed classpath entry"
+                                        {:lib lib :stage :source-paths})))
+                      (let [source-files (fn [namespace]
+                                           (->> (ns-interns namespace)
+                                                vals
+                                                (keep (comp :file meta))
+                                                distinct))
+                            loader (:generation-classloader runtime)
+                            namespaces
+                            (->> (all-ns)
+                                 (keep (fn [namespace]
+                                         (when (some (fn [file]
+                                                       (when-let [resource
+                                                                  (.getResource ^ClassLoader loader file)]
+                                                         (when (= "file" (.getProtocol resource))
+                                                           (let [path (-> resource .toURI io/file
+                                                                          .getCanonicalPath)]
+                                                             (some #(or (= path %)
+                                                                        (str/starts-with?
+                                                                         path
+                                                                         (str % java.io.File/separator)))
+                                                                   roots)))))
+                                                     (source-files namespace))
+                                           (ns-name namespace))))
+                                 (sort-by str)
+                                 vec)]
+                        (with-runtime-and-generation-classloader
+                          runtime
+                          #(doseq [namespace namespaces]
+                             (require namespace :reload)))
+                        (cond-> {:lib lib
+                                 :status (if (seq namespaces) :reloaded :unchanged)
+                                 :namespaces namespaces}
+                          (:pool-host runtime) (assoc :shared? true))))))]
+    (if-let [lock (:refresh-lock host)]
+      (locking lock (reload!))
+      (reload!))))
 
 (defn- close-module-lifecycle!
   "Close runtime-scoped module lifecycle resources before spool state."
