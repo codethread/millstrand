@@ -204,6 +204,17 @@ func (s *server) shuttingDown() bool {
 	}
 }
 
+// persistAutostartFailures preserves unresolved evidence on cancellation.
+// A completed, error-free explicit opt-out may still remove the old record.
+func (s *server) persistAutostartFailures(failures []error, explicitOptOut bool) {
+	if s.shuttingDown() && !explicitOptOut {
+		return
+	}
+	if err := writeAutostartFailure(failures); err != nil {
+		millLogf("Could not persist automatic startup failure: %v", err)
+	}
+}
+
 func (s *server) startAutostart() {
 	entries, err := readAutoStartRegistrations()
 	failures := make([]error, 0, 1)
@@ -212,15 +223,14 @@ func (s *server) startAutostart() {
 		millLogf("Automatic startup registry contains failures: %v", err)
 	}
 	if len(entries) == 0 {
-		if err := writeAutostartFailure(failures); err != nil {
-			millLogf("Could not persist automatic startup failure: %v", err)
-		}
+		s.persistAutostartFailures(failures, false)
 		return
 	}
 	// Automatic startup owns host processes, not logical members. Keep the
 	// first eligible remembered member for each effective pool and retain every
 	// isolated workspace as its own host job.
 	grouped := make(map[string]autoStartRegistration, len(entries))
+	optedOut := false
 	for _, entry := range entries {
 		cfg, _, err := config.Load(entry.ConfigDir)
 		if err != nil {
@@ -234,6 +244,8 @@ func (s *server) startAutostart() {
 				failure := fmt.Errorf("remove disabled automatic startup registration for %s: %w", entry.ConfigDir, err)
 				failures = append(failures, failure)
 				millLogf("Automatic startup cleanup failure: %v", failure)
+			} else {
+				optedOut = true
 			}
 			continue
 		}
@@ -246,9 +258,7 @@ func (s *server) startAutostart() {
 		}
 	}
 	if len(grouped) == 0 {
-		if err := writeAutostartFailure(failures); err != nil {
-			millLogf("Could not persist automatic startup failure: %v", err)
-		}
+		s.persistAutostartFailures(failures, optedOut && len(failures) == 0)
 		return
 	}
 	jobsToStart := make([]autoStartRegistration, 0, len(grouped))
@@ -301,19 +311,10 @@ func (s *server) startAutostart() {
 			}(entry)
 		}
 		jobs.Wait()
-		// A shutdown may have cancelled the queue before all eligible jobs were
-		// admitted, or while admitted jobs were waiting for their own startup
-		// boundary. Preserve the previous failure evidence until a later,
-		// non-cancelled pass can account for the complete eligible set.
-		if s.shuttingDown() {
-			return
-		}
 		failureMu.Lock()
 		deferredFailures := append([]error(nil), failures...)
 		failureMu.Unlock()
-		if err := writeAutostartFailure(deferredFailures); err != nil {
-			millLogf("Could not persist automatic startup failure: %v", err)
-		}
+		s.persistAutostartFailures(deferredFailures, false)
 	}()
 }
 

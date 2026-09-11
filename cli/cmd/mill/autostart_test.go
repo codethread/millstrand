@@ -217,73 +217,102 @@ func TestStartAutostartPersistsRegistryAndConfigFailures(t *testing.T) {
 }
 
 func TestStartAutostartPreservesFailureEvidenceWhenShutdownCancelsPass(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	t.Setenv("XDG_STATE_HOME", state)
-	configDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(configDir, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":true}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	world, err := config.RuntimeWorld(configDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := registerAutoStart(world, configDir, "cancelled"); err != nil {
-		t.Fatal(err)
-	}
-	failurePath, err := autostartFailurePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
-	if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	s := &server{shutdown: make(chan struct{})}
-	s.signalShutdown()
-	s.startAutostart()
-	s.autostartWG.Wait()
-
-	got, err := os.ReadFile(failurePath)
-	if err != nil {
-		t.Fatalf("cancelled autostart removed prior failure evidence: %v", err)
-	}
-	if string(got) != string(oldFailure) {
-		t.Fatalf("cancelled autostart changed prior failure evidence: got=%q want=%q", got, oldFailure)
+	for _, fixture := range []struct {
+		name       string
+		registered bool
+		configured bool
+	}{
+		{"eligible workspace", true, true},
+		{"no registrations", false, false},
+		{"unreadable config", true, false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+			configDir := t.TempDir()
+			if fixture.configured {
+				if err := os.WriteFile(filepath.Join(configDir, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":true}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if fixture.registered {
+				world, err := config.RuntimeWorld(configDir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := registerAutoStart(world, configDir, "cancelled"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			failurePath, err := autostartFailurePath()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(failurePath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
+			if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			s := &server{shutdown: make(chan struct{})}
+			s.signalShutdown()
+			s.startAutostart()
+			s.autostartWG.Wait()
+			got, err := os.ReadFile(failurePath)
+			if err != nil {
+				t.Fatalf("cancelled autostart removed prior failure evidence: %v", err)
+			}
+			if string(got) != string(oldFailure) {
+				t.Fatalf("cancelled autostart changed prior failure evidence: got=%q want=%q", got, oldFailure)
+			}
+		})
 	}
 }
 
 func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	t.Setenv("XDG_STATE_HOME", state)
-	cfg := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":false}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	world := config.World{ConfigDir: cfg}
-	if err := registerAutoStart(world, cfg, "disabled"); err != nil {
-		t.Fatal(err)
-	}
-	s := &server{shutdown: make(chan struct{})}
-	failurePath, err := autostartFailurePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
-	if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s.startAutostart()
-	s.autostartWG.Wait()
-	s.signalShutdown()
-	path, err := autostartPath(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("disabled registration was not pruned: %v", err)
-	}
-	if _, err := os.Stat(failurePath); !os.IsNotExist(err) {
-		t.Fatalf("explicit autostart opt-out did not clear prior failure evidence: %v", err)
+	for _, fixture := range []struct {
+		name      string
+		cancelled bool
+	}{
+		{"running", false},
+		{"cancelled", true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			state := filepath.Join(t.TempDir(), "state")
+			t.Setenv("XDG_STATE_HOME", state)
+			cfg := t.TempDir()
+			if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":false}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			world := config.World{ConfigDir: cfg}
+			if err := registerAutoStart(world, cfg, "disabled"); err != nil {
+				t.Fatal(err)
+			}
+			s := &server{shutdown: make(chan struct{})}
+			if fixture.cancelled {
+				s.signalShutdown()
+			}
+			failurePath, err := autostartFailurePath()
+			if err != nil {
+				t.Fatal(err)
+			}
+			oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
+			if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			s.startAutostart()
+			s.autostartWG.Wait()
+			s.signalShutdown()
+			path, err := autostartPath(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("disabled registration was not pruned: %v", err)
+			}
+			if _, err := os.Stat(failurePath); !os.IsNotExist(err) {
+				t.Fatalf("explicit autostart opt-out did not clear prior failure evidence: %v", err)
+			}
+		})
 	}
 }
