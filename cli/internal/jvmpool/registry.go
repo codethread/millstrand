@@ -437,7 +437,7 @@ func atomicWrite(path string, doc Document) error {
 	if err != nil {
 		return fmt.Errorf("open JVM pool membership directory: %w", err)
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	if err := dir.Sync(); err != nil {
 		return fmt.Errorf("sync JVM pool membership directory: %w", err)
 	}

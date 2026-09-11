@@ -425,7 +425,7 @@ func TestInitJVMPoolRegistersWithoutLaunching(t *testing.T) {
 	if len(snapshot.Members) != 1 || snapshot.Members[0].ConfigDir != world.ConfigDir {
 		t.Fatalf("pool init did not durably register selected workspace: %#v", snapshot.Members)
 	}
-	if s.poolHosts != nil && len(s.poolHosts) != 0 {
+	if len(s.poolHosts) != 0 {
 		t.Fatalf("pool init launched a host: %#v", s.poolHosts)
 	}
 	cfg, _, err := config.Load(world.ConfigDir)

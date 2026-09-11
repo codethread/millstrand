@@ -141,24 +141,3 @@ func poolConfigDirsFromSnapshot(snapshot jvmpool.PoolSnapshot) []string {
 	}
 	return result
 }
-
-func sPoolStatusForMember(host *weaverHost, world config.World) map[string]any {
-	for _, member := range host.Members {
-		if member.World.ConfigDir == world.ConfigDir {
-			status := baseStatus(world, "running")
-			status["jvm_pool"] = host.Pool
-			status["host_id"] = host.HostID
-			status["host_generation_id"] = host.HostGenerationID
-			status["registered_members"] = poolConfigDirs(host.Members)
-			status["live_members"] = poolConfigDirs(host.Members)
-			status["pending_members"] = []string{}
-			status["restart_required"] = false
-			status["pid"] = host.PID
-			status["weaver_id"] = member.WeaverID
-			status["generation_id"] = member.GenerationID
-			status["member_basis_fingerprint"] = member.MemberBasis
-			return status
-		}
-	}
-	return nil
-}

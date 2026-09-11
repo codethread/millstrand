@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -283,10 +282,4 @@ func validatePoolAdmission(host *weaverHost, marker poolReadyMarker, statuses ma
 		}
 	}
 	return nil
-}
-
-func poolMembersSorted(members []poolMember) []poolMember {
-	result := append([]poolMember(nil), members...)
-	sort.Slice(result, func(i, j int) bool { return result[i].World.ConfigDir < result[j].World.ConfigDir })
-	return result
 }
