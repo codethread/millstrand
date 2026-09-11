@@ -15,6 +15,7 @@ import (
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/jvmpool"
 	"millstrand-strand-cli/internal/process"
 )
 
@@ -391,6 +392,68 @@ func TestInitAutoStartRegistersBeforeFailedLaunchAndStealthStartsImmediately(t *
 	}
 	if stealthPersisted["autoStart"] != true {
 		t.Fatalf("stealth init did not enable autoStart: %s", stealthConfig)
+	}
+}
+
+func TestInitJVMPoolRegistersWithoutLaunching(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	world, cwd := writeAutoStartConfig(t, `{"configFormat":"alpha","name":"backend-a"}`)
+	pool := "backend"
+	s := newAutostartTestServer()
+	response := callMillRequest(t, s, client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "init-jvm-pool",
+		MillID:          s.meta.MillID,
+		Operation:       "init",
+		World:           client.MillWorldRequest{CWD: cwd, ConfigDir: world.ConfigDir, JVMPool: &pool},
+		Payload:         map[string]any{},
+	})
+	if !response.OK {
+		t.Fatalf("pool init failed: %#v", response.Error)
+	}
+	if _, ok := response.Result.(map[string]any); !ok {
+		t.Fatalf("pool init result is not an object: %#v", response.Result)
+	}
+	registry, err := jvmpool.New(mustStateRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.Snapshot(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Members) != 1 || snapshot.Members[0].ConfigDir != world.ConfigDir {
+		t.Fatalf("pool init did not durably register selected workspace: %#v", snapshot.Members)
+	}
+	if s.poolHosts != nil && len(s.poolHosts) != 0 {
+		t.Fatalf("pool init launched a host: %#v", s.poolHosts)
+	}
+	cfg, _, err := config.Load(world.ConfigDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.JVMPool == nil || *cfg.JVMPool != pool {
+		t.Fatalf("pool init did not write effective local override: %#v", cfg.JVMPool)
+	}
+
+	plainWorld, plainCWD := writeAutoStartConfig(t, `{"configFormat":"alpha","JVMPool":"backend"}`)
+	plainResponse := callMillRequest(t, s, client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "init-configured-jvm-pool",
+		MillID:          s.meta.MillID,
+		Operation:       "init",
+		World:           client.MillWorldRequest{CWD: plainCWD, ConfigDir: plainWorld.ConfigDir},
+		Payload:         map[string]any{},
+	})
+	if !plainResponse.OK {
+		t.Fatalf("plain configured pool init failed: %#v", plainResponse.Error)
+	}
+	snapshot, err = registry.Snapshot(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Members) != 2 {
+		t.Fatalf("plain init did not honor configured JVM pool: %#v", snapshot.Members)
 	}
 }
 

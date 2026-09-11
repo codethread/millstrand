@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -162,6 +163,38 @@ func (s *server) startAutostart() {
 	if len(entries) == 0 {
 		return
 	}
+	// Automatic startup owns host processes, not logical members. Keep the
+	// first eligible remembered member for each effective pool and retain every
+	// isolated workspace as its own host job.
+	grouped := make(map[string]autoStartRegistration, len(entries))
+	for _, entry := range entries {
+		cfg, _, err := config.Load(entry.ConfigDir)
+		if err != nil {
+			millLogf("Could not read startup config for %s: %v", entry.ConfigDir, err)
+			continue
+		}
+		if !cfg.AutoStart {
+			if err := removeAutoStart(entry.ConfigDir); err != nil {
+				millLogf("Could not remove startup registration for %s: %v", entry.ConfigDir, err)
+			}
+			continue
+		}
+		key := "world:" + entry.ConfigDir
+		if cfg.JVMPool != nil {
+			key = "pool:" + *cfg.JVMPool
+		}
+		if _, exists := grouped[key]; !exists {
+			grouped[key] = entry
+		}
+	}
+	if len(grouped) == 0 {
+		return
+	}
+	jobsToStart := make([]autoStartRegistration, 0, len(grouped))
+	for _, entry := range grouped {
+		jobsToStart = append(jobsToStart, entry)
+	}
+	sort.Slice(jobsToStart, func(i, j int) bool { return jobsToStart[i].ConfigDir < jobsToStart[j].ConfigDir })
 	s.autostartWG.Add(1)
 	go func() {
 		defer s.autostartWG.Done()
@@ -169,20 +202,9 @@ func (s *server) startAutostart() {
 		var jobs sync.WaitGroup
 		defer jobs.Wait()
 	launch:
-		for _, entry := range entries {
+		for _, entry := range jobsToStart {
 			if s.shuttingDown() {
 				break
-			}
-			cfg, _, err := config.Load(entry.ConfigDir)
-			if err != nil {
-				millLogf("Could not read startup config for %s: %v", entry.ConfigDir, err)
-				continue
-			}
-			if !cfg.AutoStart {
-				if err := removeAutoStart(entry.ConfigDir); err != nil {
-					millLogf("Could not remove startup registration for %s: %v", entry.ConfigDir, err)
-				}
-				continue
 			}
 			select {
 			case sem <- struct{}{}:

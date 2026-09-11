@@ -55,6 +55,33 @@ func TestReadMillMetadataRejectsMissingMalformedAndMismatched(t *testing.T) {
 	}
 }
 
+func TestMillWorldRequestJVMPoolUsesPresenceAwareTransport(t *testing.T) {
+	pool := "backend"
+	withPool, err := json.Marshal(MillWorldRequest{JVMPool: &pool})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(withPool), `"jvm_pool":"backend"`) {
+		t.Fatalf("present JVM pool was omitted from request: %s", withPool)
+	}
+	withoutPool, err := json.Marshal(MillWorldRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(withoutPool), "jvm_pool") {
+		t.Fatalf("omitted JVM pool unexpectedly crossed the wire: %s", withoutPool)
+	}
+	var explicitNull struct {
+		JVMPool *string `json:"jvm_pool"`
+	}
+	if err := json.Unmarshal([]byte(`{"jvm_pool":null}`), &explicitNull); err != nil {
+		t.Fatal(err)
+	}
+	if explicitNull.JVMPool != nil {
+		t.Fatal("JSON null JVM pool decoded as an override")
+	}
+}
+
 func TestReadMillMetadataProtocolMismatchNamesVersionsAndSkipsStartRemedy(t *testing.T) {
 	xdg := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", xdg)

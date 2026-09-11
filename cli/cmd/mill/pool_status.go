@@ -54,7 +54,49 @@ func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, e
 	host := poolHostForConfigLocked(s, world.ConfigDir)
 	s.mu.Unlock()
 	if host != nil && host.Live {
-		return s.poolStatusForMember(host, world.ConfigDir), true, nil
+		snapshot, err := s.poolRegisteredSnapshot(host.Pool)
+		if err != nil {
+			return nil, true, err
+		}
+		status := s.poolStatusForMember(host, world.ConfigDir)
+		addPoolPending(status, host, snapshot)
+		return status, true, nil
+	}
+	// A desired config edit is not allowed to erase the recorded live
+	// placement. Rehydrate from durable membership before consulting the
+	// effective config, so JVMPool:null still reports the serving host.
+	recordedPool, recorded, err := s.registeredPoolForConfig(world.ConfigDir)
+	if err != nil {
+		return nil, true, err
+	}
+	if recorded {
+		snapshot, snapshotErr := s.poolRegisteredSnapshot(recordedPool)
+		if snapshotErr != nil {
+			return nil, true, snapshotErr
+		}
+		s.mu.Lock()
+		host = s.poolHosts[recordedPool]
+		s.mu.Unlock()
+		if host == nil {
+			host, err = s.discoverPoolHost(recordedPool)
+			if err != nil {
+				return nil, true, err
+			}
+		}
+		if host != nil && host.Live {
+			if poolHostHasMember(host, world.ConfigDir) {
+				status := s.poolStatusForMember(host, world.ConfigDir)
+				addPoolPending(status, host, snapshot)
+				return status, true, nil
+			}
+			status := baseStatus(world, "pending")
+			status["jvm_pool"] = recordedPool
+			status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)
+			status["live_members"] = poolConfigDirs(host.Members)
+			status["pending_members"] = []string{world.ConfigDir}
+			status["restart_required"] = true
+			return status, true, nil
+		}
 	}
 	pool, err := configuredPool(world)
 	if err != nil {
@@ -80,6 +122,11 @@ func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, e
 		}
 	}
 	if host != nil && host.Live {
+		if poolHostHasMember(host, world.ConfigDir) {
+			status := s.poolStatusForMember(host, world.ConfigDir)
+			addPoolPending(status, host, snapshot)
+			return status, true, nil
+		}
 		status := baseStatus(world, "pending")
 		status["jvm_pool"] = pool
 		status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)

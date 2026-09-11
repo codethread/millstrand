@@ -13,7 +13,7 @@ func TestRunInitAutoStartRequiresRunningMill(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	workspace := t.TempDir()
 
-	err := runInit(workspace, false, true)
+	err := runInit(workspace, false, true, nil)
 	if err == nil || !strings.Contains(err.Error(), "no running mill") {
 		t.Fatalf("expected no-running-mill transport error, got %v", err)
 	}

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -183,6 +185,145 @@ func TestFailedPoolHostLaunchLeavesNoPartialRoute(t *testing.T) {
 	}
 	if s.poolMembers != nil && s.poolMembers[world.ConfigDir] != nil {
 		t.Fatal("failed pool launch left a member route")
+	}
+}
+
+func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollectively(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	source := tempSource(t)
+	cfgA := tempConfig(t, source)
+	cfgB := tempConfig(t, source)
+	for _, cfg := range []string{cfgA, cfgB} {
+		if err := config.SetLocalJVMPool(cfg, "backend"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	worldA, err := config.RuntimeWorld(cfgA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worldB, err := config.RuntimeWorld(cfgB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := jvmpool.New(mustStateRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range []jvmpool.Member{{ConfigDir: worldA.ConfigDir, SourceCWD: source, JVMPool: "backend"}, {ConfigDir: worldB.ConfigDir, SourceCWD: source, JVMPool: "backend"}} {
+		if _, err := registry.Reconcile(member, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, err := registry.Snapshot("backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
+			terminatePID(cmd.Process.Pid)
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	hostID, hostGeneration := "host-rediscovered", "host-generation-rediscovered"
+	members := []poolLaunchMember{
+		{ConfigDir: worldA.ConfigDir, SourceCWD: source, StateDir: worldA.StateDir, DataDir: worldA.DataDir, Name: "a", WeaverID: "weaver-a", GenerationID: "generation-a", DependencyDiagnostic: dependencyDiagnosticPath(worldA)},
+		{ConfigDir: worldB.ConfigDir, SourceCWD: source, StateDir: worldB.StateDir, DataDir: worldB.DataDir, Name: "b", WeaverID: "weaver-b", GenerationID: "generation-b", DependencyDiagnostic: dependencyDiagnosticPath(worldB)},
+	}
+	sort.Slice(members, func(i, j int) bool { return members[i].ConfigDir < members[j].ConfigDir })
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostDir, err := jvmpool.PoolHostDir(root, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: members}
+	manifestPath := filepath.Join(hostDir, "launch-"+hostID+".json")
+	if err := writePoolLaunchManifest(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	marker := poolReadyMarker{Format: poolReadyFormat, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGeneration, MembershipRevision: snapshot.Revision, PID: cmd.Process.Pid, BasisFingerprint: poolTestBasis}
+	statuses := map[string]map[string]any{}
+	for _, member := range members {
+		world := worldA
+		if member.ConfigDir == worldB.ConfigDir {
+			world = worldB
+		}
+		writePooledMemberMetadata(t, world, cmd.Process.Pid, member.WeaverID, member.GenerationID, hostID, hostGeneration)
+		marker.Members = append(marker.Members, poolReadyMember{ConfigDir: member.ConfigDir, WeaverID: member.WeaverID, GenerationID: member.GenerationID, SocketPath: filepath.Join(member.StateDir, "weaver.sock"), NREPLHost: "127.0.0.1", NREPLPort: 4100})
+		status, stale := readStatus(world)
+		if stale || status == nil {
+			t.Fatalf("pooled member metadata was not readable: status=%#v stale=%v", status, stale)
+		}
+		statuses[member.ConfigDir] = status
+	}
+	if err := atomicPoolJSON(filepath.Join(hostDir, "ready.json"), marker); err != nil {
+		t.Fatal(err)
+	}
+	originalAdmission := poolAdmissionStatus
+	poolAdmissionStatus = func(identity weaverIdentity) (map[string]any, error) {
+		return statuses[identity.ConfigDir], nil
+	}
+	t.Cleanup(func() { poolAdmissionStatus = originalAdmission })
+	// The desired config has opted out, but status must retain the recorded
+	// live placement after Mill rehydrates the host.
+	for _, world := range []config.World{worldA, worldB} {
+		if err := os.WriteFile(filepath.Join(world.ConfigDir, config.LocalConfigFileName), []byte(`{"JVMPool":null}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &server{}
+	status, ok, err := s.poolStatusForWorld(worldA)
+	if err != nil || !ok {
+		t.Fatalf("rediscovered pooled member status failed: status=%#v ok=%v err=%v", status, ok, err)
+	}
+	if status["state"] != "running" || status["jvm_pool"] != "backend" {
+		t.Fatalf("rediscovered pooled member was not running: %#v", status)
+	}
+	if got := status["live_members"].([]string); len(got) != 2 {
+		t.Fatalf("rediscovered status lost a live member: %#v", status)
+	}
+	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: source, ConfigDir: cfgA}); err != nil {
+		t.Fatalf("collective stop through isolated desired config failed: %v", err)
+	}
+	_, _ = cmd.Process.Wait()
+	if processAlive(cmd.Process.Pid) {
+		t.Fatalf("collective stop left host pid %d alive", cmd.Process.Pid)
+	}
+	if _, err := os.Stat(filepath.Join(hostDir, "ready.json")); !os.IsNotExist(err) {
+		t.Fatalf("collective stop left host marker: %v", err)
+	}
+	for _, world := range []config.World{worldA, worldB} {
+		if _, err := os.Stat(filepath.Join(world.StateDir, "weaver.json")); !os.IsNotExist(err) {
+			t.Fatalf("collective stop left member metadata for %s: %v", world.ConfigDir, err)
+		}
+	}
+}
+
+func writePooledMemberMetadata(t *testing.T, world config.World, pid int, weaverID, generationID, hostID, hostGenerationID string) {
+	t.Helper()
+	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := world.DBPath
+	metadata := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: config.Version, PID: pid, DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &databasePath, DaemonID: weaverID, GenerationID: generationID, BasisFingerprint: poolTestBasis, JVMPool: "backend", HostID: hostID, HostGenerationID: hostGenerationID, MemberBasisFingerprint: poolTestBasis, ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: filepath.Base(world.ConfigDir), SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "2026-09-11T00:00:00Z"}
+	metadata.NREPL.Host = "127.0.0.1"
+	metadata.NREPL.Port = 4100
+	b, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), b, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

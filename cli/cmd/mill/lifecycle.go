@@ -14,6 +14,7 @@ import (
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/jvmpool"
 	"millstrand-strand-cli/internal/process"
 )
 
@@ -486,8 +487,17 @@ func (s *server) weaverList() ([]map[string]any, error) {
 		if host == nil || !host.Live || len(host.Members) == 0 {
 			continue
 		}
+		snapshot := jvmpool.PoolSnapshot{Pool: host.Pool}
+		if s.poolRegistry != nil {
+			var snapshotErr error
+			snapshot, snapshotErr = s.poolRegistry.Snapshot(host.Pool)
+			if snapshotErr != nil {
+				return nil, snapshotErr
+			}
+		}
 		for _, member := range host.Members {
 			if status := s.poolStatusForMember(host, member.World.ConfigDir); status != nil {
+				addPoolPending(status, host, snapshot)
 				rows = append(rows, status)
 			}
 			seen[member.World.StateDir] = true

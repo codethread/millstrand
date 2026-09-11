@@ -211,11 +211,20 @@ Environment:
 		workspace, _ := cmd.Flags().GetString("workspace")
 		stealth, _ := cmd.Flags().GetBool("stealth")
 		autoStart, _ := cmd.Flags().GetBool("auto-start")
-		return runInit(workspace, stealth, autoStart)
+		var jvmPool *string
+		if cmd.Flags().Changed("jvm-pool") {
+			value, _ := cmd.Flags().GetString("jvm-pool")
+			if strings.TrimSpace(value) == "" {
+				return errors.New("--jvm-pool requires a non-empty value")
+			}
+			jvmPool = &value
+		}
+		return runInit(workspace, stealth, autoStart, jvmPool)
 	}}
 	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	initCmd.Flags().Bool("stealth", false, "keep repo-local .millstrand/.ms and Claude guidance untracked through .git/info/exclude")
 	initCmd.Flags().Bool("auto-start", false, "enable and register this workspace for automatic weaver startup")
+	initCmd.Flags().String("jvm-pool", "", "register this workspace in the named JVM pool (local config override)")
 	root.AddCommand(initCmd)
 
 	weaver := &cobra.Command{Use: "weaver", Short: "Manage supervised weavers"}
@@ -429,6 +438,16 @@ func (s *server) handle(conn net.Conn) {
 			}
 			return
 		}
+		pool, poolErr := s.reconcileInitPool(world, req.World.CWD, req.World.JVMPool)
+		if poolErr != nil {
+			var responseErr *client.ResponseError
+			if errors.As(poolErr, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+			} else {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", poolErr.Error()))
+			}
+			return
+		}
 		if stealth != nil {
 			if req.World.AutoStart {
 				if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
@@ -441,7 +460,12 @@ func (s *server) handle(conn net.Conn) {
 				}
 				started, err := s.startWeaver(req.World)
 				if err != nil {
-					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", err.Error()))
+					var responseErr *client.ResponseError
+					if errors.As(err, &responseErr) {
+						_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+					} else {
+						_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", err.Error()))
+					}
 					return
 				}
 				if isRetainedFailedStart(started) {
@@ -458,6 +482,9 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		result := map[string]any{"config_dir": world.ConfigDir, "config_file": world.ConfigFile}
+		if pool != "" {
+			result["jvm_pool"] = pool
+		}
 		if req.World.AutoStart {
 			if err := config.SetAutoStart(world.ConfigDir, true); err != nil {
 				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-failed", "mill init failed", err.Error()))
@@ -469,7 +496,12 @@ func (s *server) handle(conn net.Conn) {
 			}
 			started, startErr := s.startWeaver(req.World)
 			if startErr != nil {
-				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", startErr.Error()))
+				var responseErr *client.ResponseError
+				if errors.As(startErr, &responseErr) {
+					_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				} else {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/init-weaver-start-failed", "mill init weaver start failed", startErr.Error()))
+				}
 				return
 			}
 			if isRetainedFailedStart(started) {
@@ -599,6 +631,9 @@ func drainRequestWhitespace(reader *bufio.Reader) error {
 func validateInitRequest(world client.MillWorldRequest) error {
 	if world.Stealth && strings.TrimSpace(world.ConfigDir) != "" {
 		return errors.New("stealth init cannot select an explicit workspace")
+	}
+	if world.JVMPool != nil && strings.TrimSpace(*world.JVMPool) == "" {
+		return errors.New("jvm_pool must be a non-blank string when present")
 	}
 	return nil
 }
