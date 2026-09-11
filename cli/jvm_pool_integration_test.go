@@ -173,6 +173,23 @@ func TestJVMPoolLifecycleAcceptance(t *testing.T) {
 			t.Fatalf("member %s lost native child custody across replacement: child=%#v pid=%d", member.value, child, childPIDs[member.value])
 		}
 	}
+	for _, member := range []struct {
+		workspace string
+		value     string
+	}{
+		{workspaceA, "A"}, {workspaceB, "B"},
+	} {
+		out, err := h.runStrand("--workspace", member.workspace, "pool-stop-child")
+		if err != nil {
+			t.Fatalf("stop owned child for %s: %v\n%s", member.value, err, out)
+		}
+		if decodeObject(t, out)["acknowledged"] != true {
+			t.Fatalf("owned child for %s was not acknowledged: %s", member.value, out)
+		}
+		if err := waitProcessExit(childPIDs[member.value], 10*time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// Collective stop is available through any member. Registration remains,
 	// so a later start reconstructs the complete admitted set.
@@ -210,23 +227,6 @@ func TestJVMPoolLifecycleAcceptance(t *testing.T) {
 	assertIdentityResult(t, mustRunStrand(t, h, workspaceA), "A", restoredA)
 	assertIdentityResult(t, mustRunStrand(t, h, workspaceB), "B", restoredB)
 	assertIdentityResult(t, mustRunStrand(t, h, workspaceD), "D", restoredD)
-	for _, member := range []struct {
-		workspace string
-		value     string
-	}{
-		{workspaceA, "A"}, {workspaceB, "B"},
-	} {
-		out, err := h.runStrand("--workspace", member.workspace, "pool-stop-child")
-		if err != nil {
-			t.Fatalf("stop owned child for %s: %v\n%s", member.value, err, out)
-		}
-		if decodeObject(t, out)["acknowledged"] != true {
-			t.Fatalf("owned child for %s was not acknowledged: %s", member.value, out)
-		}
-		if err := waitProcessExit(childPIDs[member.value], 10*time.Second); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	// A repeated start on an admitted member is idempotent.
 	repeated, err := h.run("weaver", "start", "--workspace", workspaceB)
