@@ -7,7 +7,7 @@
 **Root specs:** [CLI](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md)
 **Feature specs:** [CLI delta](./specs/cli.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [REPL API delta](./specs/repl-api.delta.md)
 **Implementation contract:** [implementation-contract.md](./implementation-contract.md)
-**Status:** Reviewed
+**Status:** Active
 **Last Updated:** 2026-09-11
 
 ## PLAN-Jvp-001.P1 Goal and scope
@@ -105,3 +105,8 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 
 - Tracked reviews `e4u37` and `hri2w` identified host-state ownership, disposable probe boundaries, init-wire null semantics, complete probe-result validation, and phase concurrency. The contract and staged deltas now record their resolutions. The plan is Reviewed and ready for task authoring.
 - The coordinator clarified the probe handoff: refactor effect-free staging for a shared loader and newcomers; Mill validates every member, records the result, and confirms cleanup before cutover. A claimed success with incomplete or failed member results leaves old admission open.
+
+### PLAN-Jvp-001.DN3 Coordinator execution setup — 2026-09-11
+
+- The approved queue has nine AFK strands under coordinator task `9fg30`. Its dependency frontier was verified, and tracked queue review `umgpa` passed after file scopes were qualified.
+- The AFK execution guide requires separate worktrees for concurrent slices. Each dispatched implementation worker receives a dedicated worktree; the coordinator verifies its committed result there and integrates it into `codex/jvm-pools`. Later workers start from the integrated prerequisites. This changes execution placement, not the product contract or task dependencies.
