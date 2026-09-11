@@ -23,15 +23,28 @@
     (edn/read-string output)))
 
 (defn- workspace!
-  [project extra]
-  (let [directory (.toFile
-                   (java.nio.file.Files/createTempDirectory
-                    "millstrand-basis-"
-                    (make-array java.nio.file.attribute.FileAttribute 0)))]
-    (spit (io/file directory "deps.edn") (pr-str project))
-    (when extra
-      (spit (io/file directory "deps.local.edn") (pr-str extra)))
-    directory))
+  ([project extra]
+   (workspace! nil project extra))
+  ([parent project extra]
+   (let [directory (.toFile
+                    (if parent
+                      (java.nio.file.Files/createTempDirectory
+                       (.toPath (io/file parent))
+                       "millstrand-basis-"
+                       (make-array java.nio.file.attribute.FileAttribute 0))
+                      (java.nio.file.Files/createTempDirectory
+                       "millstrand-basis-"
+                       (make-array java.nio.file.attribute.FileAttribute 0))))]
+     (spit (io/file directory "deps.edn") (pr-str project))
+     (when extra
+       (spit (io/file directory "deps.local.edn") (pr-str extra)))
+     directory)))
+
+(defn- fixture-root!
+  []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "millstrand-basis-fixture-"
+            (make-array java.nio.file.attribute.FileAttribute 0))))
 
 (defn- resolved-basis
   [options]
@@ -439,14 +452,15 @@
     (is (instance? ClassLoader (:classloader result)))))
 
 (deftest pool-and-isolated-bases-share-real-relative-dependency-resolution
-  (let [source (workspace! {} nil)
-        member (workspace!
-                {:paths ["member-src"]
-                 :deps {'demo/parent {:local/root "../local-lib"}
-                        'demo/nested {:local/root "local-lib"}}
-                 :aliases {:millstrand/weaver {:extra-paths ["weaver-src"]}}}
-                {:paths ["extra-src"]
-                 :aliases {:millstrand/local {:extra-paths ["local-src"]}}})
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
+        member (workspace! fixture-root
+                           {:paths ["member-src"]
+                            :deps {'demo/parent {:local/root "../local-lib"}
+                                   'demo/nested {:local/root "local-lib"}}
+                            :aliases {:millstrand/weaver {:extra-paths ["weaver-src"]}}}
+                           {:paths ["extra-src"]
+                            :aliases {:millstrand/local {:extra-paths ["local-src"]}}})
         parent-lib (local-library! (.getParentFile member)
                                    "local-lib"
                                    "demo.parent-lib")
@@ -481,19 +495,20 @@
            (get-in pooled-generation [:basis :libs 'demo/nested :deps/root])))))
 
 (deftest probe-basis-rebases-real-copied-dependencies-from-original-config
-  (let [source (workspace! {} nil)
+  (let [fixture-root (fixture-root!)
+        source (workspace! fixture-root {} nil)
         project {:paths ["member-src"]
                  :deps {'demo/parent {:local/root "../local-lib"}
                         'demo/nested {:local/root "local-lib"}}
                  :aliases {:millstrand/weaver {:extra-paths ["weaver-src"]}}}
         extra {:paths ["extra-src"]
                :aliases {:millstrand/local {:extra-paths ["local-src"]}}}
-        original (workspace! project extra)
+        original (workspace! fixture-root project extra)
         parent-lib (local-library! (.getParentFile original)
                                    "local-lib"
                                    "demo.parent-lib")
         nested-lib (local-library! original "local-lib" "demo.nested-lib")
-        copied (workspace! project extra)
+        copied (workspace! fixture-root project extra)
         _ (doseq [path ["member-src" "extra-src" "weaver-src" "local-src"]]
             (.mkdirs (io/file copied path)))
         runtime-coordinate {:local/root (.getCanonicalPath (io/file "."))}
