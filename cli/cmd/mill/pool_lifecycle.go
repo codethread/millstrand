@@ -25,7 +25,11 @@ func poolHostFromSnapshot(snapshot jvmpool.PoolSnapshot, source string, root str
 	if len(snapshot.Members) == 0 {
 		return poolLaunchManifest{}, nil, fmt.Errorf("JVM pool %q has no registered members", snapshot.Pool)
 	}
-	hostDir, err := jvmpool.PoolHostDir(root, snapshot.Pool)
+	canonicalRoot, err := canonicalProbePath(root)
+	if err != nil {
+		return poolLaunchManifest{}, nil, fmt.Errorf("canonicalize JVM pool state root %s: %w", root, err)
+	}
+	hostDir, err := jvmpool.PoolHostDir(canonicalRoot, snapshot.Pool)
 	if err != nil {
 		return poolLaunchManifest{}, nil, err
 	}
@@ -37,6 +41,15 @@ func poolHostFromSnapshot(snapshot jvmpool.PoolSnapshot, source string, root str
 		if err != nil {
 			return poolLaunchManifest{}, nil, err
 		}
+		stateDir, err := canonicalProbePath(world.StateDir)
+		if err != nil {
+			return poolLaunchManifest{}, nil, fmt.Errorf("canonicalize JVM pool member state %s: %w", world.StateDir, err)
+		}
+		dataDir, err := canonicalProbePath(world.DataDir)
+		if err != nil {
+			return poolLaunchManifest{}, nil, fmt.Errorf("canonicalize JVM pool member data %s: %w", world.DataDir, err)
+		}
+		world.StateDir, world.DataDir = stateDir, dataDir
 		name, err := friendlyName(world, "")
 		if err != nil {
 			return poolLaunchManifest{}, nil, err

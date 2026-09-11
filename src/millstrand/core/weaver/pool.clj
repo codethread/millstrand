@@ -12,9 +12,7 @@
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.pool-basis :as pool-basis]
-            [millstrand.core.weaver.pool-probe :as probe]
-            [millstrand.core.weaver.pool-wire :as wire]
-            [millstrand.core.weaver.runtime :as runtime])
+            [millstrand.core.weaver.pool-wire :as wire])
   (:import [java.nio.charset StandardCharsets]
            [java.security MessageDigest]
            [java.lang ProcessHandle]
@@ -34,6 +32,29 @@
 
 (defn- host-context-holder [value]
   (HostContext. (atom value)))
+
+(defn- with-classloader
+  "Call `f` with `loader` as the thread context classloader.
+
+  Pool startup resolves runtime code only after the shared member basis exists;
+  this keeps optional runtime dependencies on that one shared loader rather
+  than on the thin command-line bootstrap loader."
+  [^ClassLoader loader f]
+  (let [thread (Thread/currentThread)
+        previous (.getContextClassLoader thread)]
+    (try
+      (.setContextClassLoader thread loader)
+      (f)
+      (finally
+        (.setContextClassLoader thread previous)))))
+
+(defn- runtime-var
+  [name]
+  (requiring-resolve (symbol "millstrand.core.weaver.runtime" name)))
+
+(defn- runtime-call
+  [name & args]
+  (apply (runtime-var name) args))
 
 (defn- reset-host-context! [^HostContext holder value]
   (reset! (.-state holder) value))
@@ -122,7 +143,7 @@
 (defn- cleanup-runtimes! [runtimes primary]
   (doseq [member (reverse runtimes)]
     (try
-      (runtime/stop! member)
+      (runtime-call "stop!" member)
       (catch Throwable throwable
         (.addSuppressed ^Throwable primary throwable))))
   nil)
@@ -413,50 +434,55 @@
                                             :ready-file ready-path
                                             :ready-marker nil
                                             :running? (atom true)})]
-     (try
-       (doseq [[member pool-member]
-               (map vector (:members manifest) (:members pool-basis))]
-         (let [opts (cond-> (member-runtime-options manifest pool-basis
-                                                    member pool-member)
-                      expected-version (assoc :expected-version expected-version))
-               member-runtime (runtime/start! nil (assoc opts :pool-host host-context))]
-           (swap! runtimes conj member-runtime)
-           (update-host-context! host-context assoc
-                                 :runtimes @runtimes
-                                 :runtimes-by-config
-                                 (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                                     identity)
-                                               @runtimes)))))
-       (doseq [index (range (count @runtimes))]
-         (let [published-runtime (runtime/publish-deferred! (nth @runtimes index))]
-           (swap! runtimes assoc index published-runtime)
-           (update-host-context! host-context assoc
-                                 :runtimes @runtimes
-                                 :runtimes-by-config
-                                 (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                                     identity)
-                                               @runtimes)))))
-       (let [published @runtimes
-             marker (ready-marker manifest pool-basis published)]
-         (when-not (s/valid? :millstrand.jvm-pool/ready-marker marker)
-           (throw (ex-info "constructed pooled ready marker violates its contract"
-                           {:marker marker
-                            :explain (s/explain-data
-                                      :millstrand.jvm-pool/ready-marker marker)})))
-         (atomic-json-write! ready-path (wire/ready-marker-wire marker))
-         (update-host-context! host-context assoc :ready-marker marker)
-         (let [host-value (assoc @host-context
-                                 :host-context host-context
-                                 :pool-host host-context)]
-           (reset-host-context! host-context host-value)
-           host-value))
-       (catch Throwable throwable
+     (with-classloader
+       (:classloader pool-basis)
+       (fn []
          (try
-           (delete-ready-owned! (assoc @host-context :ready-file ready-path))
-           (catch Throwable cleanup-failure
-             (.addSuppressed ^Throwable throwable cleanup-failure)))
-         (cleanup-runtimes! @runtimes throwable)
-         (throw throwable))))))
+           (doseq [[member pool-member]
+                   (map vector (:members manifest) (:members pool-basis))]
+             (let [opts (cond-> (member-runtime-options manifest pool-basis
+                                                        member pool-member)
+                          expected-version (assoc :expected-version expected-version))
+                   member-runtime (runtime-call "start!" nil
+                                                (assoc opts :pool-host host-context))]
+               (swap! runtimes conj member-runtime)
+               (update-host-context! host-context assoc
+                                     :runtimes @runtimes
+                                     :runtimes-by-config
+                                     (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                                         identity)
+                                                   @runtimes)))))
+           (doseq [index (range (count @runtimes))]
+             (let [published-runtime (runtime-call "publish-deferred!"
+                                                   (nth @runtimes index))]
+               (swap! runtimes assoc index published-runtime)
+               (update-host-context! host-context assoc
+                                     :runtimes @runtimes
+                                     :runtimes-by-config
+                                     (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                                         identity)
+                                                   @runtimes)))))
+           (let [published @runtimes
+                 marker (ready-marker manifest pool-basis published)]
+             (when-not (s/valid? :millstrand.jvm-pool/ready-marker marker)
+               (throw (ex-info "constructed pooled ready marker violates its contract"
+                               {:marker marker
+                                :explain (s/explain-data
+                                          :millstrand.jvm-pool/ready-marker marker)})))
+             (atomic-json-write! ready-path (wire/ready-marker-wire marker))
+             (update-host-context! host-context assoc :ready-marker marker)
+             (let [host-value (assoc @host-context
+                                     :host-context host-context
+                                     :pool-host host-context)]
+               (reset-host-context! host-context host-value)
+               host-value))
+           (catch Throwable throwable
+             (try
+               (delete-ready-owned! (assoc @host-context :ready-file ready-path))
+               (catch Throwable cleanup-failure
+                 (.addSuppressed ^Throwable throwable cleanup-failure)))
+             (cleanup-runtimes! @runtimes throwable)
+             (throw throwable))))))))
 
 (def start!
   "Start one pooled host from a closed serving manifest."
@@ -473,7 +499,7 @@
         (reset! primary throwable)))
     (doseq [member (reverse (:runtimes (host-runtime-view host)))]
       (try
-        (runtime/stop! member)
+        (runtime-call "stop!" member)
         (catch Throwable throwable
           (if-let [first-failure @primary]
             (.addSuppressed ^Throwable first-failure throwable)
@@ -521,7 +547,8 @@
                      (let [config-dir (:config-dir member)
                            member-runtime (get-in host [:runtimes-by-config config-dir])
                            step (try
-                                  {:result (runtime/refresh-modules!
+                                  {:result (runtime-call
+                                            "refresh-modules!"
                                             member-runtime
                                             {:pool-refreshing? true
                                              :startup? true
@@ -564,9 +591,10 @@
 (defn probe!
   "Run a private pooled replacement probe and retain its private root."
   ([manifest]
-   (probe/probe! manifest))
+   (probe! manifest {}))
   ([manifest opts]
-   (probe/probe! manifest opts)))
+   ((requiring-resolve 'millstrand.core.weaver.pool-probe/probe!)
+    manifest opts)))
 
 (defn -main
   "Launch a pooled host from a JSON serving manifest."

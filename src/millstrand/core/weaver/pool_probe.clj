@@ -9,11 +9,32 @@
             [millstrand.core.specs]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.pool-basis :as pool-basis]
-            [millstrand.core.weaver.pool-wire :as wire]
-            [millstrand.core.weaver.runtime :as runtime]))
+            [millstrand.core.weaver.pool-wire :as wire]))
 
 (defn- canonical [value]
   (.getPath (.getCanonicalFile (io/file value))))
+
+(defn- with-classloader
+  "Call `f` with `loader` as the thread context classloader.
+
+  Probe runtime code is resolved only after the complete candidate basis has
+  been composed, so every candidate member uses the shared pool loader."
+  [^ClassLoader loader f]
+  (let [thread (Thread/currentThread)
+        previous (.getContextClassLoader thread)]
+    (try
+      (.setContextClassLoader thread loader)
+      (f)
+      (finally
+        (.setContextClassLoader thread previous)))))
+
+(defn- runtime-var
+  [name]
+  (requiring-resolve (symbol "millstrand.core.weaver.runtime" name)))
+
+(defn- runtime-call
+  [name & args]
+  (apply (runtime-var name) args))
 
 (defn- diagnostic-file! [file entry]
   (.mkdirs (.getParentFile (io/file file)))
@@ -122,91 +143,97 @@
          shared-basis (atom nil)
          members (atom [])
          completed (atom ["probe/basis"])
-         failure (atom nil)]
+         failure (atom nil)
+         handle-failure!
+         (fn [throwable]
+           (reset! failure throwable)
+           (doseq [candidate (reverse @runtimes)]
+             (try
+               (runtime-call "stop!" candidate)
+               (catch Throwable stop-failure
+                 (.addSuppressed ^Throwable throwable stop-failure))))
+           (let [failed (into @members
+                              (for [member (:members manifest)
+                                    :when (not-any? #(= (:original-config-dir %)
+                                                        (:original-config-dir member))
+                                                    @members)]
+                                (failed-member-result member
+                                                      (:member-diagnostic member))))
+                 result (result-envelope manifest false "probe/failure"
+                                         (conj @completed "probe/failure")
+                                         failed collective-diagnostic log)
+                 failure-entry {:stage "probe/failure"
+                                :status :failed
+                                :data (failure-context throwable)}
+                 diagnostic! (fn [file entry]
+                               (try
+                                 (diagnostic-file! file entry)
+                                 (catch Throwable diagnostic-failure
+                                   (.addSuppressed ^Throwable throwable
+                                                   diagnostic-failure))))]
+             (diagnostic! collective-diagnostic failure-entry)
+             (doseq [member (:members manifest)
+                     :when (not-any? #(= (:original-config-dir %)
+                                         (:original-config-dir member))
+                                     @members)]
+               (diagnostic! (:member-diagnostic member)
+                            (assoc failure-entry
+                                   :member (:original-config-dir member))))
+             (pool-basis/validate-probe-result result)
+             (wire/write-json! (:result manifest) (wire/probe-result-wire result))
+             result))]
      (try
        (reset! shared-basis (pool-basis/create-probe-pool-basis
                              manifest runtime-coordinate))
-       (doseq [[member member-basis diagnostic-path]
-               (map vector (:members manifest)
-                    (:members @shared-basis)
-                    diagnostic-paths)]
-         (when @failure
-           (throw @failure))
-         (let [runtime-basis (assoc (:generation-basis member-basis)
-                                    :classloader (:classloader @shared-basis)
-                                    :fingerprint (:fingerprint @shared-basis))
-               world (assoc (weaver-config/world
-                             (:probe-config-dir member)
-                             (:probe-state-dir member)
-                             (:probe-data-dir member))
-                            :source-config-dir
-                            (:original-config-dir member))
-               opts (cond-> {:world world
-                             :name (:name member)
-                             :publish? false
-                             :probe? true
-                             :storage :sqlite-memory
-                             :generation-basis runtime-basis
-                             :member-generation-basis
-                             (:generation-basis member-basis)
-                             :weaver-id (:candidate-weaver-id member)
-                             :generation-id (:candidate-generation-id member)
-                             :diagnostic! #(report! member %)}
-                      expected-version
-                      (assoc :expected-version expected-version)
-                      (baseline member)
-                      (assoc :old-generation-baseline (baseline member)))
-               candidate (runtime/start! nil opts)]
-           (swap! runtimes conj candidate)
-           (swap! members conj (member-result member
-                                              (:probe-result candidate)
-                                              :validated
-                                              diagnostic-path))
-           (swap! completed conj
-                  (str "member/" (:original-config-dir member)))))
-       (doseq [candidate (reverse @runtimes)]
-         (runtime/stop! candidate))
-       (swap! completed conj "probe/complete")
-       (let [result (result-envelope manifest true "probe/complete"
-                                     @completed @members
-                                     collective-diagnostic log)]
-         (pool-basis/validate-probe-result result)
-         (wire/write-json! (:result manifest) (wire/probe-result-wire result))
-         result)
+       (with-classloader
+         (:classloader @shared-basis)
+         (fn []
+           (doseq [[member member-basis diagnostic-path]
+                   (map vector (:members manifest)
+                        (:members @shared-basis)
+                        diagnostic-paths)]
+             (when @failure
+               (throw @failure))
+             (let [runtime-basis (assoc (:generation-basis member-basis)
+                                        :classloader (:classloader @shared-basis)
+                                        :fingerprint (:fingerprint @shared-basis))
+                   world (assoc (weaver-config/world
+                                 (:probe-config-dir member)
+                                 (:probe-state-dir member)
+                                 (:probe-data-dir member))
+                                :source-config-dir
+                                (:original-config-dir member))
+                   opts (cond-> {:world world
+                                 :name (:name member)
+                                 :publish? false
+                                 :probe? true
+                                 :storage :sqlite-memory
+                                 :generation-basis runtime-basis
+                                 :member-generation-basis
+                                 (:generation-basis member-basis)
+                                 :weaver-id (:candidate-weaver-id member)
+                                 :generation-id (:candidate-generation-id member)
+                                 :diagnostic! #(report! member %)}
+                          expected-version
+                          (assoc :expected-version expected-version)
+                          (baseline member)
+                          (assoc :old-generation-baseline (baseline member)))
+                   candidate (runtime-call "start!" nil opts)]
+               (swap! runtimes conj candidate)
+               (swap! members conj (member-result member
+                                                  (:probe-result candidate)
+                                                  :validated
+                                                  diagnostic-path))
+               (swap! completed conj
+                      (str "member/" (:original-config-dir member)))))
+           (doseq [candidate (reverse @runtimes)]
+             (runtime-call "stop!" candidate))
+           (swap! completed conj "probe/complete")
+           (let [result (result-envelope manifest true "probe/complete"
+                                         @completed @members
+                                         collective-diagnostic log)]
+             (pool-basis/validate-probe-result result)
+             (wire/write-json! (:result manifest) (wire/probe-result-wire result))
+             result)))
        (catch Throwable throwable
-         (reset! failure throwable)
-         (doseq [candidate (reverse @runtimes)]
-           (try
-             (runtime/stop! candidate)
-             (catch Throwable stop-failure
-               (.addSuppressed ^Throwable throwable stop-failure))))
-         (let [failed (into @members
-                            (for [member (:members manifest)
-                                  :when (not-any? #(= (:original-config-dir %)
-                                                      (:original-config-dir member))
-                                                  @members)]
-                              (failed-member-result member
-                                                    (:member-diagnostic member))))
-               result (result-envelope manifest false "probe/failure"
-                                       (conj @completed "probe/failure")
-                                       failed collective-diagnostic log)
-               failure-entry {:stage "probe/failure"
-                              :status :failed
-                              :data (failure-context throwable)}
-               diagnostic! (fn [file entry]
-                             (try
-                               (diagnostic-file! file entry)
-                               (catch Throwable diagnostic-failure
-                                 (.addSuppressed ^Throwable throwable
-                                                 diagnostic-failure))))]
-           (diagnostic! collective-diagnostic failure-entry)
-           (doseq [member (:members manifest)
-                   :when (not-any? #(= (:original-config-dir %)
-                                       (:original-config-dir member))
-                                   @members)]
-             (diagnostic! (:member-diagnostic member)
-                          (assoc failure-entry
-                                 :member (:original-config-dir member))))
-           (pool-basis/validate-probe-result result)
-           (wire/write-json! (:result manifest) (wire/probe-result-wire result))
-           result))))))
+         (handle-failure! throwable))))))
