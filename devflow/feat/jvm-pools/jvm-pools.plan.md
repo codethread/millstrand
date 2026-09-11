@@ -110,3 +110,8 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 
 - The approved queue has nine AFK strands under coordinator task `9fg30`. Its dependency frontier was verified, and tracked queue review `umgpa` passed after file scopes were qualified.
 - The AFK execution guide requires separate worktrees for concurrent slices. Each dispatched implementation worker receives a dedicated worktree; the coordinator verifies its committed result there and integrates it into `codex/jvm-pools`. Later workers start from the integrated prerequisites. This changes execution placement, not the product contract or task dependencies.
+
+### PLAN-Jvp-001.DN4 Member dependency-root decision — 2026-09-11
+
+- Serving pool members reuse isolated basis resolution from each member's `config_dir`. Their `source_cwd` stays launch context and is not a dependency root.
+- Copied pooled probes keep source files under private probe paths and rebase relative local dependencies from the original member `config_dir`, matching the existing isolated probe policy.

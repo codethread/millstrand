@@ -120,6 +120,8 @@ Mill resolves one Millstrand source for the host using the initiating lifecycle 
 
 Every member keeps its own dependency inputs and workspace-relative resolution. The resulting host has one shared classloader. Membership, dependency, selected-alias, or classpath change requires restart.
 
+For dependency resolution, a member's workspace is its `config_dir`; the serving `source_cwd` remains launch context and never replaces that root. A copied probe uses the original `config_dir` for relative local dependencies, while its copied `:paths` and `:extra-paths` remain private to the probe.
+
 Millstrand does not resolve semantic conflicts between member dependencies or namespaces. Pool owners accept the first-version ordering rule and its consequences.
 
 ### Implementation recommendation

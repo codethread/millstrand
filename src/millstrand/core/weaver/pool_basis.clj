@@ -67,15 +67,14 @@
   [member runtime-coordinate]
   (basis/create-generation-basis
    (:config-dir member)
-   runtime-coordinate
-   {:dependency-source-workspace (:source-cwd member)}))
+   runtime-coordinate))
 
 (defn- probe-member-basis
   [member runtime-coordinate]
   (basis/create-generation-basis
    (:probe-config-dir member)
    runtime-coordinate
-   {:dependency-source-workspace (:original-source-cwd member)}))
+   {:dependency-source-workspace (:original-config-dir member)}))
 
 (defn- distinct-roots
   [member-bases]
@@ -130,10 +129,11 @@
   "Resolve a serving manifest into one shared pool basis.
 
   Every member is resolved independently using its own config directory and
-  source cwd. The resulting classpath is member-ordered, exact-root
-  deduplicated, and loaded by one classloader. Member bases remain available
-  in `:members` for refresh and diagnostics. An optional runtime coordinate
-  overrides the Millstrand source-derived coordinate for tests and launchers."
+  the existing isolated dependency semantics. The resulting classpath is
+  member-ordered, exact-root deduplicated, and loaded by one classloader.
+  Member bases remain available in `:members` for refresh and diagnostics.
+  An optional runtime coordinate overrides the Millstrand source-derived
+  coordinate for tests and launchers."
   ([manifest]
    (create-pool-basis manifest nil))
   ([manifest runtime-coordinate]
@@ -149,9 +149,9 @@
 (defn create-probe-pool-basis
   "Resolve a private probe manifest into one shared candidate pool basis.
 
-  Each copied config is read from its private probe path, while relative
-  dependency and source roots are rebased against that member's original
-  source cwd. The returned member keys retain original config identities for
+  Each copied config is read from its private probe path, while relative local
+  dependency roots are rebased against that member's original config
+  directory. The returned member keys retain original config identities for
   result matching; no probe runtime or serving artifact is opened."
   ([manifest]
    (create-probe-pool-basis manifest nil))
