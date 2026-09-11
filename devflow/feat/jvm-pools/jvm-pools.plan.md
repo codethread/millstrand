@@ -7,7 +7,7 @@
 **Root specs:** [CLI](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md)
 **Feature specs:** [CLI delta](./specs/cli.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [REPL API delta](./specs/repl-api.delta.md)
 **Implementation contract:** [implementation-contract.md](./implementation-contract.md)
-**Status:** Draft
+**Status:** Reviewed
 **Last Updated:** 2026-09-11
 
 ## PLAN-Jvp-001.P1 Goal and scope
@@ -91,7 +91,7 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 ## PLAN-Jvp-001.P8 Task context
 
 - **PLAN-Jvp-001.TC1:** Treat the [implementation contract](./implementation-contract.md) as the cross-language boundary. Its exact records are the membership registry, serving launch manifest, separate pooled probe manifest/result, pool basis projection, ready marker, pooled metadata additions, pending/restart-required details, and host/member identity rules.
-- **PLAN-Jvp-001.TC2:** Keep concurrently active ownership disjoint: PH1 and PH2 may run together, then follow the dependency order PH3 → PH4 → PH5 → PH6 → PH7. Sequential PH4 refresh work may edit an earlier runtime or pool dispatch seam, and sequential PH6 CLI integration may edit `cli/cmd/mill/main.go` after PH5. The validation plan supplies fixture, process, custody, and cleanup constraints. No member-only lifecycle, hot add, dependency debugger, or automatic replacement of a live host is to be added.
+- **PLAN-Jvp-001.TC2:** Keep concurrently active ownership disjoint. PH1 and PH2 may run together; PH3 follows the shared-basis foundation. After PH3, PH4 Clojure refresh and PH5 Go lifecycle may run together when PH1 membership is also available to PH5. PH6 follows PH5, and PH7 requires both refresh and CLI integration. Sequential PH4 refresh work may edit an earlier runtime or pool dispatch seam, and sequential PH6 CLI integration may edit `cli/cmd/mill/main.go` after PH5. The validation plan supplies fixture, process, custody, and cleanup constraints. No member-only lifecycle, hot add, dependency debugger, or automatic replacement of a live host is to be added.
 - **PLAN-Jvp-001.TC3:** Existing root clause IDs remain unchanged until promotion. Feature-local deltas allocate `DELTA-Jvp-001`, `DELTA-Jvp-002`, and `DELTA-Jvp-003`; implementation code must validate closed wire/status shapes at the existing boundaries.
 
 ## PLAN-Jvp-001.P9 Developer Notes
@@ -100,3 +100,8 @@ Owner boundary: tagged public-binary acceptance and feature-local documentation.
 
 - The architecture contract was incorporated after the initial baseline read. The plan remains Draft pending critique; no review or approval is claimed.
 - Material unresolved issue: promote a host-generation/member-generation distinction into the ubiquitous language before root-spec promotion.
+
+### PLAN-Jvp-001.DN2 Coordinator review disposition — 2026-09-11
+
+- Tracked reviews `e4u37` and `hri2w` identified host-state ownership, disposable probe boundaries, init-wire null semantics, complete probe-result validation, and phase concurrency. The contract and staged deltas now record their resolutions. The plan is Reviewed and ready for task authoring.
+- The coordinator clarified the probe handoff: refactor effect-free staging for a shared loader and newcomers; Mill validates every member, records the result, and confirms cleanup before cutover. A claimed success with incomplete or failed member results leaves old admission open.
