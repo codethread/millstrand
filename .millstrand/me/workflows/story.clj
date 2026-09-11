@@ -3,7 +3,8 @@
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
-            [me.workflows.support :as support]))
+            [me.workflows.support :as support]
+            [me.workflows.review :as review]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -56,23 +57,22 @@
                                    |declare entries, and section comments that no longer match
                                    |their contents. Fix findings before completing."))})
    (workflow/step :finish-validate
-                  (fn [{:keys [module]}] (str "Validate and hand " module " to landing"))
+                  (fn [{:keys [module]}] (str "Validate and hand " module " to review"))
                   :self
                   :depends-on [:fold]
                   :attributes {"workflow/action-ref" "story.finish"
                                "workflow/instruction"
-                               (fn [{:keys [module]}]
-                                 (format-alpha/reflow
-                                  (format
-                                   "|Delete `\"%s\"` from quality.api-form/pending when this is an api
-                                    |conversion; run the focused cold tests and `make fmt-check lint
-                                    |reflect-check docs-check`; `make api-docs` on docstring changes.
-                                    |The full change-review roster runs once in the land run's
-                                    |review gates: continue with `strand workflow start
-                                    |<new-land-run-id> --workflow land --params <land-params-json>`.
-                                    |The params name this run's existing feature id; the land run id is
-                                    |new. Then close this run."
-                                   module)))})))
+                               (fn [{:keys [module] :as params}]
+                                 (str (format-alpha/reflow
+                                       (format
+                                        "|Delete `\"%s\"` from quality.api-form/pending when this is an API
+                                         |conversion; run the focused cold tests and `make fmt-check lint
+                                         |reflect-check docs-check`; `make api-docs` on docstring changes.
+                                         |Finish this wave before handing the whole change to review."
+                                        module))
+                                      "\n\n"
+                                      (review/handoff-instruction
+                                       (assoc params :branch "<branch>"))))})))
 
 (workflow/defworkflow story-keep
   "Keep a story split: the per-concern files are the deliverable.
@@ -85,24 +85,24 @@
    (fn [{:keys [module]}] (str "Story keep-split: " module))
    {:attributes {"workflow/family" "story"}}
    (workflow/step :finish-validate
-                  (fn [{:keys [module]}] (str "Validate the split and hand " module " to landing"))
+                  (fn [{:keys [module]}] (str "Validate the split and hand " module " to review"))
                   :self
                   :attributes {"workflow/action-ref" "story.finish"
                                "workflow/instruction"
-                               (fn [{:keys [module]}]
-                                 (format-alpha/reflow
-                                  (format
-                                   "|The split stands: internal/<concern> files stay, named by meaning,
-                                    |gated dependency rules apply (internal never requires alpha; only
-                                    |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
-                                    |from quality.api-form/pending when this is an api conversion;
-                                    |focused cold tests; `make fmt-check lint reflect-check docs-check`;
-                                    |`make api-docs` on docstring changes. The full roster runs in the
-                                    |land run's review gates: `strand workflow start
-                                    |<new-land-run-id> --workflow land --params <land-params-json>`.
-                                    |The params name this run's existing feature id; the land run id is
-                                    |new. Then close this run."
-                                   module)))})))
+                               (fn [{:keys [module] :as params}]
+                                 (str (format-alpha/reflow
+                                       (format
+                                        "|The split stands: internal/<concern> files stay, named by meaning,
+                                         |gated dependency rules apply (internal never requires alpha; only
+                                         |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
+                                         |from quality.api-form/pending when this is an API conversion;
+                                         |focused cold tests; `make fmt-check lint reflect-check docs-check`;
+                                         |`make api-docs` on docstring changes. Finish this wave before
+                                         |handing the whole change to review."
+                                        module))
+                                      "\n\n"
+                                      (review/handoff-instruction
+                                       (assoc params :branch "<branch>"))))})))
 
 (workflow/defworkflow story
   "Run the module-form STORY workflow (family \"story\").
@@ -114,7 +114,7 @@
   swift adversarial pass while the boundaries are visible, measure the
   folded size, and decide at a checkpoint: fold back to one
   story-ordered file (roughly 500 lines or less) or keep the split.
-  Either branch validates and hands off to the land roster. One run
+  Either branch validates and hands off to the shared review workflow. One run
   covers one module wave; extra large modules take their own runs."
   {:entrypoints #{:start}
    :param-spec ::story-params
@@ -173,7 +173,7 @@
                                        "|Your FINAL MESSAGE becomes the gate's outcome
                                         |notes: put the full findings there, verdict
                                         |first. Do not write to workflow strands. Never
-                                        |the full roster lens - that runs once at land.")))})
+                                        |the full roster lens - that runs in the shared review workflow.")))})
    (workflow/step :resolve-intent
                   (fn [_] "Resolve intent-review findings")
                   :self

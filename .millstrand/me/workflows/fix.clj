@@ -3,7 +3,8 @@
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
-            [me.workflows.support :as support]))
+            [me.workflows.support :as support]
+            [me.workflows.review :as review]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -24,7 +25,7 @@
 ;; judgment and a machine shell gate proves `make docs-check` green
 ;; (PHILOSOPHY: prose guides, code decides). The branch and worktree are
 ;; poured params so that gate has a cwd; the claim step creates them. The run
-;; ends by handing the branch to the coordinator land workflow.
+;; ends by handing the branch to the shared review workflow.
 ;; ---------------------------------------------------------------------------
 
 (s/def ::fix-params (s/keys :req-un [::subject ::branch ::worktree]
@@ -52,40 +53,16 @@
       branch worktree))))
 
 (defn- fix-handoff-instruction
-  "Return the validate-handoff instruction with a concrete land card identity.
-
-  A run started with the `card` param interpolates it directly; a cardless run
-  derives the identity from the `fix/card` stamp the claim-trail step recorded."
+  "Hand the validated fix to shared review, preserving its recorded card."
   [{:keys [card branch worktree]}]
-  (if card
-    (format-alpha/reflow
-     (format
-      "|Run the focused cold tests for the touched namespaces and the blocking
-       |quality gates per CLAUDE.md; commit everything to the branch. Then hand
-       |off to the coordinator land workflow: `strand workflow start
-       |<new-land-run-id> --workflow land --params
-       |'{\"feature\":\"%s\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"%s\",
-       |\"review-target\":\"<task-id>\",\"review-id\":\"<unique-pass-id>\",
-       |\"change-context\":{\"commit-range\":\"<base-sha>..<head-sha>\",
-       |\"files\":[\"<changed-file>\"]}}'`
-       |— the land run owns review, merge, and the card finish. Then close this
-       |run."
-      card branch worktree card))
-    (format-alpha/reflow
-     (format
-      "|Run the focused cold tests for the touched namespaces and the blocking
-       |quality gates per CLAUDE.md; commit everything to the branch. Then hand
-       |off to the coordinator land workflow, naming as both `feature` and
-       |`card` the card id this run stamped as `fix/card` on the claim-trail
-       |step (`strand show <claim-trail-step-id>`): `strand workflow start
-       |<new-land-run-id> --workflow land --params
-       |'{\"feature\":\"<fix/card>\",\"branch\":\"%s\",\"worktree\":\"%s\",
-       |\"card\":\"<fix/card>\",\"review-target\":\"<task-id>\",
-       |\"review-id\":\"<unique-pass-id>\",\"change-context\":
-       |{\"commit-range\":\"<base-sha>..<head-sha>\",\"files\":[\"<changed-file>\"]}}'`
-       |— the land run owns review, merge, and the card finish. Then close this
-       |run."
-      branch worktree))))
+  (str (format-alpha/reflow
+        "|Run focused cold tests and the relevant blocking quality gates. Use
+         |the supplied card, or read fix/card from this run's claim-trail step
+         |and substitute that id for <fix/card> below.")
+       "\n\n"
+       (review/handoff-instruction {:feature (or card "<fix/card>")
+                                    :branch branch :worktree worktree
+                                    :card (or card "<fix/card>")})))
 
 (workflow/defworkflow fix
   "Run the light BUG-FIX workflow (family \"fix\").
@@ -95,7 +72,7 @@
   then face the doc discipline as structure — a docs-sync step for the
   spec-delta and CLAUDE.md judgment, and a machine gate that proves
   `make docs-check` green — before validating and handing the branch to
-  the coordinator `land` workflow. Params: `subject` (one-line statement
+  the shared `review` workflow. Params: `subject` (one-line statement
   of the bug), `branch` and `worktree` (the pair the claim step
   creates), `card` (optional existing card id to claim instead of
   pouring one)."
@@ -167,7 +144,7 @@
                                  |stamp (`strand update <gate-id> --attributes
                                  |'{\"gate/error\":null}'`) to re-run.")})
    (workflow/step :validate-handoff
-                  (fn [{:keys [branch]}] (str "Validate " branch " and hand off to landing"))
+                  (fn [{:keys [branch]}] (str "Validate " branch " and hand off to review"))
                   :self
                   :depends-on [:docs-check]
                   :attributes {"workflow/action-ref" "fix.validate-handoff"

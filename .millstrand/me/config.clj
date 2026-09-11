@@ -9,8 +9,10 @@
             [me.workflows.explore :as explore]
             [me.workflows.fix :as fix]
             [me.workflows.land :as land]
-            [me.workflows.land-actions]
+            [me.workflows.card-actions]
             [me.workflows.merge-queue :as merge-queue]
+            [me.workflows.ralph :as ralph]
+            [me.workflows.review :as review]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
             [millhouse.spools.chime :as chime]
@@ -34,8 +36,9 @@
 
 (workflow/use-workflow! land/land-abort)
 (workflow/use-workflow! land/land-merge)
-(workflow/use-workflow! land/land-review)
 (workflow/use-workflow! land/land)
+(workflow/use-workflow! review/review)
+(lifecycle/use-seed! ralph/review-handoff)
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
 (workflow/use-workflow! story/story)

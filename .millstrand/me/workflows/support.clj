@@ -2,7 +2,8 @@
   "Shared script helpers for the repo's independently loaded workflow definitions."
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as shell]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [millhouse.spools.workflow :as workflow]))
 
 (defn canonical-worktree
   "Resolve the canonical checkout while the feature worktree still exists.
@@ -75,3 +76,23 @@
         "head=$(gh pr view \"$3\" --json headRefOid --jq .headRefOid)\n"
         "exec sh -c \"$4\" land-cleanup \"$1\" \"$2\" \"$head\"\n")
    "land-cleanup-head" branch worktree (str pr-number) land-cleanup-script))
+
+(defn card-gate
+  "Build a short, retryable card bookkeeping gate."
+  [id title dependencies callable]
+  (workflow/gate id title :code
+                 :depends-on dependencies
+                 :attributes {"code/fn" callable
+                              "code/params" #(select-keys % [:card])
+                              "workflow/instruction"
+                              "This card update is automatic. On failure, fix the cause and clear gate/error to retry."}))
+
+(defn shell-gate
+  "Build a shell gate whose request is frozen with the worktree context."
+  [id title dependencies argv timeout instruction]
+  (workflow/gate id title :shell
+                 :depends-on dependencies
+                 :attributes {"shell/argv" argv
+                              "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                              "shell/timeout-secs" timeout
+                              "workflow/instruction" instruction}))

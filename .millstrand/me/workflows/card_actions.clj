@@ -1,5 +1,5 @@
-(ns me.workflows.land-actions
-  "Short, repeatable card updates used by the landing workflows."
+(ns me.workflows.card-actions
+  "Short, repeatable card updates used by review and landing."
   (:require [millhouse.spools.kanban :as kanban]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
@@ -8,7 +8,7 @@
 (defn- card-view [id]
   (let [card (weaver/show (current/runtime) id)]
     (when-not (= "true" (attr-get card :kanban/card))
-      (fail! "Landing requires a kanban card" {:card id}))
+      (fail! "Expected a kanban card" {:card id}))
     card))
 
 (defn review!
@@ -18,7 +18,7 @@
     (case (attr-get (card-view card) :kanban/lane)
       "in_review" nil
       "claimed" (kanban/review! (current/runtime) card)
-      (fail! "Landing card must be claimed or in review" {:card card})))
+      (fail! "Card must be claimed or in review" {:card card})))
   nil)
 
 (defn rework!

@@ -188,7 +188,7 @@
                         "  *'--json headRefName'*) printf '" branch "\\n' ;;\n"
                         "  *'--json headRefOid'*) printf '%s\\n' \"$GH_TEST_HEAD\" ;;\n"
                         "  *'--json isDraft'*) printf 'false\\n' ;;\n"
-                        "  *'pr ready '*) exit 0 ;;\n"
+                        "  *'pr ready '*) exit 1 ;;\n"
                         "  *'pr merge '*)\n"
                         "    match=\n"
                         "    while [ \"$#\" -gt 0 ]; do\n"
@@ -219,6 +219,8 @@
                                     [branch] env))
         (assert-success (run-script (:worktree fixture) "land-merge.sh"
                                     ["42" "subject" "body" branch] env))
+        (is (str/includes? (slurp gh-log) "--json isDraft")
+            "an already-ready PR is accepted when gh pr ready declines the conversion")
         (is (str/includes? (slurp gh-log) "pr merge"))
         (is (= "MERGED\n" (slurp gh-state)))
         (assert-success (run-script (:worktree fixture) "land-merge.sh"

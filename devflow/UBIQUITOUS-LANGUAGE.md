@@ -149,12 +149,13 @@ Registered by the modules under `.millstrand/me/workflows/` and `.millstrand/me/
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **land** | The coordinator-driven workflow: record the draft PR, review and sign off, then queue automatic rebase, final-HEAD validation, squash merge and canonical-main fast-forward. Release the turn before cleanup and card completion. | Merge, deploy, release, ship, publish |
+| **review** | The repository-owned final review of implemented work: full change-review roster, findings resolution, and validation of the pushed HEAD. Story, fix, and Ralph hand off here before landing. A PR is optional; completing review does not authorize merging. | Landing, proposal review, card review |
+| **land** | Merge reviewed work from a draft or ready PR, or resolve a PR from a working branch. Sign-off authorizes FIFO admission, rebase, final-HEAD validation, squash merge and canonical-main fast-forward. Release the turn before cleanup and card completion. | Deploy, release, publish |
 | **Merge lock** | The exclusion acquired by the FIFO head and held through rebase, final-HEAD validation, merge and canonical-main fast-forward. Failures retain it for repair; successful completion or explicit safe withdrawal releases it. | Branch protection, mutex, freeze |
 | **Merge queue** | Strict FIFO reservations for approved land runs. A failed head keeps its position; timeouts never evict or requeue it. Any trusted agent may explicitly withdraw a reservation with a reason after stopping its merge work. | Auto-merge, approval queue, scheduler |
-| **Sign-off** | The coordinator checkpoint on a land run. Valid on a pushed branch with an open draft PR and a passing local quality contract at HEAD. Authorizes queue admission and automatic landing, including repairs and focused review; the agent may still abort over major changes. | Approval, review, LGTM, merge |
+| **Sign-off** | The coordinator checkpoint on a land run. Names the reviewed, pushed branch and its open PR, whether draft or ready, plus the squash message. Authorizes queue admission and automatic landing, including repairs and focused review; the agent may still abort over major changes. | Approval, review, LGTM, merge |
 | **explore** | The zero-ceremony exploration workflow: a card + worktree trail, note discipline while exploring, and a human checkpoint that decides the thread's fate — promote to a devflow brief, park, or abandon. | Spike, research task, investigation, poking around |
-| **fix** | The light bug-fix workflow: a card + worktree trail, a regression-locked implementation step, a docs-sync judgment backed by a `make docs-check` gate, then handoff to **land**. | Hotfix, patch, bugfix flow, quick fix |
+| **fix** | The light bug-fix workflow: a card + worktree trail, a regression-locked implementation step, a docs-sync judgment backed by a `make docs-check` gate, then handoff to shared **review** before **land**. | Hotfix, patch, bugfix flow, quick fix |
 | **release** | The release workflow: bump `VERSION` and the changelog, run the full quality contract, pin the Homebrew formula to the release commit, verify binary identity, then obtain human sign-off before tagging and atomically pushing `main` plus the tag. | Deploy, land, publish bare |
 | **HITL** | Human-in-the-loop. The `hitl=true` attribute means stop and ask the user. Interactive work uses a tracking strand plus `agent delegate --interactive`. | Manual, human review, interactive, blocked |
 | **Coordinator** | The agent that plans the work, delegates it, verifies the result, and closes it. Only a coordinator drives **land**. | Orchestrator, manager, parent agent, lead |
@@ -207,7 +208,7 @@ The agreed landing contract validates the final branch HEAD incorporating curren
 - "Battery" means an operational relation and the **batteries** spool. Unrelated; qualify when both are in scope.
 - "Spool" can mean the trusted Clojure code or its repository. Name the repository or tools.deps library when that distinction matters.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
-- "Review" means the land **sign-off** step here, and a devflow step, a delegation preset, or a kanban lane elsewhere. Name the surface.
+- **review** is the repository final-code-review workflow. Proposal review, card review, delegation reviews, the kanban review lane, and land sign-off are separate surfaces; name the one intended.
 - "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
 - "Agent" means the `agent` op family, a spawned run, the **harness** behind it, and the **coordinator** reading the sentence. Use **harness** for the provider and a spool's own run term for the invocation.
 - "Gate" means a workflow step and a CI quality check in `make`. Only the first is a strand.

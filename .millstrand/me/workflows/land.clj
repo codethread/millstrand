@@ -1,11 +1,7 @@
 (ns me.workflows.land
   "The coordinator land workflow definitions (family `land`)."
   (:require [clojure.spec.alpha :as s]
-            [ct.spools.delegation :as agents]
-            [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
-            [millstrand.api.spool.alpha :refer [attr-get fail!]]
-            [millstrand.api.weaver.alpha :as weaver]
             [millhouse.spools.workflow :as workflow]
             [me.workflows.support :as support]))
 
@@ -22,40 +18,23 @@
 (s/def ::feature ::non-blank-string)
 (s/def ::branch ::non-blank-string)
 (s/def ::card ::non-blank-string)
-(s/def ::review-target ::non-blank-string)
-(s/def ::review-id ::non-blank-string)
-(s/def ::commit-range
-  (s/and ::non-blank-string
-         #(boolean (re-matches #"(?i)[0-9a-f]{40}\.\.[0-9a-f]{40}" %))))
-(s/def ::files (s/coll-of ::non-blank-string :kind vector? :min-count 1))
-(s/def ::change-context
-  (s/and :ct.spools.delegation/change-context
-         #(s/valid? ::commit-range (:commit-range %))
-         #(s/valid? ::files (:files %))))
 (s/def ::subject ::non-blank-string)
 (s/def ::reason ::non-blank-string)
 (s/def ::pr-number pos-int?)
 
-(s/def ::land-params (s/keys :req-un [::feature ::branch ::worktree
-                                      ::review-target ::review-id ::change-context]
-                             :opt-un [::card]))
+(s/def ::land-params
+  (s/keys :req-un [::feature ::branch ::worktree] :opt-un [::card ::pr-number]))
 (s/def ::land-merge-params (s/keys :req-un [::feature ::branch ::worktree
                                             ::subject ::body ::pr-number]
                                    :opt-un [::card]))
-(s/def ::land-review-params
-  (s/and ::land-params (s/keys :req-un [::pr-number])))
 (s/def ::land-abort-params
   (s/keys :req-un [::branch ::reason] :opt-un [::card]))
-(s/def ::pr-input
-  (s/and (s/keys :req-un [::pr-number])
-         #(every? #{:pr-number} (keys %))))
-
 (s/def ::land-abort-input
   (s/and (s/keys :req-un [::reason])
          #(every? #{:reason} (keys %))))
 (s/def ::land-merge-input
-  (s/and (s/keys :req-un [::subject ::body])
-         #(every? #{:subject :body} (keys %))))
+  (s/and (s/keys :req-un [::pr-number ::subject ::body])
+         #(every? #{:pr-number :subject :body} (keys %))))
 
 (def ^:private land-abort-reason-input
   "Declared choice input for the land sign-off abort choice: a required
@@ -65,64 +44,14 @@
    :doc "Why landing is being aborted; recorded on the abort step."})
 
 (def ^:private land-merge-input
-  "Declare the squash subject and body required by the approved choice."
+  "Declare the exact PR and squash message approved for landing."
   {:spec ::land-merge-input
-   :doc "Semantic squash subject and Squashed commits body for gh pr merge."})
-
-(defn- review-specs
-  "Build and validate the gate-ready change-review specs for one land run."
-  [{:keys [review-target review-id change-context]}]
-  (let [target (weaver/show (current/runtime) review-target)]
-    (when (= "true" (attr-get target :kanban/card))
-      (fail! "Land review targets a task strand, never a kanban card"
-             {:review-target review-target :kanban/card "true"}))
-    (when-not (or (= "true" (attr-get target :kanban/task))
-                  (= "task" (attr-get target :kind)))
-      (fail! "Land review target must be a task strand"
-             {:review-target review-target
-              :kanban/task (attr-get target :kanban/task)
-              :kind (attr-get target :kind)}))
-    (agents/roster-review-specs
-     :change-review
-     {:target review-target
-      :review-id review-id
-      :change-context change-context})))
-
-(defn- reviewer-specs
-  "Return loop items for the land review fan-out."
-  [params]
-  (mapv #(assoc % :id (:name %)) (:reviewers (review-specs params))))
-
-(defn- synthesis-specs
-  "Return the single synthesis item as a loop collection."
-  [params]
-  [(assoc (:synthesizer (review-specs params)) :id :synthesis)])
-
-(defn- item-attr
-  "Read a string-keyed roster attribute from a loop item."
-  [item key]
-  (get (:attrs item) key))
+   :doc "Exact PR number, semantic squash subject, and squash commit body."})
 
 (defn- stage [name]
   {:attributes {"workflow/family" "land"
                 "land/version" 2
                 "land/stage" name}})
-
-(defn- card-gate [id title dependencies callable]
-  (workflow/gate id title :code
-                 :depends-on dependencies
-                 :attributes {"code/fn" callable
-                              "code/params" #(select-keys % [:card])
-                              "workflow/instruction"
-                              "This card update is automatic. On failure, fix the cause and clear gate/error to retry."}))
-
-(defn- shell-gate [id title dependencies argv timeout instruction]
-  (workflow/gate id title :shell
-                 :depends-on dependencies
-                 :attributes {"shell/argv" argv
-                              "shell/cwd" (fn [{:keys [worktree]}] worktree)
-                              "shell/timeout-secs" timeout
-                              "workflow/instruction" instruction}))
 
 (def ^:private retry-instruction
   (format-alpha/prose
@@ -141,8 +70,8 @@
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Abort land: " branch))
    (update (stage "abort") :attributes assoc "land/abort-reason" (fn [{:keys [reason]}] reason))
-   (card-gate :return-card "Return the card to claimed" []
-              "me.workflows.land-actions/rework!")
+   (support/card-gate :return-card "Return the card to claimed" []
+                      "me.workflows.card-actions/rework!")
    (workflow/step :record-abort "Record the abort and hand over the work" :self
                   :depends-on [:return-card]
                   :attributes {"land/abort-reason" (fn [{:keys [reason]}] reason)
@@ -181,20 +110,20 @@
                                   withdraw a run with `strand merge-queue withdraw <entry-id>
                                   --reason <reason>`; age alone never evicts a run.
                                 " {})})
-   (shell-gate :prepare-merge "Update the branch and validate its final HEAD"
-               [:take-turn]
-               (fn [{:keys [branch]}]
-                 (support/sh-gate (support/script "land-prepare.sh")
-                                  "land-prepare" branch support/land-quality-gate-script))
-               5400 retry-instruction)
-   (update (shell-gate :merge-pr "Squash-merge the validated PR" [:prepare-merge]
-                       (fn [{:keys [pr-number subject body]}]
-                         (support/sh-gate support/land-merge-script
-                                          "land-merge" (str pr-number) subject body))
-                       300 retry-instruction)
+   (support/shell-gate :prepare-merge "Update the branch and validate its final HEAD"
+                       [:take-turn]
+                       (fn [{:keys [branch]}]
+                         (support/sh-gate (support/script "land-prepare.sh")
+                                          "land-prepare" branch support/land-quality-gate-script))
+                       5400 retry-instruction)
+   (update (support/shell-gate :merge-pr "Squash-merge the validated PR" [:prepare-merge]
+                               (fn [{:keys [pr-number subject body]}]
+                                 (support/sh-gate support/land-merge-script
+                                                  "land-merge" (str pr-number) subject body))
+                               300 retry-instruction)
            :attributes assoc "land/irreversible" true)
-   (shell-gate :pull-main "Fast-forward canonical main" [:merge-pr]
-               ["sh" "-c" support/land-pull-main-script] 300 retry-instruction)
+   (support/shell-gate :pull-main "Fast-forward canonical main" [:merge-pr]
+                       ["sh" "-c" support/land-pull-main-script] 300 retry-instruction)
    (workflow/gate :release-turn "Release the merge turn before housekeeping" :merge-release
                   :depends-on [:pull-main]
                   :attributes {"workflow/instruction"
@@ -225,116 +154,59 @@
                                   Leave shared or uncertain resources alone, and record anything
                                   deliberately retained on the work task.
                                 " {})})
-   (card-gate :finish-card "Finish the optional kanban card" [:tidy-resources]
-              "me.workflows.land-actions/finish!")))
+   (support/card-gate :finish-card "Finish the optional kanban card" [:tidy-resources]
+                      "me.workflows.card-actions/finish!")))
 
-(workflow/defworkflow land-review
-  "Review the PR and authorize automatic landing with the ordinary sign-off checkpoint."
-  {:entrypoints #{:continue} :param-spec ::land-review-params :defaults {}}
+(workflow/defworkflow land
+  (format-alpha/prose
+   "
+     Merge reviewed work from an existing PR or a working branch.
+
+     Supply the branch and worktree for the work being landed; pr-number may
+     identify an existing draft or ready PR. Reuse its completed review. When
+     the request starts from a design, use the development and review workflows
+     to produce working, reviewed code before entering land.
+
+     Resolve or create the PR, then approve its exact number and squash message.
+     Approval authorizes queued rebase, final-HEAD validation, merge, and cleanup.
+     The agent may act on the user's existing instruction to land the work.
+   " {})
+  {:entrypoints #{:start} :param-spec ::land-params :defaults {}}
   (workflow/workflow
-   (fn [{:keys [branch]}] (str "Review land: " branch))
-   (stage "review")
-   (card-gate :review-card "Move the optional card into review" []
-              "me.workflows.land-actions/review!")
-   (shell-gate :ci-green "Validate the pushed branch before review" [:review-card]
-               (fn [{:keys [branch]}]
-                 (support/sh-gate support/land-quality-gate-script "land-quality" branch))
-               5400
-               "Fix failed checks, push the corrected branch, then clear gate/error to retry.")
-   (workflow/gate :reviewer
-                  (fn [{:keys [item]}] (str "Review land change: " (:name item)))
-                  :subagent
-                  :depends-on [:ci-green]
-                  :loop {:each reviewer-specs}
-                  :attributes {"agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
-                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "panel/blackboard" (fn [{:keys [item]}]
-                                                    (item-attr item "panel/blackboard"))
-                               "review/roster" (fn [{:keys [item]}]
-                                                 (item-attr item "review/roster"))
-                               "panel/pass" (fn [{:keys [item]}]
-                                              (item-attr item "panel/pass"))
-                               "review/focus" (fn [{:keys [item]}]
-                                                (item-attr item "review/focus"))
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Machine gate: run one declared change-review seat and append its
-                                  findings to the review target.
-                                "
-                                {})})
-   (workflow/gate :review-synthesis
-                  "Synthesize the land review findings"
-                  :subagent
-                  :depends-on [:reviewer]
-                  :loop {:each synthesis-specs}
-                  :attributes {"agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
-                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "panel/blackboard" (fn [{:keys [item]}]
-                                                    (item-attr item "panel/blackboard"))
-                               "review/roster" (fn [{:keys [item]}]
-                                                 (item-attr item "review/roster"))
-                               "panel/pass" (fn [{:keys [item]}]
-                                              (item-attr item "panel/pass"))
-                               "panel/synthesis" (fn [{:keys [item]}]
-                                                   (item-attr item "panel/synthesis"))
-                               "workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Machine gate: synthesize this pass's reviewer notes into one
-                                  verdict.
-                                "
-                                {})})
-
-   (workflow/step :resolve-review "Resolve the review findings" :self
-                  :depends-on [:review-synthesis]
+   (fn [{:keys [branch]}] (str "Land: " branch))
+   (stage "ready")
+   (workflow/step :resolve-pr "Confirm reviewed work and resolve its pull request" :self
                   :attributes {"workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Read the synthesis on the review task, resolve its findings,
-                                  and commit and push repairs. Obtain focused follow-up review
-                                  where repairs materially change the reviewed code. Complete
-                                  this step when ready for final validation.
-                                " {})})
-   (shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
-               (fn [{:keys [branch]}]
-                 (support/sh-gate support/land-quality-gate-script "land-quality" branch))
-               5400
-               "Validate the actual pushed HEAD after review repairs. Fix failures and clear gate/error to retry.")
-   (workflow/checkpoint :signoff "Authorize this PR to land" :depends-on [:final-ci-green]
+                               (fn [{:keys [pr-number]}]
+                                 (str
+                                  (when pr-number (str "Use PR #" pr-number ". "))
+                                  (format-alpha/prose
+                                   "
+                                     Inspect the work and its completed review. Resolve any
+                                     outstanding preparation through the development workflow
+                                     and `review`; reuse sufficient existing review evidence.
+                                     An approved proposal can be landed as reviewed work too.
+
+                                     Push the clean working branch. Reuse its open PR, whether
+                                     draft or ready; create one only if none exists. Confirm the
+                                     PR names this branch and targets main. Complete this step,
+                                     then supply its exact number and squash message at sign-off.
+                                   " {})))})
+   (support/card-gate :mark-ready "Mark the optional card ready for landing" [:resolve-pr]
+                      "me.workflows.card-actions/review!")
+   (workflow/checkpoint :signoff "Authorize this work to land" :depends-on [:mark-ready]
                         :kind :agent
                         :choices [{:key :approved :label "Approve and join the queue"
                                    :next :land-merge :input land-merge-input}
-                                  {:key :revise :label "Repeat review" :revise {:params {}}}
                                   {:key :abort :label "Abort landing"
                                    :next :land-abort :input land-abort-reason-input}]
                         :attributes {"workflow/instruction"
                                      (format-alpha/prose
                                       "
-                                        Use `strand workflow choose <run-id> approved` with the
-                                        squash subject and body. Approval authorizes landing when
-                                        the FIFO turn arrives, including rebase, repair, focused
-                                        review, and revalidation. Major changes may still justify
-                                        an explicit abort and a conversation with the user.
+                                        Use `strand workflow choose <run-id> approved --input`
+                                        with pr-number, subject, and body. Act on the user's
+                                        existing authorization to land; no repeat approval is
+                                        needed. Approval covers the FIFO turn, rebase, repairs,
+                                        focused review, final validation, and automatic merge.
+                                        Major changes may justify aborting to consult the user.
                                       " {})})))
-
-(workflow/defworkflow land
-  "Open a draft PR and record its exact number before entering review."
-  {:entrypoints #{:start} :param-spec ::land-params :defaults {}}
-  (workflow/workflow
-   (fn [{:keys [branch]}] (str "Open land PR: " branch))
-   (stage "open-pr")
-   (workflow/step :push-draft-pr "Push the branch and open or reuse its draft PR" :self
-                  :attributes {"workflow/instruction"
-                               (format-alpha/prose
-                                "
-                                  Push the feature branch and open or reuse its draft PR.
-                                  Complete with `strand workflow complete <run-id>`, then record
-                                  the exact PR number at the next checkpoint.
-                                " {})})
-   (workflow/checkpoint :pr-number "Record the opened PR number"
-                        :depends-on [:push-draft-pr] :kind :agent
-                        :choices [{:key :opened :label "PR opened" :next :land-review
-                                   :input {:spec ::pr-input :doc "Exact positive GitHub PR number."}}])))

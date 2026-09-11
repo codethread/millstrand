@@ -120,6 +120,7 @@
                           :millstrand/spools-kanban
                           :millhouse/spools-chime
                           :millhouse/spools-cron
+                          :codethread/ralph
                           :codethread/config]
                   :required? true})
 

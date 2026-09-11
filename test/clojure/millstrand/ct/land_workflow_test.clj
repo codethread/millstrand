@@ -1,9 +1,8 @@
 (ns millstrand.ct.land-workflow-test
   "Exercise ordinary landing transitions and card actions in disposable runtimes."
   (:require [clojure.test :refer [deftest is]]
-            [ct.spools.delegation :as agents]
             [me.workflows.land :as land]
-            [me.workflows.land-actions :as land-actions]
+            [me.workflows.card-actions :as card-actions]
             [millhouse.spools.kanban :as kanban]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.hooks.alpha :as hooks]
@@ -22,26 +21,10 @@
              (= "true" (attr-get (:strand/after ctx) :kanban/card)))
     (throw (ex-info "Injected card write failure" {}))))
 
-(def ^:private land-routes
-  "Continuation names needed by the landing checkpoints."
-  {:land-abort 'me.workflows.land/land-abort
-   :land-merge 'me.workflows.land/land-merge
-   :land-review 'me.workflows.land/land-review})
-
-(def ^:private review-roster
-  "Minimal valid roster that still exercises the review loop and synthesis."
-  {:seats [{:name "correctness"
-            :harness :luna-low
-            :brief "Check the changed behavior for concrete regressions."}]
-   :synthesis {:harness :sol-med}})
-
 (defn- register-land-routes!
   []
-  (doseq [name [:land-abort :land-merge]]
-    (let [definition (get land-routes name)]
-      (workflow/register-workflow! name definition)))
-  (agents/defroster! :change-review review-roster)
-  (workflow/register-workflow! :land-review (:land-review land-routes)))
+  (workflow/register-workflow! :land-abort 'me.workflows.land/land-abort)
+  (workflow/register-workflow! :land-merge 'me.workflows.land/land-merge))
 
 (defn- card-fixture
   [rt]
@@ -50,20 +33,13 @@
         card (:id (:card (kanban/add! rt "Landing fixture" {})))
         _ (kanban/claim! rt card {"--owner" "test-agent"
                                   "--branch" "feature/land-test"
-                                  "--worktree" (.getPath root)})
-        task (:id (:task (kanban/task-add! rt card "Review task" {})))]
+                                  "--worktree" (.getPath root)})]
     {:root root
      :card card
-     :task task
      :params {:feature "land fixture"
               :branch "feature/land-test"
               :worktree (.getPath root)
-              :card card
-              :review-target task
-              :review-id "land-test-review"
-              :change-context {:commit-range
-                               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                               :files ["src/example.clj"]}}}))
+              :card card}}))
 
 (defn- card-lane
   [rt id]
@@ -73,42 +49,32 @@
   [run-id params]
   (workflow/start! run-id #'land/land params))
 
-(defn- open-review!
-  [run-id]
-  (workflow/complete! run-id)
-  (workflow/choose! run-id :opened {:pr-number 42}))
-
 (defn- complete-ready!
   [run-id]
   (workflow/complete! run-id {:by "test-agent"}))
 
 (defn- reach-signoff!
   [rt run-id card]
-  (land-actions/review! {:card card})
   (complete-ready! run-id)
-  (complete-ready! run-id)
-  (complete-ready! run-id)
-  (complete-ready! run-id)
-  (complete-ready! run-id)
+  (card-actions/review! {:card card})
   (complete-ready! run-id)
   (is (= "in_review" (card-lane rt card)))
   (workflow/ready-checkpoint run-id))
 
-(deftest pr-number-routes-to-review-with-the-same-run-id
+(deftest landing-accepts-a-reviewed-branch-or-existing-pr-without-a-review-roster
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :millhouse/spools-workflow
                                     'millhouse.spools.workflow)
       (register-land-routes!)
-      (let [{:keys [root params]} (card-fixture rt)
-            run-id "land-pr-number"
-            ready (do (start-land! run-id params)
-                      (:ready (open-review! run-id)))]
+      (let [{:keys [root card params]} (card-fixture rt)]
         (try
-          (is (= "Move the optional card into review" (:title (first ready))))
-          (is (= run-id (:run-id (first ready))))
-          (is (= run-id (attr-get (workflow/current-root run-id)
-                                  :workflow/run-id)))
+          (doseq [[run-id extra] [["land-branch" {}] ["land-existing-pr" {:pr-number 42}]]]
+            (start-land! run-id (merge params extra))
+            (is (= "Confirm reviewed work and resolve its pull request"
+                   (:title (first (workflow/ready run-id)))))
+            (is (= "signoff" (:checkpoint (reach-signoff! rt run-id card))))
+            (is (= run-id (attr-get (workflow/current-root run-id) :workflow/run-id))))
           (finally
             (test-support/delete-tree! root)))))))
 
@@ -122,11 +88,10 @@
             run-id "land-approved"
             _ (start-land! run-id params)]
         (try
-          (open-review! run-id)
           (is (= "signoff" (:checkpoint (reach-signoff! rt run-id card))))
           (let [ready (:ready (workflow/choose!
                                run-id :approved
-                               {:subject "Land fixture"
+                               {:pr-number 42 :subject "Land fixture"
                                 :body "Land the reviewed fixture."}))]
             (is (= "Join the queue and await the merge turn"
                    (:title (first ready))))
@@ -155,7 +120,6 @@
             run-id "land-aborted"
             _ (start-land! run-id params)]
         (try
-          (open-review! run-id)
           (reach-signoff! rt run-id card)
           (let [ready (:ready (workflow/choose! run-id :abort
                                                 {:reason "Needs a larger change."}))
@@ -168,12 +132,12 @@
             (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                   #"Lifecycle hook failed"
                                   (binding [*fail-card-write* true]
-                                    (land-actions/rework! {:card card}))))
+                                    (card-actions/rework! {:card card}))))
             (is (= (:id abort-root) (:id (workflow/current-root run-id))))
             (is (= "in_review" (card-lane rt card)))
             (is (= "Return the card to claimed"
                    (:title (first (workflow/ready run-id)))))
-            (land-actions/rework! {:card card})
+            (card-actions/rework! {:card card})
             (is (= "claimed" (card-lane rt card)))
             (is (= "in_review" (do (kanban/review! rt card)
                                    (card-lane rt card)))))
@@ -185,16 +149,16 @@
     (fn [rt _]
       (let [{:keys [root card]} (card-fixture rt)]
         (try
-          (is (nil? (land-actions/review! {:card card})))
+          (is (nil? (card-actions/review! {:card card})))
           (is (= "in_review" (card-lane rt card)))
-          (is (nil? (land-actions/review! {:card card})))
-          (is (nil? (land-actions/rework! {:card card})))
+          (is (nil? (card-actions/review! {:card card})))
+          (is (nil? (card-actions/rework! {:card card})))
           (is (= "claimed" (card-lane rt card)))
-          (is (nil? (land-actions/rework! {:card card})))
-          (is (nil? (land-actions/finish! {:card card})))
+          (is (nil? (card-actions/rework! {:card card})))
+          (is (nil? (card-actions/finish! {:card card})))
           (is (= "closed" (:state (weaver/show rt card))))
           (is (= "done" (attr-get (weaver/show rt card) :kanban/outcome)))
-          (is (nil? (land-actions/finish! {:card card})))
+          (is (nil? (card-actions/finish! {:card card})))
           (finally
             (test-support/delete-tree! root)))))))
 
