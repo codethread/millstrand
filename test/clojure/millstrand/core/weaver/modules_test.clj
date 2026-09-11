@@ -3,7 +3,7 @@
   (:require [clojure.java.io :as io]
             [clojure.data.json :as json]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is]]
+            [clojure.test :refer [deftest is testing]]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.core.db-test :as db-test]
@@ -346,5 +346,57 @@
           (is (= :partial (:status result)))
           (is (= :applied (get-in result [:members first-config :status])))
           (is (= :failed (get-in result [:members second-config :status])))))
+      (finally
+        (delete-tree! root)))))
+
+(deftest pooled-refresh-preserves-member-partial-and-restart-status
+  (let [root (temp-dir)]
+    (try
+      (let [{:keys [host membership-file members]} (pooled-refresh-fixture root)
+            first-config (:config-dir (first members))]
+        (write-membership! membership-file
+                           (map #(assoc (select-keys % [:config-dir :source-cwd])
+                                        :jvm-pool "backend")
+                                members))
+        (with-redefs [pool-basis-api/create-pool-basis (fn [_] (:pool-basis
+                                                                (pooled-refresh-fixture root)))
+                      weaver-runtime/refresh-modules!
+                      (fn [member _opts]
+                        (if (= (:member-config member) first-config)
+                          {:status :partial}
+                          {:status :unchanged}))]
+          (let [result (pool/refresh! host)]
+            (is (= :partial (:status result)))
+            (is (= :partial
+                   (get-in result [:members first-config :status]))))))
+      (finally
+        (delete-tree! root)))))
+
+(deftest pooled-membership-document-is-validated-before-filtering
+  (let [root (temp-dir)]
+    (try
+      (let [{:keys [host membership-file members]} (pooled-refresh-fixture root)
+            member (first members)
+            row (json/write-str {:config_dir (:config-dir member)
+                                 :source_cwd (:source-cwd member)
+                                 :jvm_pool "backend"})
+            calls (atom 0)]
+        (doseq [[label document]
+                [["duplicate"
+                  (str "{\"format\":\"millstrand.jvm-pool-membership/v1\","
+                       "\"revision\":\"membership-bad\",\"members\":["
+                       row "," row "]}")]
+                 ["unknown field"
+                  (str "{\"format\":\"millstrand.jvm-pool-membership/v1\","
+                       "\"revision\":\"membership-bad\",\"members\":[],"
+                       "\"extra\":true}")]]]
+          (testing label
+            (spit membership-file document)
+            (with-redefs [weaver-runtime/refresh-modules!
+                          (fn [_ _] (swap! calls inc) {:status :applied})]
+              (let [result (pool/refresh! host)]
+                (is (= :restart-required (:status result)))
+                (is (= :pool/membership-invalid (:reason result)))
+                (is (zero? @calls)))))))
       (finally
         (delete-tree! root)))))

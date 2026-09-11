@@ -29,7 +29,7 @@
   clojure.lang.IDeref
   (deref [_] @state))
 
-(defmethod print-method HostContext [_ writer]
+(defmethod print-method HostContext [_ ^java.io.Writer writer]
   (.write writer "#<millstrand.jvm-pool-host>"))
 
 (defn- host-context-holder [value]
@@ -154,25 +154,111 @@
   [manifest]
   (io/file (pool-state-root manifest) "jvm-pools" "membership.json"))
 
+;; The closed wire format accepted by the Go JVM-pool registry.
+(def ^:private membership-format "millstrand.jvm-pool-membership/v1")
+
+(defn- bytewise-compare
+  "Compare strings by their UTF-8 bytes, matching Go's bytewise sort."
+  [^String left ^String right]
+  (let [left-bytes (.getBytes left StandardCharsets/UTF_8)
+        right-bytes (.getBytes right StandardCharsets/UTF_8)]
+    (loop [index 0]
+      (cond
+        (and (= index (alength left-bytes))
+             (= index (alength right-bytes))) 0
+        (= index (alength left-bytes)) -1
+        (= index (alength right-bytes)) 1
+        :else (let [difference (- (bit-and 0xff (aget left-bytes index))
+                                  (bit-and 0xff (aget right-bytes index)))]
+                (if (zero? difference)
+                  (recur (inc index))
+                  difference))))))
+
+(defn- clean-absolute-path?
+  [value]
+  (and (string? value)
+       (not (str/blank? value))
+       (let [path (.toPath (io/file value))]
+         (and (.isAbsolute path)
+              (= value (.toString (.normalize path)))))))
+
+(defn- valid-membership-member?
+  [member]
+  (and (map? member)
+       (= #{:config-dir :source-cwd :jvm-pool} (set (keys member)))
+       (clean-absolute-path? (:config-dir member))
+       (clean-absolute-path? (:source-cwd member))
+       (string? (:jvm-pool member))
+       (not (str/blank? (:jvm-pool member)))))
+
+(defn- membership-revision?
+  [value]
+  (if (string? value)
+    (str/starts-with? value "membership-")
+    false))
+
+(defn- valid-membership-document?
+  [document]
+  (and (map? document)
+       (= #{:format :revision :members} (set (keys document)))
+       (= membership-format (:format document))
+       (membership-revision? (:revision document))
+       (vector? (:members document))
+       (every? valid-membership-member? (:members document))
+       (= (count (:members document))
+          (count (distinct (map :config-dir (:members document)))))
+       (= (:members document)
+          (vec (sort-by :config-dir bytewise-compare (:members document))))))
+
+(defn- decode-membership
+  [raw]
+  (if (and (map? raw)
+           (= #{"format" "revision" "members"} (set (keys raw)))
+           (vector? (get raw "members"))
+           (every? #(and (map? %)
+                         (= #{"config_dir" "source_cwd" "jvm_pool"}
+                            (set (keys %))))
+                   (get raw "members")))
+    (assoc (select-keys raw ["format" "revision"])
+           "members"
+           (get raw "members"))
+    raw))
+
+(defn- keyword-membership
+  [document]
+  (if (and (map? document)
+           (= #{"format" "revision" "members"} (set (keys document)))
+           (vector? (get document "members"))
+           (every? #(and (map? %)
+                         (= #{"config_dir" "source_cwd" "jvm_pool"}
+                            (set (keys %))))
+                   (get document "members")))
+    {:format (get document "format")
+     :revision (get document "revision")
+     :members (mapv (fn [member]
+                      {:config-dir (get member "config_dir")
+                       :source-cwd (get member "source_cwd")
+                       :jvm-pool (get member "jvm_pool")})
+                    (get document "members"))}
+    document))
+
 (defn- read-membership
   "Read the durable membership document used for pooled refresh preflight."
   [manifest]
-  (let [file (membership-file manifest)]
+  (let [^java.io.File file (membership-file manifest)]
     (when-not (.exists file)
       (throw (ex-info "Pooled refresh requires a durable membership document"
                       {:reason :pool/membership-unavailable
                        :file (.getPath file)})))
     (try
-      (let [value (json/read-str
-                   (slurp file)
-                   :key-fn #(keyword (str/replace % "_" "-")))]
-        (when-not (and (= "millstrand.jvm-pool-membership/v1" (:format value))
-                       (string? (:revision value))
-                       (vector? (:members value)))
+      (let [raw (json/read-str (slurp file))
+            document (decode-membership raw)
+            value (keyword-membership document)]
+        (when-not (valid-membership-document? value)
           (throw (ex-info "Pooled membership document has an invalid shape"
                           {:reason :pool/membership-invalid
                            :file (.getPath file)
-                           :value value})))
+                           :value raw})))
         value)
       (catch clojure.lang.ExceptionInfo throwable
         (throw throwable))
@@ -461,6 +547,11 @@
                      completed))]
              (finish-result
               {:status (cond
+                         (some #(= :restart-required (get-in % [1 :status]))
+                               member-results)
+                         :restart-required
+                         (some #(= :partial (get-in % [1 :status])) member-results)
+                         :partial
                          (some #(#{:failed :skipped} (:status (second %)))
                                member-results) :partial
                          (some #(= :applied (get-in % [1 :status])) member-results)

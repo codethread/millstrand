@@ -94,6 +94,36 @@
    :millstrand-version "dev"
    :members [(pool-member root "a") (pool-member root "b")]})
 
+(defn- write-pool-membership! [root manifest]
+  (let [file (io/file root "jvm-pools" "membership.json")]
+    (.mkdirs (.getParentFile file))
+    (spit file
+          (json/write-str
+           {:format "millstrand.jvm-pool-membership/v1"
+            :revision "membership-test"
+            :members (mapv (fn [{:keys [config-dir source-cwd]}]
+                             {:config_dir config-dir
+                              :source_cwd source-cwd
+                              :jvm_pool (:jvm-pool manifest)})
+                           (:members manifest))}))
+    file))
+
+(defn- write-pooled-module! [member ns-sym query]
+  (spit (io/file (:config-dir member) "shared.clj")
+        (str "(ns " ns-sym ")\n"
+             "(millstrand.api.runtime.alpha/collect-entry! "
+             ":queries \"owned\" " (pr-str query) ")\n"))
+  (spit (io/file (:config-dir member) "init.clj")
+        (str "(millstrand.api.runtime.alpha/module! "
+             "millstrand.core.weaver.runtime/*runtime* "
+             ":shared {:file \"shared.clj\"})\n")))
+
+(defn- write-pooled-image-module! [member ns-sym]
+  (spit (io/file (:config-dir member) "init.clj")
+        (str "(millstrand.api.runtime.alpha/module! "
+             "millstrand.core.weaver.runtime/*runtime* "
+             ":shared {:ns '" ns-sym " :load :image})\n")))
+
 (defn- pooled-probe-manifest [root]
   (let [member (fn [name baseline]
                  (let [original (io/file root name "original")
@@ -452,6 +482,95 @@
           (is (map? (first @called)))
           (is (identical? (:host-context host)
                           (:host-context (first @called)))))
+        (finally
+          (pool/stop! host)
+          (delete-tree! root))))))
+
+(deftest pooled-host-replays-member-scoped-images-and-isolates-failures
+  (let [root (io/file "/tmp" (str "pool-replay-" (java.util.UUID/randomUUID)))
+        manifest (pool-manifest root)
+        [member-a member-b] (:members manifest)
+        ns-sym (symbol (str "test.pooled.shared-"
+                            (str/replace (str (java.util.UUID/randomUUID)) "-" "")))]
+    (.mkdirs root)
+    (try
+      (write-pooled-module! member-a ns-sym [:= [:attr :member] "a"])
+      (write-pooled-module! member-b ns-sym [:= [:attr :member] "b"])
+      (write-pool-membership! root manifest)
+      (let [host (pool/start! manifest)]
+        (try
+          (let [[runtime-a runtime-b] (:runtimes host)]
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (write-pooled-image-module! member-a ns-sym)
+            (write-pooled-image-module! member-b ns-sym)
+            (is (#{:applied :unchanged} (:status (pool/refresh! host))))
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (write-pooled-module! member-a ns-sym [:= [:attr :member] "a"])
+            (spit (io/file (:config-dir member-a) "shared.clj")
+                  (str "(ns " ns-sym ")\n"
+                       "(throw (ex-info \"member refresh failed\" {}))\n"))
+            (is (= :partial (:status (pool/refresh! host))))
+            (is (= [:= [:attr :member] "a"]
+                   (get (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned")))
+
+            (spit (io/file (:config-dir member-a) "init.clj") "")
+            (is (#{:applied :unchanged} (:status (pool/refresh! host))))
+            (is (not (contains? (graph/queries runtime-a) "owned")))
+            (is (= [:= [:attr :member] "b"]
+                   (get (graph/queries runtime-b) "owned"))))
+          (finally
+            (pool/stop! host)))
+        (is (not (.exists (io/file (pool/ready-file manifest))))))
+      (finally
+        (delete-tree! root)))))
+
+(deftest pooled-endpoint-reload-code-takes-shared-lock
+  (let [root (io/file "/tmp" (str "pool-reload-" (java.util.UUID/randomUUID)))
+        manifest (pool-manifest root)]
+    (.mkdirs root)
+    (let [host (pool/start! manifest)
+          runtime (first (:runtimes host))
+          port (get-in runtime [:metadata :endpoint :port])
+          lock (get-in @(:pool-host runtime) [:refresh-lock])
+          reloaded (atom [])
+          lock-held? (atom false)
+          root-lib 'io.millstrand/millstrand]
+      (try
+        (with-redefs [clojure.core/require
+                      (fn [namespace & args]
+                        (reset! lock-held? (Thread/holdsLock lock))
+                        (swap! reloaded conj [namespace args]))
+                      pool/refresh!
+                      (fn [& _]
+                        (throw (ex-info "reload-code must not reconcile modules" {})))]
+          (let [value (str "(millstrand.api.runtime.alpha/reload-code! "
+                           "(millstrand.core.weaver.runtime/runtime-for-nrepl-port "
+                           port ") '" root-lib ")")]
+            (with-open [conn (nrepl/connect :host "127.0.0.1" :port port)]
+              (let [session (nrepl/client-session
+                             (nrepl/client conn (test-support/await-budget-ms)))
+                    responses (doall (nrepl/message session {:op "eval"
+                                                             :code value}))
+                    result (some->> responses
+                                    (keep :value)
+                                    last
+                                    edn/read-string)]
+                (is (some :value responses) (pr-str responses))
+                (is (= :reloaded (:status result)))
+                (is (true? (:shared? result)))
+                (is (seq (:namespaces result))))))
+          (is @lock-held?)
+          (is (seq @reloaded)))
         (finally
           (pool/stop! host)
           (delete-tree! root))))))

@@ -38,7 +38,7 @@
   clojure.lang.IDeref
   (deref [_] @state))
 
-(defmethod print-method RuntimeState [_ writer]
+(defmethod print-method RuntimeState [_ ^java.io.Writer writer]
   (.write writer "#<millstrand.runtime-state>"))
 
 (defn- state-holder []

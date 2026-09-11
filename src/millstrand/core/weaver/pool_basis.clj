@@ -6,15 +6,16 @@
   member's own config and source roots, and constructs one shared loader. It
   never opens runtime state, storage, metadata, sockets, or endpoints."
   (:require [clojure.spec.alpha :as s]
-            [millstrand.core.weaver.basis :as basis]))
+            [millstrand.core.weaver.basis :as basis])
+  (:import [java.nio.file Path]))
 
-(defn- canonical-path [value]
+(defn- canonical-path ^Path [value]
   (.toPath (.getCanonicalFile (java.io.File. ^String value))))
 
 (defn- path-below? [root value]
-  (let [root-path (canonical-path root)
-        value-path (canonical-path value)
-        relative-path (.relativize root-path value-path)]
+  (let [^Path root-path (canonical-path root)
+        ^Path value-path (canonical-path value)
+        ^Path relative-path (.relativize root-path value-path)]
     (and (not= root-path value-path)
          (not= ".." (str (.getName relative-path 0))))))
 
