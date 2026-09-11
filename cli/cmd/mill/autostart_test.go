@@ -216,6 +216,43 @@ func TestStartAutostartPersistsRegistryAndConfigFailures(t *testing.T) {
 	s.signalShutdown()
 }
 
+func TestStartAutostartPreservesFailureEvidenceWhenShutdownCancelsPass(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "state")
+	t.Setenv("XDG_STATE_HOME", state)
+	configDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(configDir, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	world, err := config.RuntimeWorld(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registerAutoStart(world, configDir, "cancelled"); err != nil {
+		t.Fatal(err)
+	}
+	failurePath, err := autostartFailurePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
+	if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &server{shutdown: make(chan struct{})}
+	s.signalShutdown()
+	s.startAutostart()
+	s.autostartWG.Wait()
+
+	got, err := os.ReadFile(failurePath)
+	if err != nil {
+		t.Fatalf("cancelled autostart removed prior failure evidence: %v", err)
+	}
+	if string(got) != string(oldFailure) {
+		t.Fatalf("cancelled autostart changed prior failure evidence: got=%q want=%q", got, oldFailure)
+	}
+}
+
 func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", state)
@@ -228,6 +265,14 @@ func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &server{shutdown: make(chan struct{})}
+	failurePath, err := autostartFailurePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldFailure := []byte(`{"state":"failed","errors":["previous startup failed"]}` + "\n")
+	if err := os.WriteFile(failurePath, oldFailure, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s.startAutostart()
 	s.autostartWG.Wait()
 	s.signalShutdown()
@@ -237,5 +282,8 @@ func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("disabled registration was not pruned: %v", err)
+	}
+	if _, err := os.Stat(failurePath); !os.IsNotExist(err) {
+		t.Fatalf("explicit autostart opt-out did not clear prior failure evidence: %v", err)
 	}
 }

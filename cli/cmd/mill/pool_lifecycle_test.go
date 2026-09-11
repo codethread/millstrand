@@ -157,6 +157,129 @@ func TestStopPooledWeaverRetainsCustodyWhenReadyMarkerCleanupFails(t *testing.T)
 	}
 }
 
+func TestStopPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand"), StateDir: t.TempDir(), DataDir: t.TempDir()}
+	cmd := startPoolOwnedBlockingProcess(t)
+	identity := weaverIdentity{PID: cmd.Process.Pid, WeaverID: "old-weaver", GenerationID: "generation-old-weaver", StartedAt: "started", Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir}
+	writeWeaverMetadataForIdentity(t, world, weaverIdentity{PID: cmd.Process.Pid, WeaverID: "other-weaver", GenerationID: "generation-other-weaver", StartedAt: identity.StartedAt, Socket: identity.Socket, ConfigDir: identity.ConfigDir, StateDir: identity.StateDir, DataDir: identity.DataDir}, "member")
+	readyPath := filepath.Join(t.TempDir(), "ready.json")
+	if err := os.WriteFile(readyPath, []byte("ready\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := &weaverHost{Pool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", PID: cmd.Process.Pid, cmd: cmd, Live: true, ReadyPath: readyPath, Members: []poolMember{{World: world, WeaverID: identity.WeaverID, Identity: identity}}}
+	s := &server{poolHosts: map[string]*weaverHost{"backend": host}, poolMembers: map[string]*weaverHost{world.ConfigDir: host}}
+
+	_, err := s.stopPooledWeaver(world)
+	if err == nil || !strings.Contains(err.Error(), "backend") || !strings.Contains(err.Error(), world.ConfigDir) || !strings.Contains(err.Error(), "artifact cleanup") {
+		t.Fatalf("member cleanup failure was not contextualized: %v", err)
+	}
+	if host.Live {
+		t.Fatal("member cleanup failure left stopped host marked live")
+	}
+	if s.poolHosts["backend"] != host || s.poolMembers[world.ConfigDir] != host {
+		t.Fatalf("member cleanup failure discarded host custody: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+	}
+
+	writeWeaverMetadataForIdentity(t, world, identity, "member")
+	if _, err := s.stopPooledWeaver(world); err != nil {
+		t.Fatalf("retry after repairing member metadata failed: %v", err)
+	}
+	if s.poolHosts["backend"] != nil || s.poolMembers[world.ConfigDir] != nil {
+		t.Fatalf("successful cleanup retry retained host custody: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+	}
+	if _, err := os.Stat(filepath.Join(world.StateDir, "weaver.json")); !os.IsNotExist(err) {
+		t.Fatalf("successful cleanup retry left member metadata: %v", err)
+	}
+}
+
+func TestRestartPooledWeaverRetainsNonLiveCustodyOnMemberCleanupFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	if err := config.SetLocalJVMPool(cfg, "backend"); err != nil {
+		t.Fatal(err)
+	}
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := jvmpool.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Reconcile(jvmpool.Member{ConfigDir: world.ConfigDir, SourceCWD: source, JVMPool: "backend"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := registry.Snapshot("backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := startPoolOwnedBlockingProcess(t)
+	identity := weaverIdentity{PID: cmd.Process.Pid, WeaverID: "old-weaver", GenerationID: "generation-old-weaver", StartedAt: "started", Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir}
+	writeWeaverMetadataForIdentity(t, world, weaverIdentity{PID: cmd.Process.Pid, WeaverID: "other-weaver", GenerationID: "generation-other-weaver", StartedAt: identity.StartedAt, Socket: identity.Socket, ConfigDir: identity.ConfigDir, StateDir: identity.StateDir, DataDir: identity.DataDir}, "member")
+	hostDir, err := jvmpool.PoolHostDir(root, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldManifest := poolLaunchManifest{Format: poolLaunchFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, MillstrandSource: source, MillstrandVersion: config.Version, Members: []poolLaunchMember{{ConfigDir: world.ConfigDir, SourceCWD: source, StateDir: world.StateDir, DataDir: world.DataDir, Name: "member", WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, DependencyDiagnostic: dependencyDiagnosticPath(world)}}}
+	if err := writePoolLaunchManifest(filepath.Join(hostDir, "launch-host-1.json"), oldManifest); err != nil {
+		t.Fatal(err)
+	}
+	readyPath := filepath.Join(hostDir, "ready.json")
+	oldMarker := poolReadyMarker{Format: poolReadyFormat, JVMPool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRevision: snapshot.Revision, PID: cmd.Process.Pid, BasisFingerprint: poolTestBasis, Members: []poolReadyMember{{ConfigDir: world.ConfigDir, WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, SocketPath: identity.Socket, NREPLHost: "127.0.0.1", NREPLPort: 4100}}}
+	if err := atomicPoolJSON(readyPath, oldMarker); err != nil {
+		t.Fatal(err)
+	}
+	host := &weaverHost{Pool: "backend", HostID: "host-1", HostGenerationID: "host-generation-1", MembershipRev: snapshot.Revision, PID: cmd.Process.Pid, cmd: cmd, Live: true, ReadyPath: readyPath, ManifestPath: filepath.Join(hostDir, "launch-host-1.json"), LogPath: filepath.Join(hostDir, "host.log"), Members: []poolMember{{World: world, WeaverID: identity.WeaverID, GenerationID: identity.GenerationID, Identity: identity}}}
+	s := &server{poolRegistry: registry, poolHosts: map[string]*weaverHost{"backend": host}, poolMembers: map[string]*weaverHost{world.ConfigDir: host}}
+
+	originalBaseline, originalProbe := poolProbeBaselineStatus, poolProbeRuntime
+	t.Cleanup(func() {
+		poolProbeBaselineStatus, poolProbeRuntime = originalBaseline, originalProbe
+	})
+	poolProbeBaselineStatus = func(weaverIdentity) (map[string]any, error) {
+		return map[string]any{"registry_projection": map[string]any{}}, nil
+	}
+	poolProbeRuntime = func(manifest poolProbeManifest) (poolProbeResult, error) {
+		result := poolProbeTestResult(manifest)
+		result.SourceWorkspace = manifest.Members[0].OriginalConfigDir
+		result.CollectiveDiagnostic = manifest.CollectiveDiagnostic
+		result.Log = filepath.Join(manifest.ProbeRoot, "probe.log")
+		result.Members[0].BaselineKind = "live"
+		result.Members[0].RegistryDiff = map[string]any{"added": map[string]any{}, "removed": map[string]any{}, "changed": map[string]any{}}
+		return result, nil
+	}
+
+	_, err = s.restartPooledWeaver(client.MillWorldRequest{CWD: source, ConfigDir: world.ConfigDir}, world, "backend")
+	if err == nil || !strings.Contains(err.Error(), "backend") || !strings.Contains(err.Error(), world.ConfigDir) || !strings.Contains(err.Error(), "artifact cleanup") {
+		t.Fatalf("member cleanup failure was not contextualized: %v", err)
+	}
+	if host.Live {
+		t.Fatal("restart member cleanup failure left stopped host marked live")
+	}
+	if s.poolHosts["backend"] != host || s.poolMembers[world.ConfigDir] != host {
+		t.Fatalf("restart member cleanup failure discarded host custody: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+	}
+	_ = cmd.Wait()
+	writeWeaverMetadataForIdentity(t, world, identity, "member")
+	if _, err := s.stopPooledWeaver(world); err != nil {
+		t.Fatalf("retry after repairing restart cleanup fixture failed: %v", err)
+	}
+	if s.poolHosts["backend"] != nil || s.poolMembers[world.ConfigDir] != nil {
+		t.Fatalf("successful restart cleanup retry retained host custody: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+	}
+}
+
 func TestPooledRestartResultUsesClosedRouteEnvelope(t *testing.T) {
 	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
 	status := map[string]any{

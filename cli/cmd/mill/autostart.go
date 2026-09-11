@@ -301,6 +301,13 @@ func (s *server) startAutostart() {
 			}(entry)
 		}
 		jobs.Wait()
+		// A shutdown may have cancelled the queue before all eligible jobs were
+		// admitted, or while admitted jobs were waiting for their own startup
+		// boundary. Preserve the previous failure evidence until a later,
+		// non-cancelled pass can account for the complete eligible set.
+		if s.shuttingDown() {
+			return
+		}
 		failureMu.Lock()
 		deferredFailures := append([]error(nil), failures...)
 		failureMu.Unlock()

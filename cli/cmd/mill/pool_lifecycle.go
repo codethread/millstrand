@@ -356,20 +356,23 @@ func (s *server) stopPooledWeaver(world config.World) (map[string]any, error) {
 	admission.Lock()
 	defer admission.Unlock()
 	if err := stopPoolProcess(host); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stop JVM pool host %q process: %w", host.Pool, err)
 	}
+	// The process is no longer live even if a later artifact cleanup fails.
+	// Keep the host and member routes in custody so the failed cleanup remains
+	// inspectable, but never let a stopped host receive lifecycle traffic.
+	host.Live = false
 	for _, member := range host.Members {
 		if member.Identity.WeaverID != "" {
 			if err := cleanupWorldArtifactsOwned(member.World, member.Identity); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("stop JVM pool host %q member %s artifact cleanup failed: %w", host.Pool, member.World.ConfigDir, err)
 			}
 		}
 	}
 	if err := removePoolReadyMarker(host); err != nil {
-		// The process and member artifacts have already stopped, but retaining
-		// the host routes keeps the failed cleanup inspectable and prevents a
-		// later lifecycle call from treating the stale marker as an unknown host.
-		host.Live = false
+		// Retaining the host routes keeps the failed cleanup inspectable and
+		// prevents a later lifecycle call from treating the stale marker as an
+		// unknown host.
 		return nil, fmt.Errorf("stop JVM pool host %q: %w", host.Pool, err)
 	}
 	s.removePoolHost(host)
@@ -568,12 +571,15 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 	admission.Lock()
 	defer admission.Unlock()
 	if err := stopPoolProcess(host); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stop JVM pool host %q process: %w", host.Pool, err)
 	}
+	// Preserve custody of a stopped host on every subsequent cleanup failure;
+	// it must not remain routable while its old generation is being retired.
+	host.Live = false
 	for _, member := range host.Members {
 		if member.Identity.WeaverID != "" {
 			if err := cleanupWorldArtifactsOwned(member.World, member.Identity); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("restart JVM pool host %q member %s artifact cleanup failed: %w", host.Pool, member.World.ConfigDir, err)
 			}
 		}
 	}
@@ -581,7 +587,6 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 		// Keep the stopped host in Mill custody so status/recovery code and an
 		// operator can inspect the failed cutover rather than losing the only
 		// evidence of which generation owned the marker.
-		host.Live = false
 		return nil, fmt.Errorf("restart JVM pool host %q cleanup failed: %w", host.Pool, err)
 	}
 	s.removePoolHost(host)
