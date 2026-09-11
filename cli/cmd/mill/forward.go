@@ -106,6 +106,18 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if host := poolHostForConfigLocked(s, configDir); host != nil {
+		if s.poolAdmissionLocks == nil {
+			s.poolAdmissionLocks = map[string]*sync.Mutex{}
+		}
+		key := poolHostKey(host.Pool)
+		if lock := s.poolAdmissionLocks[key]; lock != nil {
+			return lock
+		}
+		lock := &sync.Mutex{}
+		s.poolAdmissionLocks[key] = lock
+		return lock
+	}
 	if s.admissionLocks == nil {
 		s.admissionLocks = map[string]*sync.Mutex{}
 	}
@@ -212,6 +224,13 @@ func waitForLifecycleTransitionContext(ctx context.Context, t *weaverTransition,
 }
 
 func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any, *weaverTransition, *client.ResponseError) {
+	if host := poolHostForConfigLocked(s, world.ConfigDir); host != nil && host.Live {
+		status := s.poolStatusForMember(host, world.ConfigDir)
+		if status == nil {
+			return nil, nil, &client.ResponseError{Type: "domain", Code: "mill/no-selected-weaver", Message: "no running weaver for selected workspace", Details: map[string]any{"config_dir": world.ConfigDir}}
+		}
+		return status, nil, nil
+	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		switch transition.state() {
 		case restartStateProbing:

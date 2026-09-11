@@ -152,6 +152,11 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if pool, poolErr := configuredPool(world); poolErr != nil {
+		return nil, poolErr
+	} else if pool != "" {
+		return s.startPooledWeaver(req, world, pool, shutdown)
+	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		if !waitForStartClaimWithShutdown(claim, shutdown) {
 			return nil, errors.New("weaver start cancelled during mill shutdown")
@@ -413,6 +418,11 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	if pooled, ok, poolErr := s.poolStatusForWorld(world); poolErr != nil {
+		return nil, poolErr
+	} else if ok {
+		return pooled, nil
+	}
 	if req.Details {
 		return s.weaverStatusDetailedForWorld(world), nil
 	}
@@ -472,6 +482,17 @@ func (s *server) weaverList() ([]map[string]any, error) {
 	defer s.mu.Unlock()
 	seen := map[string]bool{}
 	rows := []map[string]any{}
+	for _, host := range s.poolHosts {
+		if host == nil || !host.Live || len(host.Members) == 0 {
+			continue
+		}
+		for _, member := range host.Members {
+			if status := s.poolStatusForMember(host, member.World.ConfigDir); status != nil {
+				rows = append(rows, status)
+			}
+			seen[member.World.StateDir] = true
+		}
+	}
 	for _, child := range s.children {
 		status := s.weaverStatusForWorldLocked(child.world)
 		rows = append(rows, status)
@@ -536,6 +557,11 @@ func (s *server) weaverStatusForWorld(world config.World) map[string]any {
 }
 
 func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
+	if host := poolHostForConfigLocked(s, world.ConfigDir); host != nil && host.Live {
+		if status := s.poolStatusForMember(host, world.ConfigDir); status != nil {
+			return status
+		}
+	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		switch transition.state() {
 		case restartStateProbing:
@@ -608,6 +634,11 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	world, err := resolveLifecycleWorld(req)
 	if err != nil {
 		return nil, err
+	}
+	if pool, poolErr := configuredPool(world); poolErr != nil {
+		return nil, poolErr
+	} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
+		return s.stopPooledWeaver(world)
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		waitForStartClaim(claim)
@@ -697,6 +728,24 @@ func (s *server) stopAll() error {
 			failures = append(failures, err)
 		}
 	}
+	for pool, host := range s.poolHosts {
+		if host == nil {
+			continue
+		}
+		if err := stopPoolProcess(host); err != nil {
+			failures = append(failures, err)
+		}
+		for _, member := range host.Members {
+			if member.Identity.WeaverID != "" {
+				if err := cleanupWorldArtifactsOwned(member.World, member.Identity); err != nil {
+					failures = append(failures, err)
+				}
+			}
+		}
+		_ = os.Remove(host.ReadyPath)
+		delete(s.poolHosts, pool)
+	}
+	s.poolMembers = map[string]*weaverHost{}
 	for _, child := range s.children {
 		if child.cmd != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 			terminateProcess(child.cmd.Process)
@@ -789,6 +838,12 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		status["generation_id"] = m.GenerationID
 	}
 	status["basis_fingerprint"] = m.BasisFingerprint
+	if m.JVMPool != "" {
+		status["jvm_pool"] = m.JVMPool
+		status["host_id"] = m.HostID
+		status["host_generation_id"] = m.HostGenerationID
+		status["member_basis_fingerprint"] = m.MemberBasisFingerprint
+	}
 	return status
 }
 

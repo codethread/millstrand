@@ -20,6 +20,7 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/jvmpool"
 	"millstrand-strand-cli/internal/process"
 )
 
@@ -28,6 +29,13 @@ type server struct {
 	mu        sync.Mutex
 	children  map[string]*weaverChild
 	custodies map[string]*process.Custody
+	// poolHosts owns one command per named pool. poolMembers is only a reverse
+	// route from member identity to that host; custody remains keyed by member.
+	poolHosts          map[string]*weaverHost
+	poolMembers        map[string]*weaverHost
+	poolAdmissionLocks map[string]*sync.Mutex
+	poolStartClaims    map[string]chan struct{}
+	poolRegistry       *jvmpool.Registry
 	// startClaims close the check-to-registration window for a new child. A
 	// restart waits for the claim to resolve instead of racing a start that has
 	// not yet published its admitted generation.
@@ -475,6 +483,11 @@ func (s *server) handle(conn net.Conn) {
 	case "weaver-start":
 		result, err := s.startWeaver(req.World)
 		if err != nil {
+			var responseErr *client.ResponseError
+			if errors.As(err, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				return
+			}
 			var dependencyFailure *dependencyLaunchError
 			if errors.As(err, &dependencyFailure) {
 				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: &client.ResponseError{Type: "domain", Code: "mill/weaver-start-failed", Message: "weaver start failed", Details: map[string]any{"dependency": dependencyFailure.diagnostic}}})
@@ -503,6 +516,11 @@ func (s *server) handle(conn net.Conn) {
 	case "weaver-restart":
 		result, err := s.restartWeaver(req.World)
 		if err != nil {
+			var responseErr *client.ResponseError
+			if errors.As(err, &responseErr) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: responseErr})
+				return
+			}
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
 			return
 		}

@@ -25,17 +25,21 @@ type Metadata struct {
 	DatabaseLabel   string `json:"database_label"`
 	// Pointer so a JSON null (required for sqlite-memory) is distinguishable
 	// from an accidental empty string.
-	DatabasePath     *string `json:"database_path"`
-	DaemonID         string  `json:"weaver_id"`
-	GenerationID     string  `json:"generation_id"`
-	BasisFingerprint string  `json:"basis_fingerprint"`
-	ConfigDir        string  `json:"config_dir"`
-	StateDir         string  `json:"state_dir"`
-	DataDir          string  `json:"data_dir"`
-	Name             string  `json:"name"`
-	SocketPath       string  `json:"socket_path"`
-	StartedAt        string  `json:"started_at"`
-	NREPL            struct {
+	DatabasePath           *string `json:"database_path"`
+	DaemonID               string  `json:"weaver_id"`
+	GenerationID           string  `json:"generation_id"`
+	BasisFingerprint       string  `json:"basis_fingerprint"`
+	JVMPool                string  `json:"jvm_pool,omitempty"`
+	HostID                 string  `json:"host_id,omitempty"`
+	HostGenerationID       string  `json:"host_generation_id,omitempty"`
+	MemberBasisFingerprint string  `json:"member_basis_fingerprint,omitempty"`
+	ConfigDir              string  `json:"config_dir"`
+	StateDir               string  `json:"state_dir"`
+	DataDir                string  `json:"data_dir"`
+	Name                   string  `json:"name"`
+	SocketPath             string  `json:"socket_path"`
+	StartedAt              string  `json:"started_at"`
+	NREPL                  struct {
 		Host string `json:"host"`
 		Port int    `json:"port"`
 	} `json:"nrepl"`

@@ -1,0 +1,131 @@
+package main
+
+import (
+	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/jvmpool"
+)
+
+func (s *server) poolStatusForMember(host *weaverHost, configDir string) map[string]any {
+	for _, member := range host.Members {
+		if member.World.ConfigDir != configDir {
+			continue
+		}
+		status, stale := readStatus(member.World)
+		if status == nil || stale {
+			status = baseStatus(member.World, "running")
+			status["pid"] = host.PID
+			status["weaver_id"] = member.WeaverID
+			status["generation_id"] = member.GenerationID
+			status["socket_path"] = member.Identity.Socket
+			status["started_at"] = member.Identity.StartedAt
+		} else {
+			status = cloneStatus(status)
+		}
+		status["jvm_pool"] = host.Pool
+		status["host_id"] = host.HostID
+		status["host_generation_id"] = host.HostGenerationID
+		status["registered_members"] = poolConfigDirs(host.Members)
+		live := poolConfigDirs(host.Members)
+		status["live_members"] = live
+		status["pending_members"] = []string{}
+		status["restart_required"] = false
+		status["member_basis_fingerprint"] = member.MemberBasis
+		return status
+	}
+	return nil
+}
+
+func poolStatusForRegistered(world config.World, pool string, snapshot jvmpool.PoolSnapshot) map[string]any {
+	status := baseStatus(world, "stopped")
+	registered := make([]string, 0, len(snapshot.Members))
+	for _, member := range snapshot.Members {
+		registered = append(registered, member.ConfigDir)
+	}
+	status["jvm_pool"] = pool
+	status["registered_members"] = registered
+	status["live_members"] = []string{}
+	status["pending_members"] = []string{}
+	status["restart_required"] = false
+	return status
+}
+
+func (s *server) poolStatusForWorld(world config.World) (map[string]any, bool, error) {
+	s.mu.Lock()
+	host := poolHostForConfigLocked(s, world.ConfigDir)
+	s.mu.Unlock()
+	if host != nil && host.Live {
+		return s.poolStatusForMember(host, world.ConfigDir), true, nil
+	}
+	pool, err := configuredPool(world)
+	if err != nil {
+		return nil, false, err
+	}
+	if pool == "" {
+		return nil, false, nil
+	}
+	snapshot, err := s.poolSnapshot(pool)
+	if err != nil {
+		return nil, true, err
+	}
+	if _, ok := memberForPool(snapshot, world.ConfigDir); !ok {
+		return nil, true, nil
+	}
+	s.mu.Lock()
+	host = s.poolHosts[pool]
+	s.mu.Unlock()
+	if host == nil {
+		host, err = s.discoverPoolHost(pool)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+	if host != nil && host.Live {
+		status := baseStatus(world, "pending")
+		status["jvm_pool"] = pool
+		status["registered_members"] = poolConfigDirsFromSnapshot(snapshot)
+		status["live_members"] = poolConfigDirs(host.Members)
+		pending := []string{}
+		live := map[string]bool{}
+		for _, member := range host.Members {
+			live[member.World.ConfigDir] = true
+		}
+		for _, member := range snapshot.Members {
+			if !live[member.ConfigDir] {
+				pending = append(pending, member.ConfigDir)
+			}
+		}
+		status["pending_members"] = pending
+		status["restart_required"] = len(pending) != 0
+		return status, true, nil
+	}
+	return poolStatusForRegistered(world, pool, snapshot), true, nil
+}
+
+func poolConfigDirsFromSnapshot(snapshot jvmpool.PoolSnapshot) []string {
+	result := make([]string, 0, len(snapshot.Members))
+	for _, member := range snapshot.Members {
+		result = append(result, member.ConfigDir)
+	}
+	return result
+}
+
+func sPoolStatusForMember(host *weaverHost, world config.World) map[string]any {
+	for _, member := range host.Members {
+		if member.World.ConfigDir == world.ConfigDir {
+			status := baseStatus(world, "running")
+			status["jvm_pool"] = host.Pool
+			status["host_id"] = host.HostID
+			status["host_generation_id"] = host.HostGenerationID
+			status["registered_members"] = poolConfigDirs(host.Members)
+			status["live_members"] = poolConfigDirs(host.Members)
+			status["pending_members"] = []string{}
+			status["restart_required"] = false
+			status["pid"] = host.PID
+			status["weaver_id"] = member.WeaverID
+			status["generation_id"] = member.GenerationID
+			status["member_basis_fingerprint"] = member.MemberBasis
+			return status
+		}
+	}
+	return nil
+}

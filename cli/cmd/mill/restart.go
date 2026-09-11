@@ -453,6 +453,11 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if pool, poolErr := configuredPool(world); poolErr != nil {
+		return nil, poolErr
+	} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
+		return s.restartPooledWeaver(req, world, pool)
+	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		waitForStartClaim(claim)
 		return s.restartWeaver(req)
