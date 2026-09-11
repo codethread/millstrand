@@ -256,26 +256,30 @@ func TestJVMPoolProbeFailureAcceptance(t *testing.T) {
 		}
 
 		out, err := h.run("weaver", "restart", "--workspace", workspaceD)
-		if err == nil {
-			// A failed probe may be represented as a structured restart result;
-			// it must never be treated as successful admission.
-			result := decodeObject(t, out)
-			if result["state"] == "running" {
-				t.Fatalf("missing-source probe was reported as running: %#v", result)
-			}
-		} else if !strings.Contains(out, "weaver restart") && !strings.Contains(out, "probe") {
-			t.Fatalf("missing-source probe lost its structured failure: %v\n%s", err, out)
-		}
+		assertPooledFailedRestartResponse(t, out, err, workspaceD, "missing-source probe")
 		statusA := h.statusDetails(t, workspaceA)
 		statusB := h.statusDetails(t, workspaceB)
 		if requiredPID(t, statusA) != oldPID || requiredString(t, statusA, "generation_id") != oldGeneration || requiredPID(t, statusB) != oldPID {
 			t.Fatalf("failed probe changed the admitted host: A=%#v B=%#v", statusA, statusB)
 		}
-		assertRetainedProbeFailure(t, statusA, oldPID, oldGeneration, "pooled missing-source probe")
-		pending := h.status(t, workspaceD)
+		expectedMembers := map[string]string{
+			canonicalWorkspace(t, workspaceA): "live",
+			canonicalWorkspace(t, workspaceB): "live",
+			canonicalWorkspace(t, workspaceD): "newcomer",
+		}
+		assertPooledProbeFailure(t, statusA, oldPID, oldGeneration, expectedMembers, "pooled missing-source probe A")
+		if statusB["state"] != "running" || requiredPID(t, statusB) != oldPID {
+			t.Fatalf("pooled missing-source probe B changed admitted host: %#v", statusB)
+		}
+		assertPooledProbeDiagnostics(t, statusB, expectedMembers, "pooled missing-source probe B")
+		pending := h.statusDetails(t, workspaceD)
 		if pending["state"] != "pending" || containsString(pending["live_members"].([]any), canonicalWorkspace(t, workspaceD)) {
 			t.Fatalf("failed probe admitted or lost newcomer state: %#v", pending)
 		}
+		if generation, ok := pending["generation_id"]; ok && generation != nil && strings.TrimSpace(fmt.Sprint(generation)) != "" {
+			t.Fatalf("failed probe admitted a generation for newcomer: %#v", pending)
+		}
+		assertPooledProbeDiagnostics(t, pending, expectedMembers, "pooled missing-source pending newcomer")
 	})
 
 	t.Run("post-cutover startup failure admits no partial pool", func(t *testing.T) {
@@ -303,15 +307,18 @@ func TestJVMPoolProbeFailureAcceptance(t *testing.T) {
 			if failure["state"] != "failed" || failure["generation_id"] != nil {
 				t.Fatalf("post-cutover failure admitted a partial generation: %#v", failure)
 			}
-		} else if !strings.Contains(out, "mill/weaver-restart-failed") {
+		} else if !strings.Contains(out, "mill/weaver-restart-failed") || strings.Contains(out, "mill/weaver-restart-invalid-result") || strings.Contains(strings.ToLower(out), "eof") {
 			t.Fatalf("post-cutover failure lost its structured error: %v\n%s", err, out)
 		}
 		if processExists(oldPID) {
 			t.Fatalf("old pooled host remained alive after post-cutover failure: pid=%d", oldPID)
 		}
 		failureStatus := h.status(t, workspaceA)
-		if failureStatus["state"] != "failed" || failureStatus["generation_id"] != nil {
-			t.Fatalf("post-cutover failure status admitted a partial generation: %#v", failureStatus)
+		failureStatusB := h.status(t, workspaceB)
+		for label, status := range map[string]map[string]any{"A": failureStatus, "B": failureStatusB} {
+			if status["state"] != "failed" || status["generation_id"] != nil || status["old_generation_stopped"] != true {
+				t.Fatalf("post-cutover failure status for %s admitted a partial generation or lost cutover truth: %#v", label, status)
+			}
 		}
 		if err := os.Remove(failureMarker); err != nil {
 			t.Fatal(err)
@@ -433,6 +440,132 @@ func startUnpooledWorld(t *testing.T, h *restartProcessHarness, workspace string
 	status := decodeObject(t, out)
 	h.pids = append(h.pids, requiredPID(t, status))
 	return status
+}
+
+func assertPooledFailedRestartResponse(t *testing.T, output string, runErr error, workspace, label string) {
+	t.Helper()
+	if runErr != nil {
+		t.Fatalf("%s returned an unstructured restart error: %v\n%s", label, runErr, output)
+	}
+	result := decodeObject(t, output)
+	if err := validateRestartEnvelopeForAcceptance(result, "restart"); err != nil {
+		t.Fatalf("%s returned an invalid closed restart envelope: %v (%#v)", label, err, result)
+	}
+	if result["state"] != "failed" || result["workspace"] != canonicalWorkspace(t, workspace) {
+		t.Fatalf("%s selected the wrong failed restart result: %#v", label, result)
+	}
+	if generation, ok := result["generation_id"]; ok && generation != nil && strings.TrimSpace(fmt.Sprint(generation)) != "" {
+		t.Fatalf("%s exposed an admitted generation: %#v", label, result)
+	}
+	diagnostics, ok := result["diagnostics"].([]any)
+	if !ok || len(diagnostics) != 1 {
+		t.Fatalf("%s lost its single closed failure diagnostic: %#v", label, result)
+	}
+	diagnostic, ok := diagnostics[0].(map[string]any)
+	if !ok || diagnostic["stage"] != "probe" || diagnostic["status"] != "failed" {
+		t.Fatalf("%s returned the wrong failure diagnostic: %#v", label, result)
+	}
+	data, ok := diagnostic["data"].(map[string]any)
+	if !ok || strings.TrimSpace(fmt.Sprint(data["message"])) == "" || strings.TrimSpace(fmt.Sprint(data["transition_id"])) == "" {
+		t.Fatalf("%s failure diagnostic lost message or transition evidence: %#v", label, diagnostic)
+	}
+}
+
+func assertPooledProbeFailure(t *testing.T, status map[string]any, oldPID int, oldGeneration string, expectedMembers map[string]string, label string) {
+	t.Helper()
+	if status["state"] != "running" || requiredPID(t, status) != oldPID || requiredString(t, status, "generation_id") != oldGeneration {
+		t.Fatalf("%s changed admitted generation: %#v", label, status)
+	}
+	assertPooledProbeDiagnostics(t, status, expectedMembers, label)
+}
+
+func assertPooledProbeDiagnostics(t *testing.T, status map[string]any, expectedMembers map[string]string, label string) {
+	t.Helper()
+	probe, ok := status["probe"].(map[string]any)
+	if !ok || probe["success"] != false {
+		t.Fatalf("%s retained probe success or omitted probe: %#v", label, status)
+	}
+	stage, ok := probe["stage"].(string)
+	if !ok || strings.TrimSpace(stage) == "" || stage != "probe/failure" {
+		t.Fatalf("%s retained the wrong observed probe stage: %#v", label, probe)
+	}
+	probePath := requiredString(t, probe, "probe/workspace")
+	logPath := requiredString(t, probe, "log")
+	if !pathExists(probePath) || !pathExists(logPath) {
+		t.Fatalf("%s probe diagnostics were not retained at path/log: %#v", label, probe)
+	}
+	completed, ok := probe["completed"].([]any)
+	if !ok || len(completed) == 0 {
+		t.Fatalf("%s probe lost observed completed stages: %#v", label, probe)
+	}
+	for _, raw := range completed {
+		stage, ok := raw.(string)
+		if !ok || strings.TrimSpace(stage) == "" {
+			t.Fatalf("%s probe completed stage is blank: %#v", label, probe)
+		}
+		if map[string]bool{"evaluate": true, "staged": true, "plan": true, "publication": true, "apply": true, "rearm": true}[stage] {
+			t.Fatalf("%s fabricated isolated lifecycle stage %q: %#v", label, stage, probe)
+		}
+	}
+	diagnostics, ok := probe["diagnostics"].([]any)
+	if !ok || len(diagnostics) != 1 {
+		t.Fatalf("%s probe did not retain exactly one failure diagnostic: %#v", label, probe)
+	}
+	diagnostic, ok := diagnostics[0].(map[string]any)
+	if !ok || diagnostic["stage"] != stage || diagnostic["status"] != "failed" {
+		t.Fatalf("%s probe diagnostic did not retain the observed failure stage: %#v", label, diagnostic)
+	}
+	data, ok := diagnostic["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s probe diagnostic lost structured failure data: %#v", label, diagnostic)
+	}
+	dataCompleted, ok := data["completed"].([]any)
+	if !ok || len(dataCompleted) != len(completed) {
+		t.Fatalf("%s probe diagnostic lost observed completed stages: %#v", label, data)
+	}
+	for i := range completed {
+		if dataCompleted[i] != completed[i] {
+			t.Fatalf("%s probe diagnostic changed observed completed stages: probe=%#v data=%#v", label, completed, dataCompleted)
+		}
+	}
+	collective := requiredString(t, data, "collective_diagnostic")
+	if !pathExists(collective) || strings.TrimSpace(fmt.Sprint(data["message"])) == "" {
+		t.Fatalf("%s probe diagnostic lost collective path or failure message: %#v", label, data)
+	}
+	members, ok := data["members"].([]any)
+	if !ok || len(members) != len(expectedMembers) {
+		t.Fatalf("%s probe diagnostic lost member evidence: %#v", label, data)
+	}
+	seen := map[string]bool{}
+	failedMembers := 0
+	for _, raw := range members {
+		member, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("%s probe member evidence is not an object: %#v", label, raw)
+		}
+		workspace := requiredString(t, member, "workspace")
+		if seen[workspace] || expectedMembers[workspace] == "" {
+			t.Fatalf("%s probe member evidence has unexpected workspace: %#v", label, member)
+		}
+		seen[workspace] = true
+		if member["baseline_kind"] != expectedMembers[workspace] || strings.TrimSpace(fmt.Sprint(member["status"])) == "" {
+			t.Fatalf("%s probe member evidence lost baseline/status: %#v", label, member)
+		}
+		if member["status"] == "failed" {
+			failedMembers++
+		}
+		diagnosticPath := requiredString(t, member, "diagnostic")
+		if !pathExists(diagnosticPath) {
+			t.Fatalf("%s probe member diagnostic path does not exist: %#v", label, member)
+		}
+	}
+	if len(seen) != len(expectedMembers) || failedMembers == 0 {
+		t.Fatalf("%s probe member evidence did not include a failed member: %#v", label, members)
+	}
+	failure, ok := status["restart_failure"].(map[string]any)
+	if !ok || failure["stage"] != "probe" || strings.TrimSpace(fmt.Sprint(failure["message"])) == "" {
+		t.Fatalf("%s retained restart failure context: %#v", label, status)
+	}
 }
 
 func assertPooledMemberIdentity(t *testing.T, status map[string]any, value string) {
