@@ -1,6 +1,9 @@
 # Feature Tracking Registry
 
-**Document ID:** `RFC-014` **Status:** Implemented **Date:** 2026-07-02 **Related:** [RFC-011](../archive/26-07-02__attention-surface/rfcs/2026-07-02-coordination-attention-surface.md) (attention surface for workflow runs), [Workflow spool](../../spools/workflow.md), [Devflow spool](https://github.com/codethread/devflow.spool#readme), [discovery tiers](../../docs/reference.md#discovery-tiers-help-about-prime)
+- **Document ID:** `RFC-014`
+- **Status:** Implemented
+- **Date:** 2026-07-02
+- **Related:** [RFC-011](../archive/26-07-02__attention-surface/rfcs/2026-07-02-coordination-attention-surface.md) (attention surface for workflow runs), [Workflow spool](../../spools/workflow.md), [Devflow spool](https://github.com/codethread/devflow.spool#readme), [discovery tiers](../../docs/reference.md#discovery-tiers-help-about-prime)
 
 ## RFC-014.P1 Problem
 

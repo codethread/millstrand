@@ -1,6 +1,9 @@
 # Kanban tracker strategy: unbind kanban from devflow
 
-**Document ID:** `RFC-022` **Status:** Accepted **Date:** 2026-07-14 **Related:** [Shared spool publishing RFC-017 lineage](../../docs/spools/writing-shared-spools.md), [`spools/README.md`](../../spools/README.md) (index + external spool notes), chime's notifier binding ([`spools/chime/README.md`](../../spools/chime/README.md)), kanban.md "Devflow dependency" ([kanban.spool](https://github.com/codethread/kanban.spool)), [TENETS](../TENETS.md)
+- **Document ID:** `RFC-022`
+- **Status:** Accepted
+- **Date:** 2026-07-14
+- **Related:** [Shared spool publishing RFC-017 lineage](../../docs/spools/writing-shared-spools.md), [`spools/README.md`](../../spools/README.md) (index + external spool notes), chime's notifier binding ([`spools/chime/README.md`](../../spools/chime/README.md)), kanban.md "Devflow dependency" ([kanban.spool](https://github.com/codethread/kanban.spool)), [TENETS](../TENETS.md)
 
 ## RFC-022.P1 Problem
 

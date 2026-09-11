@@ -1,6 +1,9 @@
 # Readability macros for the .skein config surface
 
-**Document ID:** `RFC-020` **Status:** Accepted **Date:** 2026-07-08 **Related:** [Workflow ergonomics RFC-012](../archive/26-07-02__workflow-ergonomics/rfcs/2026-07-02-workflow-authoring-ergonomics.md) (deferred `defworkflow`), [`.skein/spools/macros`](../../.skein/spools/macros) (`defpattern` precedent), [TENETS](../TENETS.md), [PHILOSOPHY](../PHILOSOPHY.md), [writing shared spools](../../docs/spools/writing-shared-spools.md)
+- **Document ID:** `RFC-020`
+- **Status:** Accepted
+- **Date:** 2026-07-08
+- **Related:** [Workflow ergonomics RFC-012](../archive/26-07-02__workflow-ergonomics/rfcs/2026-07-02-workflow-authoring-ergonomics.md) (deferred `defworkflow`), [`.skein/spools/macros`](../../.skein/spools/macros) (`defpattern` precedent), [TENETS](../TENETS.md), [PHILOSOPHY](../PHILOSOPHY.md), [writing shared spools](../../docs/spools/writing-shared-spools.md)
 
 ## RFC-020.P1 Problem
 

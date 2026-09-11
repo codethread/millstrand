@@ -1,6 +1,10 @@
 # Batch task refs
 
-**Document ID:** `RFC-001` **Status:** Accepted **Date:** 2026-06-24 **Related:** [Strand Model](../specs/strand-model.md), [CLI Surface](../specs/cli.md), [DB-owned task IDs feature](../archive/26-06-24__db-owned-task-ids/proposal.md) **Configuration identification:** `RFC-001` is the first RFC in this repository. Every nested point ID is prefixed with `RFC-001`.
+- **Document ID:** `RFC-001`
+- **Status:** Accepted
+- **Date:** 2026-06-24
+- **Related:** [Strand Model](../specs/strand-model.md), [CLI Surface](../specs/cli.md), [DB-owned task IDs feature](../archive/26-06-24__db-owned-task-ids/proposal.md)
+- **Configuration identification:** `RFC-001` is the first RFC in this repository. Every nested point ID is prefixed with `RFC-001`.
 
 ## RFC-001.P1 Problem
 
@@ -21,7 +25,7 @@ Once task ids are database-owned, users cannot know durable ids before creation.
 ## RFC-001.P4 Options
 
 | ID | Summary | Pros | Cons |
-| -- | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-001.O1 | Require strictly sequential creation and linking | No new batch format | Verbose for DAG setup; callers must manually capture ids between steps |
 | RFC-001.O2 | Batch EDN shapes with temporary `:ref` aliases | Readable DAG input; refs disappear after creation; fits Clojure tooling | Requires parser and validation for duplicate/missing refs |
 | RFC-001.O3 | Let callers provide durable ids in batch mode | Simple dependency references | Reintroduces id collision and overwrite risks the id feature is fixing |

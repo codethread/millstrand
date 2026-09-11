@@ -1,6 +1,9 @@
 # Replace `:contribute` with authoring forms
 
-**Document ID:** `RFC-Saf-001` **Status:** Open **Date:** 2026-07-28 **Related:** [ADR-003: spool activation lifecycle](../adrs/0003-spool-activation-lifecycle.md), [ADR-004: `def spool` convention](../adrs/0004-def-spool-convention.md), [RFC-020: readability macros](2026-07-08-skein-readability-macros.md), [writing shared spools](../../docs/spools/writing-shared-spools.md), forthcoming RFC on replacing `:reconcile`
+- **Document ID:** `RFC-Saf-001`
+- **Status:** Open
+- **Date:** 2026-07-28
+- **Related:** [ADR-003: spool activation lifecycle](../adrs/0003-spool-activation-lifecycle.md), [ADR-004: `def spool` convention](../adrs/0004-def-spool-convention.md), [RFC-020: readability macros](2026-07-08-skein-readability-macros.md), [writing shared spools](../../docs/spools/writing-shared-spools.md), forthcoming RFC on replacing `:reconcile`
 
 ## RFC-Saf-001.P1 Summary
 

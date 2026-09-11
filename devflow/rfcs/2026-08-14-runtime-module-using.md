@@ -1,6 +1,9 @@
 # Select reusable declarations with `runtime/module! :using`
 
-**Document ID:** `RFC-Rmu-001` **Status:** Parked after spike **Date:** 2026-08-14 **Related:** [RFC-Saf-001: replace `:contribute` with authoring forms](2026-07-28-spool-authoring-forms.md), [ADR-003: spool activation lifecycle](../adrs/0003-spool-activation-lifecycle.md), [writing shared spools](../../docs/spools/writing-shared-spools.md), [runtime customisation](../../docs/spools/customisation.md)
+- **Document ID:** `RFC-Rmu-001`
+- **Status:** Parked after spike
+- **Date:** 2026-08-14
+- **Related:** [RFC-Saf-001: replace `:contribute` with authoring forms](2026-07-28-spool-authoring-forms.md), [ADR-003: spool activation lifecycle](../adrs/0003-spool-activation-lifecycle.md), [writing shared spools](../../docs/spools/writing-shared-spools.md), [runtime customisation](../../docs/spools/customisation.md)
 
 ## RFC-Rmu-001.P1 Summary
 

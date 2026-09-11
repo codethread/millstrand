@@ -1,6 +1,9 @@
 # Lifecycle authoring forms replace module reconciliation callbacks
 
-**Document ID:** `RFC-Laf-001` **Status:** Proposed **Date:** 2026-07-28 **Related:** [ADR-002](../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [SPEC-003](../specs/repl-api.md) (extension API), [SPEC-004](../specs/daemon-runtime.md) (module refresh), [writing shared spools](../../docs/spools/writing-shared-spools.md)
+- **Document ID:** `RFC-Laf-001`
+- **Status:** Proposed
+- **Date:** 2026-07-28
+- **Related:** [ADR-002](../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [SPEC-003](../specs/repl-api.md) (extension API), [SPEC-004](../specs/daemon-runtime.md) (module refresh), [writing shared spools](../../docs/spools/writing-shared-spools.md)
 
 ## RFC-Laf-001.P1 Summary
 
