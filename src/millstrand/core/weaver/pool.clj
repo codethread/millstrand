@@ -8,7 +8,7 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [millstrand.core.specs]
+            [millstrand.core.specs :as specs]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.pool-basis :as pool-basis]
@@ -24,6 +24,7 @@
     (str/join (map #(format "%02x" (bit-and 0xff %)) digest))))
 
 (deftype HostContext [state]
+  specs/PoolHostContext
   clojure.lang.IDeref
   (deref [_] @state))
 
@@ -586,13 +587,27 @@
                :host-generation-id (:host-generation-id manifest)
                :members (into (sorted-map) member-results)}))))))))
 
+(defn- run-probe!
+  "Resolve and invoke the private probe implementation at its load boundary.
+
+  The probe namespace keeps runtime resolution late as well: the shared
+  candidate basis must install its classloader before runtime vars are loaded.
+  Keeping this seam named makes that ordering visible without moving the
+  effectful probe orchestration into the host lifecycle namespace."
+  [manifest opts]
+  (let [probe-fn (requiring-resolve
+                  'millstrand.core.weaver.pool-probe/probe!)]
+    (probe-fn manifest opts)))
+
 (defn probe!
-  "Run a private pooled replacement probe and retain its private root."
+  "Run a private pooled replacement probe and retain its private root.
+
+  Resolve the probe namespace lazily so candidate runtime vars remain resolved
+  only after the probe has installed its shared candidate classloader."
   ([manifest]
    (probe! manifest {}))
   ([manifest opts]
-   ((requiring-resolve 'millstrand.core.weaver.pool-probe/probe!)
-    manifest opts)))
+   (run-probe! manifest opts)))
 
 (defn -main
   "Launch a pooled host from a JSON serving manifest."

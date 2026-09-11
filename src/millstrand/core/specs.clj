@@ -10,6 +10,13 @@
   (:import [java.io File]
            [java.time Instant]))
 
+(defprotocol PoolHostContext
+  "Mark the opaque, derefable host context shared by pooled runtimes.
+
+  The value behind this marker is mutable while members start. Boundary
+  validation therefore checks the holder's identity and derefability without
+  duplicating the host's private, phase-dependent map shape.")
+
 (defn- non-blank-string? [x]
   (and (string? x) (not (str/blank? x))))
 
@@ -544,9 +551,23 @@
 (s/def :millstrand.weaver-start/generation-id non-blank-string?)
 (s/def :millstrand.weaver-start/member-generation-basis
   :millstrand.core.specs/generation-basis)
-(s/def :millstrand.weaver-start/pool-metadata map?)
+(s/def :millstrand.jvm-pool/jvm-pool non-blank-string?)
+(s/def :millstrand.jvm-pool/host-id non-blank-string?)
+(s/def :millstrand.jvm-pool/host-generation-id non-blank-string?)
+(s/def :millstrand.jvm-pool/member-basis-fingerprint
+  :millstrand.core.specs/basis-fingerprint)
+(def ^:private pool-start-metadata-keys
+  #{:jvm-pool :host-id :host-generation-id :member-basis-fingerprint})
+(s/def :millstrand.weaver-start/pool-metadata
+  (s/and
+   (s/keys :req-un [:millstrand.jvm-pool/jvm-pool
+                    :millstrand.jvm-pool/host-id
+                    :millstrand.jvm-pool/host-generation-id
+                    :millstrand.jvm-pool/member-basis-fingerprint])
+   #(= pool-start-metadata-keys (set (keys %)))))
 (s/def :millstrand.weaver-start/pool-host
-  #(instance? clojure.lang.IDeref %))
+  #(and (instance? clojure.lang.IDeref %)
+        (satisfies? PoolHostContext %)))
 
 ;; JVM-pool boundaries are deliberately closed.  The host and probe workers
 ;; receive these maps from Mill, so an extra or misspelled field must fail

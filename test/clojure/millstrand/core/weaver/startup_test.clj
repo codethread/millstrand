@@ -327,6 +327,25 @@
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest pooled-start-options-fail-before-opening-runtime-resources
+  (let [world (temp-world)]
+    (try
+      (doseq [opts [{:pool-metadata {}}
+                    {:pool-metadata {:jvm-pool "backend"
+                                     :host-id "host-1"
+                                     :host-generation-id "generation-1"
+                                     :member-basis-fingerprint "sha256:invalid"}}
+                    {:pool-host (atom {})}]]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Weaver start options have an invalid shape"
+                              (start-runtime! nil
+                                              (merge {:world world
+                                                      :publish? false}
+                                                     opts)))
+            (pr-str opts)))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest pooled-host-publishes-members-collectively-with-independent-runtime-state
   (let [root (java.io.File/createTempFile "pool" "")]
     (.delete root)

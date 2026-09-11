@@ -5,6 +5,40 @@
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.specs :as specs]))
 
+(def ^:private pool-start-metadata
+  {:jvm-pool "backend"
+   :host-id "host-1"
+   :host-generation-id "generation-1"
+   :member-basis-fingerprint
+   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+
+(defn- pool-host-context []
+  (reify specs/PoolHostContext
+    clojure.lang.IDeref
+    (deref [_] nil)))
+
+(deftest pooled-start-options-close-metadata-and-host-context
+  (testing "pool metadata is a closed identity projection"
+    (is (s/valid? :millstrand.weaver-start/pool-metadata
+                  pool-start-metadata))
+    (doseq [metadata [(dissoc pool-start-metadata :host-id)
+                      (assoc pool-start-metadata :unexpected true)
+                      (assoc pool-start-metadata :host-id " ")
+                      (assoc pool-start-metadata
+                             :member-basis-fingerprint "sha256:invalid")]]
+      (is (not (s/valid? :millstrand.weaver-start/pool-metadata metadata))
+          (pr-str metadata))))
+  (testing "host context requires the opaque startup marker"
+    (is (s/valid? :millstrand.weaver-start/pool-host
+                  (pool-host-context)))
+    (doseq [host [nil (atom {}) {} (reify clojure.lang.IDeref
+                                     (deref [_] {}))]]
+      (is (not (s/valid? :millstrand.weaver-start/pool-host host))
+          (pr-str host))))
+  (is (s/valid? ::specs/weaver-start-options
+                {:pool-metadata pool-start-metadata
+                 :pool-host (pool-host-context)})))
+
 (deftest attribute-archive-result-spec-pins-archive-shape
   (is (s/valid? ::specs/attribute-archive-result
                 {:strand-id "abc123" :archived? true :changed 2 :keys ["owner" "note"]}))
