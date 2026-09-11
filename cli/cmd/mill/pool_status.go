@@ -186,7 +186,10 @@ func (s *server) mergePooledDetailedRestartStatus(world config.World, status map
 	if !ok {
 		return status
 	}
-	if status["state"] != "pending" {
+	currentState, _ := status["state"].(string)
+	preservePending := currentState == "pending"
+	preserveStoppedProbe := record.State == restartStateRunning && (currentState == "stopped" || currentState == "none")
+	if !preservePending && !preserveStoppedProbe {
 		status["state"] = record.State
 	}
 	mergeRestartRecordStatus(status, record)

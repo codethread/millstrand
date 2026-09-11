@@ -118,6 +118,18 @@ func TestPooledRestartRecordsRetainCutoverTruthAndPendingDiagnostics(t *testing.
 	}
 }
 
+func TestPooledDetailedStatusKeepsStoppedStateAfterFailedProbe(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand"), StateDir: filepath.Join(t.TempDir(), "state")}
+	probe := &restartProbeResult{Success: false, Stage: "probe/failure", ProbeWorkspace: "/tmp/probe", SourceWorkspace: world.ConfigDir, Completed: []string{"probe/basis"}, Diagnostics: []map[string]any{{"stage": "probe/failure", "status": "failed", "data": map[string]any{"message": "missing source"}}}, Log: "/tmp/probe.log"}
+	if err := writeRestartRecord(world, restartRecord{State: restartStateRunning, TransitionID: "transition-1", GenerationID: "old-generation", Probe: probe, Failure: &restartFailure{Stage: "probe", Message: "missing source"}}); err != nil {
+		t.Fatal(err)
+	}
+	status := (&server{}).mergePooledDetailedRestartStatus(world, map[string]any{"state": "stopped"})
+	if status["state"] != "stopped" || status["probe"] == nil || status["restart_failure"] == nil {
+		t.Fatalf("historical probe record overwrote current stopped state: %#v", status)
+	}
+}
+
 func TestPooledStartDoesNotRediscoverMembershipAfterProbe(t *testing.T) {
 	source := tempSource(t)
 	cfgA := tempConfig(t, source)
