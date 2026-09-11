@@ -40,7 +40,11 @@
 
 (defn- member-result
   [member probe-result status diagnostic]
-  (let [candidate (or (:candidate-registries probe-result) {})
+  (let [candidate (if (contains? probe-result :candidate-registries)
+                    (:candidate-registries probe-result)
+                    (throw (ex-info "Probe did not return a candidate registry projection"
+                                    {:reason :probe/missing-candidate-projection
+                                     :member (:original-config-dir member)})))
         diff (when (= :live (baseline-kind member))
                (registry-diff (baseline member) candidate))]
     {:original-config-dir (:original-config-dir member)
@@ -82,7 +86,7 @@
    (pool-basis/validate-probe-manifest manifest)
    (let [diagnostic-paths (mapv :member-diagnostic (:members manifest))
          collective-diagnostic (:collective-diagnostic manifest)
-         log (:result manifest)
+         log (canonical (io/file (:probe-root manifest) "probe.log"))
          diagnostics (atom [])
          runtimes (atom [])
          report! (fn [member entry]
@@ -92,7 +96,8 @@
                       (:member-diagnostic member) entry)
                      (diagnostic-file! collective-diagnostic
                                        (assoc entry :member
-                                              (:original-config-dir member)))))
+                                              (:original-config-dir member)))
+                     (diagnostic-file! log entry)))
          shared-basis (atom nil)
          members (atom [])
          completed (atom ["probe/basis"])

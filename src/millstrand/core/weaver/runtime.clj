@@ -337,9 +337,13 @@
    (refresh-modules! runtime {}))
   ([runtime opts]
    (if (and (:pool-host runtime)
-            (not (:pool-refreshing? opts)))
+            (not (:pool-refreshing? opts))
+            (not (:startup? opts)))
      ((requiring-resolve 'millstrand.core.weaver.pool/refresh!)
-      (:pool-host runtime) opts)
+      (if (instance? clojure.lang.IDeref (:pool-host runtime))
+        @(:pool-host runtime)
+        (:pool-host runtime))
+      opts)
      (refresh-modules-isolated! runtime opts))))
 
 (defn module-status
@@ -580,7 +584,8 @@
                    generation-basis
                    expected-version old-generation-baseline
                    pre-publication-claim defer-publication?
-                   weaver-id generation-id member-generation-basis pool-metadata]
+                   weaver-id generation-id member-generation-basis pool-metadata
+                   pool-host]
             :or {publish? true}}]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Weaver startup requires a valid generation basis"
@@ -661,8 +666,10 @@
                           :module-refresh-lock (Object.)
                           :spool-state (atom {})
                           :server server
+                          :pool-host pool-host
                           :metadata meta
-                          :pre-publication-claim pre-publication-claim}
+                          :pre-publication-claim pre-publication-claim
+                          :runtime-state runtime-state}
             runtime-base (start-event-system! runtime-base (not probe?))
             _ (reset! runtime-state runtime-base)]
         (try
@@ -993,11 +1000,16 @@
     (throw (ex-info "Runtime is not awaiting deferred metadata publication"
                     {:generation-id (:generation-id runtime)})))
   (let [world {:state-dir (get-in runtime [:metadata :state-dir])}
-        metadata-file (metadata/publish! (:metadata runtime))]
+        metadata-file (metadata/publish! (:metadata runtime))
+        published-runtime (assoc runtime
+                                 :metadata-file metadata-file
+                                 :pre-publication-claim nil)]
     (metadata/release-pre-publication-artifacts!
      world (:pre-publication-claim runtime))
-    (assoc runtime :metadata-file metadata-file
-           :pre-publication-claim nil)))
+    (reset! (:runtime-state runtime) published-runtime)
+    (when-let [port (get-in published-runtime [:metadata :endpoint :port])]
+      (swap! nrepl-port-runtimes assoc port published-runtime))
+    published-runtime))
 
 (defn stop!
   "Stop `runtime` without unlinking a newer generation's world artifacts."
@@ -1039,7 +1051,11 @@
          ;; This remains last: discovery stays available until its endpoints
          ;; have been asked to close, and stale handles cannot unlink successors.
     (attempt! :artifacts/delete
-              #(reset! artifacts (metadata/delete-owned! (:metadata runtime) world)))
+              #(reset! artifacts
+                       (if-let [claim (:pre-publication-claim runtime)]
+                         (metadata/rollback-pre-publication-artifacts!
+                          (:metadata runtime) world claim)
+                         (metadata/delete-owned! (:metadata runtime) world))))
     (attempt! :artifacts/claim-release
               #(when-let [claim (:pre-publication-claim runtime)]
                  (metadata/release-pre-publication-artifacts! world claim)))

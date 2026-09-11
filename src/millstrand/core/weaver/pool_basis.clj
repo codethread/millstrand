@@ -8,6 +8,16 @@
   (:require [clojure.spec.alpha :as s]
             [millstrand.core.weaver.basis :as basis]))
 
+(defn- canonical-path [value]
+  (.toPath (.getCanonicalFile (java.io.File. ^String value))))
+
+(defn- path-below? [root value]
+  (let [root-path (canonical-path root)
+        value-path (canonical-path value)
+        relative-path (.relativize root-path value-path)]
+    (and (not= root-path value-path)
+         (not= ".." (str (.getName relative-path 0))))))
+
 (defn- invalid-manifest!
   [message manifest spec-key]
   (throw
@@ -26,6 +36,24 @@
   (let [paths (mapv path-key members)]
     (when-not (= (count paths) (count (distinct paths)))
       (throw (ex-info message {:manifest manifest :paths paths}))))
+  manifest)
+
+(defn- require-private-paths!
+  [manifest]
+  (let [root (:probe-root manifest)
+        paths (into [[:probe-root root]
+                     [:result (:result manifest)]
+                     [:collective-diagnostic (:collective-diagnostic manifest)]]
+                    (mapcat (fn [member]
+                              (map (fn [key] [key (get member key)])
+                                   [:probe-config-dir :probe-state-dir
+                                    :probe-data-dir :member-diagnostic]))
+                            (:members manifest)))]
+    (when-not (every? (fn [[_ path]] (path-below? root path)) (rest paths))
+      (throw (ex-info "pool probe paths must remain below its private root"
+                      {:reason :probe/private-path-outside-root
+                       :probe-root root
+                       :paths (into {} paths)}))))
   manifest)
 
 (defn validate-launch-manifest
@@ -50,7 +78,8 @@
       (require-manifest! :millstrand.jvm-pool/probe-manifest
                          "pool probe manifest violates its closed contract")
       (require-distinct-members! (:members manifest) :original-config-dir
-                                 "pool probe manifest contains duplicate members")))
+                                 "pool probe manifest contains duplicate members")
+      require-private-paths!))
 
 (defn validate-probe-result
   "Validate and return a closed private replacement-probe result."

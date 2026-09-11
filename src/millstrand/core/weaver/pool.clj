@@ -34,7 +34,11 @@
   "Return the canonical host directory for a manifest and selected member."
   [manifest]
   (let [state-dir (:state-dir (first (:members manifest)))
-        state-root (.getParentFile (.getCanonicalFile (io/file state-dir)))]
+        state-directory (.getCanonicalFile (io/file state-dir))
+        state-root (some-> state-directory .getParentFile .getParentFile)]
+    (when-not state-root
+      (throw (ex-info "Pool member state directory has no state root"
+                      {:state-dir state-dir})))
     (.getPath (.getCanonicalFile
                (io/file state-root "jvm-pools" "hosts"
                         (pool-hash (:jvm-pool manifest)))))))
@@ -107,6 +111,20 @@
         (.addSuppressed ^Throwable primary throwable))))
   nil)
 
+(defn- delete-ready-owned! [host]
+  (let [ready-file (io/file (:ready-file host))]
+    (when (.exists ready-file)
+      (let [actual (wire/read-json ready-file)
+            expected (wire/ready-marker-wire (:ready-marker host))]
+        (when (= expected actual)
+          (Files/deleteIfExists (.toPath ready-file)))))))
+
+(defn- host-runtime-view [host]
+  (cond
+    (instance? clojure.lang.IDeref host) @host
+    (instance? clojure.lang.IDeref (:host-context host)) @(:host-context host)
+    :else host))
+
 (defn start-host!
   "Construct, collectively publish, and ready one pooled host.
 
@@ -120,16 +138,37 @@
          pool-basis (pool-basis/create-pool-basis manifest runtime-coordinate)
          runtimes (atom [])
          ready-path (ready-file manifest)
-         host (atom nil)]
+         host-context (atom {:manifest manifest
+                             :pool-basis pool-basis
+                             :runtimes []
+                             :runtimes-by-config {}
+                             :refresh-lock (Object.)
+                             :ready-file ready-path
+                             :ready-marker nil
+                             :running? (atom true)})]
      (try
        (doseq [[member pool-member]
                (map vector (:members manifest) (:members pool-basis))]
          (let [opts (cond-> (member-runtime-options manifest pool-basis
                                                     member pool-member)
-                      expected-version (assoc :expected-version expected-version))]
-           (swap! runtimes conj (runtime/start! nil opts))))
+                      expected-version (assoc :expected-version expected-version))
+               member-runtime (runtime/start! nil (assoc opts :pool-host host-context))]
+           (swap! runtimes conj member-runtime)
+           (swap! host-context assoc
+                  :runtimes @runtimes
+                  :runtimes-by-config
+                  (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                      identity)
+                                @runtimes)))))
        (doseq [index (range (count @runtimes))]
-         (swap! runtimes update index runtime/publish-deferred!))
+         (let [published-runtime (runtime/publish-deferred! (nth @runtimes index))]
+           (swap! runtimes assoc index published-runtime)
+           (swap! host-context assoc
+                  :runtimes @runtimes
+                  :runtimes-by-config
+                  (into {} (map (juxt #(get-in % [:metadata :config-dir])
+                                      identity)
+                                @runtimes)))))
        (let [published @runtimes
              marker (ready-marker manifest pool-basis published)]
          (when-not (s/valid? :millstrand.jvm-pool/ready-marker marker)
@@ -138,32 +177,17 @@
                             :explain (s/explain-data
                                       :millstrand.jvm-pool/ready-marker marker)})))
          (atomic-json-write! ready-path (wire/ready-marker-wire marker))
-         (let [host-value {:manifest manifest
-                           :pool-basis pool-basis
-                           :runtimes published
-                           :runtimes-by-config
-                           (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                               identity)
-                                         published))
-                           :refresh-lock (Object.)
-                           :ready-file ready-path
-                           :ready-marker marker
-                           :running? (atom true)}
-               pooled-runtimes (mapv #(assoc % :pool-host host-value)
-                                     published)]
-           (reset! host (assoc host-value
-                               :runtimes pooled-runtimes
-                               :runtimes-by-config
-                               (into {} (map (juxt #(get-in % [:metadata :config-dir])
-                                                   identity)
-                                             pooled-runtimes)))))
-         @host)
+         (swap! host-context assoc :ready-marker marker)
+         (let [host-value (assoc @host-context
+                                 :host-context host-context
+                                 :pool-host host-context)]
+           (reset! host-context host-value)
+           host-value))
        (catch Throwable throwable
-         (when (.exists (io/file ready-path))
-           (try
-             (Files/deleteIfExists (.toPath (io/file ready-path)))
-             (catch Throwable cleanup-failure
-               (.addSuppressed ^Throwable throwable cleanup-failure))))
+         (try
+           (delete-ready-owned! (assoc @host-context :ready-file ready-path))
+           (catch Throwable cleanup-failure
+             (.addSuppressed ^Throwable throwable cleanup-failure)))
          (cleanup-runtimes! @runtimes throwable)
          (throw throwable))))))
 
@@ -175,12 +199,12 @@
   "Withdraw readiness and stop all member runtimes in reverse order."
   [host]
   (let [primary (atom nil)]
-    (reset! (:running? host) false)
+    (reset! (:running? (host-runtime-view host)) false)
     (try
-      (Files/deleteIfExists (.toPath (io/file (:ready-file host))))
+      (delete-ready-owned! (host-runtime-view host))
       (catch Throwable throwable
         (reset! primary throwable)))
-    (doseq [member (reverse (:runtimes host))]
+    (doseq [member (reverse (:runtimes (host-runtime-view host)))]
       (try
         (runtime/stop! member)
         (catch Throwable throwable
@@ -191,28 +215,12 @@
       (throw failure)
       {:stopped true
        :members (mapv #(get-in % [:metadata :config-dir])
-                      (:runtimes host))})))
+                      (:runtimes (host-runtime-view host)))})))
 
 (defn read-ready-marker
   "Read and decode a host ready marker from `file`."
   [file]
-  (let [value (wire/read-json file)
-        members (mapv (fn [member]
-                        {:config-dir (get member "config_dir")
-                         :weaver-id (get member "weaver_id")
-                         :generation-id (get member "generation_id")
-                         :socket-path (get member "socket_path")
-                         :nrepl-host (get member "nrepl_host")
-                         :nrepl-port (get member "nrepl_port")})
-                      (get value "members"))]
-    {:format (get value "format")
-     :jvm-pool (get value "jvm_pool")
-     :host-id (get value "host_id")
-     :host-generation-id (get value "host_generation_id")
-     :pid (get value "pid")
-     :membership-revision (get value "membership_revision")
-     :basis-fingerprint (get value "basis_fingerprint")
-     :members members}))
+  (wire/decode-ready-marker (wire/read-json file)))
 
 (defn refresh!
   "Refresh all members under the host lock after frozen-basis validation.
@@ -224,40 +232,41 @@
   ([host opts]
    #_{:clj-kondo/ignore [:locking-suspicious-lock]}
    #_{:splint/disable [lint/locking-object]}
-   (locking (:refresh-lock host)
-     (when (contains? opts :only)
-       (throw (ex-info "Targeted refresh is unsupported for a pooled host"
-                       {:reason :pool/targeted-refresh-unsupported
-                        :jvm-pool (get-in host [:manifest :jvm-pool])})))
-     (let [manifest (:manifest host)
-           candidate (pool-basis/create-pool-basis manifest)]
-       (if (not= (:fingerprint candidate)
-                 (get-in host [:pool-basis :fingerprint]))
-         {:status :restart-required
-          :jvm-pool (:jvm-pool manifest)
-          :host-generation-id (:host-generation-id manifest)
-          :members (into {}
-                         (map (fn [member]
-                                [(:config-dir member)
-                                 {:status :restart-required}])
-                              (:members manifest)))}
-         (let [results (mapv (fn [member]
-                               (let [member-runtime
-                                     (get-in host [:runtimes-by-config
-                                                   (:config-dir member)])]
-                                 [(:config-dir member)
-                                  (runtime/refresh-modules!
-                                   member-runtime
-                                   {:pool-refreshing? true
-                                    :startup? true})]))
-                             (:members manifest))]
-           {:status (if (some #(= :applied (get-in % [1 :status]))
-                              results)
-                      :applied
-                      :unchanged)
+   (let [host (host-runtime-view host)]
+     (locking (:refresh-lock host)
+       (when (contains? opts :only)
+         (throw (ex-info "Targeted refresh is unsupported for a pooled host"
+                         {:reason :pool/targeted-refresh-unsupported
+                          :jvm-pool (get-in host [:manifest :jvm-pool])})))
+       (let [manifest (:manifest host)
+             candidate (pool-basis/create-pool-basis manifest)]
+         (if (not= (:fingerprint candidate)
+                   (get-in host [:pool-basis :fingerprint]))
+           {:status :restart-required
             :jvm-pool (:jvm-pool manifest)
             :host-generation-id (:host-generation-id manifest)
-            :members (into {} results)}))))))
+            :members (into {}
+                           (map (fn [member]
+                                  [(:config-dir member)
+                                   {:status :restart-required}])
+                                (:members manifest)))}
+           (let [results (mapv (fn [member]
+                                 (let [member-runtime
+                                       (get-in host [:runtimes-by-config
+                                                     (:config-dir member)])]
+                                   [(:config-dir member)
+                                    (runtime/refresh-modules!
+                                     member-runtime
+                                     {:pool-refreshing? true
+                                      :startup? true})]))
+                               (:members manifest))]
+             {:status (if (some #(= :applied (get-in % [1 :status]))
+                                results)
+                        :applied
+                        :unchanged)
+              :jvm-pool (:jvm-pool manifest)
+              :host-generation-id (:host-generation-id manifest)
+              :members (into {} results)})))))))
 
 (defn probe!
   "Run a private pooled replacement probe and retain its private root."

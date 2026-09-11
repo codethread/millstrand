@@ -406,25 +406,76 @@
          (pool-basis/validate-launch-manifest
           (assoc manifest :unexpected true))))))
 
+(deftest probe-private-paths-cannot-escape-before-basis-resolution
+  (let [root (workspace! {} nil)
+        original (workspace! {} nil)
+        private-config (workspace! {} nil)
+        probe-root (.getParentFile private-config)
+        sentinel (io/file probe-root "sentinel")
+        member {:original-config-dir (.getCanonicalPath original)
+                :original-source-cwd (.getCanonicalPath original)
+                :probe-config-dir (.getCanonicalPath private-config)
+                :probe-state-dir (.getCanonicalPath (io/file private-config "state"))
+                :probe-data-dir (.getCanonicalPath (io/file private-config "data"))
+                :member-diagnostic
+                (.getCanonicalPath (io/file private-config "diagnostic.jsonl"))
+                :name "a"
+                :candidate-weaver-id "candidate-a"
+                :candidate-generation-id "generation-a"
+                :old-member-baseline nil}
+        manifest {:format "millstrand.jvm-pool-probe/v1"
+                  :jvm-pool "backend"
+                  :probe-id "probe-boundary"
+                  :candidate-host-id "host-boundary"
+                  :candidate-host-generation-id "generation-host-boundary"
+                  :probe-root (.getCanonicalPath probe-root)
+                  :millstrand-source (.getCanonicalPath root)
+                  :result (.getCanonicalPath (io/file private-config "result.json"))
+                  :collective-diagnostic
+                  (.getCanonicalPath (io/file private-config "collective.jsonl"))
+                  :members [member]}
+        escaped (.getCanonicalPath (io/file probe-root ".." "escaped.json"))
+        sibling (str (.getCanonicalPath probe-root) "-sibling" "/result.json")
+        original-state (.getCanonicalPath (io/file "/" "original-state"))]
+    (spit sentinel "untouched")
+    (doseq [[label candidate] [["escaped-result" (assoc manifest :result escaped)]
+                               ["sibling-diagnostic"
+                                (assoc manifest :collective-diagnostic sibling)]
+                               ["original-state"
+                                (assoc-in manifest [:members 0 :probe-state-dir]
+                                          original-state)]
+                               ["escaped-member-diagnostic"
+                                (assoc-in manifest [:members 0 :member-diagnostic]
+                                          escaped)]]]
+      (testing label
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (pool-basis/validate-probe-manifest candidate)))))
+    (is (= "untouched" (slurp sentinel)))))
+
 (deftest probe-basis-uses-private-config-and-original-config-authority
   (let [source (workspace! {} nil)
         original-root (workspace! {} nil)
         probe-root (workspace! {:deps {'demo/local {:local/root "original-lib"}}}
                                nil)
+        _ (do
+            (.mkdirs (io/file probe-root "config"))
+            (spit (io/file probe-root "config" "deps.edn")
+                  "{:deps {demo/local {:local/root \"original-lib\"}}}\n"))
         captured (atom nil)
         manifest {:format "millstrand.jvm-pool-probe/v1"
                   :jvm-pool "backend"
                   :probe-id "probe-1"
                   :candidate-host-id "probe-host-1"
                   :candidate-host-generation-id "probe-generation-1"
-                  :probe-root (.getCanonicalPath (io/file probe-root "root"))
+                  :probe-root (.getCanonicalPath (.getParentFile probe-root))
                   :millstrand-source (.getCanonicalPath source)
                   :result (.getCanonicalPath (io/file probe-root "result.json"))
                   :collective-diagnostic
                   (.getCanonicalPath (io/file probe-root "collective.jsonl"))
                   :members [{:original-config-dir (.getCanonicalPath original-root)
                              :original-source-cwd (.getCanonicalPath source)
-                             :probe-config-dir (.getCanonicalPath probe-root)
+                             :probe-config-dir
+                             (.getCanonicalPath (io/file probe-root "config"))
                              :probe-state-dir
                              (.getCanonicalPath (io/file probe-root "state"))
                              :probe-data-dir
@@ -444,7 +495,7 @@
                      :argmap {}})]
           (pool-basis/create-probe-pool-basis
            manifest {:local/root (.getCanonicalPath source)}))]
-    (is (= (.getCanonicalPath probe-root) (:dir @captured)))
+    (is (= (.getCanonicalPath (io/file probe-root "config")) (:dir @captured)))
     (is (= (.getCanonicalPath (io/file original-root "original-lib"))
            (get-in @captured [:project :deps 'demo/local :local/root])))
     (is (= (.getCanonicalPath original-root)
@@ -520,7 +571,7 @@
                         :probe-id "probe-real"
                         :candidate-host-id "probe-host-real"
                         :candidate-host-generation-id "probe-generation-real"
-                        :probe-root (.getCanonicalPath (io/file copied "root"))
+                        :probe-root (.getCanonicalPath (.getParentFile copied))
                         :millstrand-source (.getCanonicalPath source)
                         :result (.getCanonicalPath (io/file copied "result.json"))
                         :collective-diagnostic

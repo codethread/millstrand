@@ -14,6 +14,7 @@
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.pool :as pool]
+            [millstrand.core.weaver.pool-wire :as pool-wire]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.weaver.scheduler :as scheduler]
             [millstrand.core.db :as db]
@@ -314,6 +315,10 @@
           (is (= ["weaver-a" "weaver-b"] (mapv :nonce metadata)))
           (is (nil? @weaver-runtime/current-runtime))
           (is (.isFile (io/file (:ready-file host))))
+          (is (= (.getCanonicalPath
+                  (io/file root "jvm-pools" "hosts" (pool/pool-hash "backend")
+                           "ready.json"))
+                 (.getCanonicalPath (io/file (:ready-file host)))))
           (is (every? metadata/valid-metadata? metadata)))
         (finally
           (pool/stop! host)
@@ -341,7 +346,45 @@
         (is (every? #(not (.exists (metadata/json-metadata-file
                                     {:state-dir (:state-dir %)})))
                     (:members manifest)))
+        (is (every? #(not (.exists (metadata/socket-file
+                                    {:state-dir (:state-dir %)})))
+                    (:members manifest)))
+        (let [replacement (pool/start! manifest)]
+          (pool/stop! replacement))
         (finally
+          (delete-tree! root))))))
+
+(deftest pooled-endpoints-select-the-shared-host-context
+  (let [root (io/file "/tmp" (str "pool-endpoint-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)
+          selected (weaver-runtime/runtime-for-nrepl-port
+                    (get-in (first (:runtimes host)) [:metadata :endpoint :port]))
+          called (atom nil)]
+      (try
+        (is (identical? (:pool-host selected) (:host-context host)))
+        (with-redefs [pool/refresh!
+                      (fn [selected-host opts]
+                        (reset! called [selected-host opts])
+                        {:status :unchanged})]
+          (let [{:keys [host port]} (get-in selected [:metadata :endpoint])]
+            (with-open [conn (nrepl/connect :host host :port port)]
+              (let [session (nrepl/client-session
+                             (nrepl/client conn (test-support/await-budget-ms)))
+                    responses (doall
+                               (nrepl/message
+                                session
+                                {:op "eval"
+                                 :code (str "(millstrand.core.weaver.runtime/refresh-modules! "
+                                            "(millstrand.core.weaver.runtime/"
+                                            "runtime-for-nrepl-port " port "))")}))]
+                (is (some :value responses)))))
+          (is (map? (first @called)))
+          (is (identical? (:host-context host)
+                          (:host-context (first @called)))))
+        (finally
+          (pool/stop! host)
           (delete-tree! root))))))
 
 (deftest pooled-probe-uses-private-state-and-retains-result-root
@@ -360,6 +403,18 @@
         (is (nil? (get-in result [:members 0 :registry-diff])))
         (is (map? (get-in result [:members 1 :registry-diff])))
         (is (.isFile (io/file (:result manifest))))
+        (is (.isFile (io/file (:log result))))
+        (is (not= (:result manifest) (:log result)))
+        (let [raw (json/read-str (slurp (:result manifest)))]
+          (is (contains? (first (get raw "members")) "registry_diff"))
+          (is (= result (pool-wire/read-probe-result (:result manifest))))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (pool-wire/decode-probe-result
+                        (dissoc raw "members"))))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (pool-wire/decode-probe-result
+                        (update raw "members"
+                                #(vector (dissoc (first %) "registry_diff")))))))
         (is (.isFile (io/file (:collective-diagnostic manifest))))
         (is (nil? @weaver-runtime/current-runtime))
         (is (not (.exists (metadata/json-metadata-file
@@ -367,6 +422,22 @@
                                         (first (:members manifest)))})))))
       (finally
         (delete-tree! root)))))
+
+(deftest stale-pooled-host-cannot-withdraw-a-successor-ready-marker
+  (let [root (io/file "/tmp" (str "pool-ready-" (java.util.UUID/randomUUID)))]
+    (.mkdirs root)
+    (let [manifest (pool-manifest root)
+          host (pool/start! manifest)
+          successor (assoc (:ready-marker host) :host-id "successor")]
+      (try
+        (pool-wire/write-json! (:ready-file host)
+                               (pool-wire/ready-marker-wire successor))
+        (pool/stop! host)
+        (is (.isFile (io/file (:ready-file host))))
+        (is (= "successor"
+               (get (json/read-str (slurp (:ready-file host))) "host_id")))
+        (finally
+          (delete-tree! root))))))
 
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)

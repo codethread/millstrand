@@ -545,6 +545,8 @@
 (s/def :millstrand.weaver-start/member-generation-basis
   :millstrand.core.specs/generation-basis)
 (s/def :millstrand.weaver-start/pool-metadata map?)
+(s/def :millstrand.weaver-start/pool-host
+  #(instance? clojure.lang.IDeref %))
 
 ;; JVM-pool boundaries are deliberately closed.  The host and probe workers
 ;; receive these maps from Mill, so an extra or misspelled field must fail
@@ -791,12 +793,13 @@
                           :millstrand.weaver-start/weaver-id
                           :millstrand.weaver-start/generation-id
                           :millstrand.weaver-start/member-generation-basis
-                          :millstrand.weaver-start/pool-metadata])
+                          :millstrand.weaver-start/pool-metadata
+                          :millstrand.weaver-start/pool-host])
          #(every? #{:world :name :publish? :storage :probe?
                     :diagnostic! :generation-basis :expected-version
                     :old-generation-baseline :defer-publication?
                     :weaver-id :generation-id :member-generation-basis
-                    :pool-metadata}
+                    :pool-metadata :pool-host}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))
