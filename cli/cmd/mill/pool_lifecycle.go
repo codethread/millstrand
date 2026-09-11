@@ -333,8 +333,15 @@ func (s *server) stopPooledWeaver(world config.World) (map[string]any, error) {
 	host := poolHostForConfigLocked(s, world.ConfigDir)
 	s.mu.Unlock()
 	if host == nil {
-		if pool, ok, _ := s.registeredPoolForConfig(world.ConfigDir); ok {
-			host, _ = s.discoverPoolHost(pool)
+		pool, recorded, err := s.registeredPoolForConfig(world.ConfigDir)
+		if err != nil {
+			return nil, fmt.Errorf("read JVM pool membership for workspace %s: %w", world.ConfigDir, err)
+		}
+		if recorded {
+			host, err = s.discoverPoolHost(pool)
+			if err != nil {
+				return nil, fmt.Errorf("discover JVM pool host %q for workspace %s: %w", pool, world.ConfigDir, err)
+			}
 			s.mu.Lock()
 			if host == nil {
 				host = s.poolHosts[pool]
@@ -358,7 +365,13 @@ func (s *server) stopPooledWeaver(world config.World) (map[string]any, error) {
 			}
 		}
 	}
-	_ = os.Remove(host.ReadyPath)
+	if err := removePoolReadyMarker(host); err != nil {
+		// The process and member artifacts have already stopped, but retaining
+		// the host routes keeps the failed cleanup inspectable and prevents a
+		// later lifecycle call from treating the stale marker as an unknown host.
+		host.Live = false
+		return nil, fmt.Errorf("stop JVM pool host %q: %w", host.Pool, err)
+	}
 	s.removePoolHost(host)
 	status := baseStatus(world, "stopped")
 	status["jvm_pool"] = host.Pool
@@ -367,6 +380,16 @@ func (s *server) stopPooledWeaver(world config.World) (map[string]any, error) {
 	status["pending_members"] = []string{}
 	status["restart_required"] = false
 	return status, nil
+}
+
+func removePoolReadyMarker(host *weaverHost) error {
+	if host == nil || strings.TrimSpace(host.ReadyPath) == "" {
+		return errors.New("JVM pool ready marker path is blank")
+	}
+	if err := os.Remove(host.ReadyPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove JVM pool ready marker %s: %w", host.ReadyPath, err)
+	}
+	return nil
 }
 
 // discoverPoolHost rehydrates an already serving host after Mill itself has
@@ -554,7 +577,13 @@ func (s *server) restartPooledWeaver(req client.MillWorldRequest, world config.W
 			}
 		}
 	}
-	_ = os.Remove(host.ReadyPath)
+	if err := removePoolReadyMarker(host); err != nil {
+		// Keep the stopped host in Mill custody so status/recovery code and an
+		// operator can inspect the failed cutover rather than losing the only
+		// evidence of which generation owned the marker.
+		host.Live = false
+		return nil, fmt.Errorf("restart JVM pool host %q cleanup failed: %w", host.Pool, err)
+	}
 	s.removePoolHost(host)
 	replacement, err := s.startPooledWeaverFromSnapshot(req, world, pool, nil, snapshot)
 	if err != nil {

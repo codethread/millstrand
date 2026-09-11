@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,12 +166,54 @@ func TestReadAutoStartRegistrationsSkipsMalformedEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	entries, err := readAutoStartRegistrations()
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), badPath) {
+		t.Fatalf("malformed entry did not fail loudly: %v", err)
 	}
 	if len(entries) != 1 || entries[0].Name != "healthy" {
 		t.Fatalf("malformed entry prevented healthy registration: %#v", entries)
 	}
+}
+
+func TestStartAutostartPersistsRegistryAndConfigFailures(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "state")
+	t.Setenv("XDG_STATE_HOME", state)
+	cfg := t.TempDir()
+	world := config.World{ConfigDir: cfg}
+	if err := registerAutoStart(world, cfg, "unreadable"); err != nil {
+		t.Fatal(err)
+	}
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badPath := filepath.Join(root, autostartDirectory, "malformed.json")
+	if err := os.WriteFile(badPath, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{shutdown: make(chan struct{})}
+	s.startAutostart()
+	s.autostartWG.Wait()
+
+	failurePath, err := autostartFailurePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(failurePath)
+	if err != nil {
+		t.Fatalf("autostart failure was not persisted: %v", err)
+	}
+	var failure autostartFailureRecord
+	if err := json.Unmarshal(b, &failure); err != nil {
+		t.Fatal(err)
+	}
+	if failure.State != "failed" || len(failure.Errors) != 2 {
+		t.Fatalf("unexpected persisted autostart failure: %#v", failure)
+	}
+	joined := strings.Join(failure.Errors, "\n")
+	if !strings.Contains(joined, badPath) || !strings.Contains(joined, cfg) {
+		t.Fatalf("persisted failure lost registration/config paths: %#v", failure)
+	}
+	s.signalShutdown()
 }
 
 func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {

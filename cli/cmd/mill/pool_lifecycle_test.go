@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
@@ -19,6 +21,141 @@ import (
 )
 
 const poolTestBasis = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+func TestPoolOwnedBlockingHelperProcess(t *testing.T) {
+	if os.Getenv("MILLSTRAND_POOL_HELPER_PROCESS") != "1" {
+		return
+	}
+	readyPath := os.Getenv("MILLSTRAND_POOL_HELPER_READY")
+	if readyPath == "" {
+		os.Exit(2)
+	}
+	if err := os.WriteFile(readyPath, []byte("ready\n"), 0o600); err != nil {
+		os.Exit(2)
+	}
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+}
+
+func startPoolOwnedBlockingProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	readyPath := filepath.Join(t.TempDir(), "ready")
+	cmd := exec.Command(os.Args[0], "-test.run=TestPoolOwnedBlockingHelperProcess", "--")
+	cmd.Env = append(os.Environ(), "MILLSTRAND_POOL_HELPER_PROCESS=1", "MILLSTRAND_POOL_HELPER_READY="+readyPath)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitForPoolTestFile(t, readyPath)
+	t.Cleanup(func() {
+		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
+			_, _ = stdin.Write([]byte("release\n"))
+			_ = stdin.Close()
+		}
+		if cmd.ProcessState == nil {
+			_ = cmd.Wait()
+		}
+	})
+	return cmd
+}
+
+func waitForPoolTestFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat helper readiness marker %s: %v", path, err)
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for helper readiness marker %s", path)
+		case <-ticker.C:
+		}
+	}
+}
+
+func TestStopPooledWeaverPropagatesMembershipReadFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	membershipPath := filepath.Join(root, "jvm-pools", jvmpool.MembershipFile)
+	if err := os.MkdirAll(filepath.Dir(membershipPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(membershipPath, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := jvmpool.OpenPath(membershipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = (&server{poolRegistry: registry}).stopPooledWeaver(world)
+	if err == nil || !strings.Contains(err.Error(), world.ConfigDir) || !strings.Contains(err.Error(), membershipPath) {
+		t.Fatalf("membership failure was not contextualized: %v", err)
+	}
+}
+
+func TestStopPooledWeaverPropagatesDiscoveryFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
+	source := t.TempDir()
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := jvmpool.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := "backend"
+	if _, err := registry.Reconcile(jvmpool.Member{ConfigDir: world.ConfigDir, SourceCWD: source, JVMPool: pool}, nil); err != nil {
+		t.Fatal(err)
+	}
+	hostDir, err := jvmpool.PoolHostDir(root, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, "ready.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = (&server{poolRegistry: registry}).stopPooledWeaver(world)
+	if err == nil || !strings.Contains(err.Error(), world.ConfigDir) || !strings.Contains(err.Error(), pool) {
+		t.Fatalf("discovery failure was not contextualized: %v", err)
+	}
+}
+
+func TestStopPooledWeaverRetainsCustodyWhenReadyMarkerCleanupFails(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
+	markerPath := filepath.Join(t.TempDir(), "ready-dir")
+	if err := os.MkdirAll(filepath.Join(markerPath, "non-empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	host := &weaverHost{Pool: "backend", HostID: "host-1", Live: true, ReadyPath: markerPath, Members: []poolMember{{World: world}}}
+	s := &server{poolHosts: map[string]*weaverHost{"backend": host}, poolMembers: map[string]*weaverHost{world.ConfigDir: host}}
+	_, err := s.stopPooledWeaver(world)
+	if err == nil || !strings.Contains(err.Error(), markerPath) {
+		t.Fatalf("ready-marker cleanup failure was not returned: %v", err)
+	}
+	if s.poolHosts["backend"] != host || s.poolMembers[world.ConfigDir] != host {
+		t.Fatalf("failed cleanup discarded host custody: hosts=%#v members=%#v", s.poolHosts, s.poolMembers)
+	}
+	if host.Live {
+		t.Fatal("failed cleanup left stopped host marked live")
+	}
+}
 
 func TestPooledRestartResultUsesClosedRouteEnvelope(t *testing.T) {
 	world := config.World{ConfigDir: filepath.Join(t.TempDir(), ".millstrand")}
@@ -245,16 +382,7 @@ func TestInitRejectsLiveIsolatedOwnerBeforePoolMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("sleep", "60")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
-			terminatePID(cmd.Process.Pid)
-			_, _ = cmd.Process.Wait()
-		}
-	})
+	cmd := startPoolOwnedBlockingProcess(t)
 	writeWeaverMetadata(t, world, cmd.Process.Pid, "isolated-live")
 
 	launches := 0
@@ -450,7 +578,7 @@ func TestFailedPoolHostLaunchLeavesNoPartialRoute(t *testing.T) {
 	original := launchWeaver
 	defer func() { launchWeaver = original }()
 	launchWeaver = func(_ string, _ []string, _ []string, register func(*exec.Cmd) error, _ io.Writer, _ io.Writer) (*exec.Cmd, error) {
-		if err := register(exec.Command("sleep", "60")); err != nil {
+		if err := register(&exec.Cmd{}); err != nil {
 			return nil, err
 		}
 		return nil, errors.New("replacement launch failed")
@@ -505,16 +633,7 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("sleep", "60")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if cmd.Process != nil && processAlive(cmd.Process.Pid) {
-			terminatePID(cmd.Process.Pid)
-			_, _ = cmd.Process.Wait()
-		}
-	})
+	cmd := startPoolOwnedBlockingProcess(t)
 	hostID, hostGeneration := "host-rediscovered", "host-generation-rediscovered"
 	members := []poolLaunchMember{
 		{ConfigDir: worldA.ConfigDir, SourceCWD: source, StateDir: worldA.StateDir, DataDir: worldA.DataDir, Name: "a", WeaverID: "weaver-a", GenerationID: "generation-a", DependencyDiagnostic: dependencyDiagnosticPath(worldA)},
@@ -593,7 +712,7 @@ func TestRediscoveredPoolWithIsolatedDesiredConfigReportsRunningAndStopsCollecti
 	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: source, ConfigDir: cfgA}); err != nil {
 		t.Fatalf("collective stop through isolated desired config failed: %v", err)
 	}
-	_, _ = cmd.Process.Wait()
+	_ = cmd.Wait()
 	if processAlive(cmd.Process.Pid) {
 		t.Fatalf("collective stop left host pid %d alive", cmd.Process.Pid)
 	}

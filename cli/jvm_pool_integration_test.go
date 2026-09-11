@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -362,7 +363,17 @@ func initPoolMember(t *testing.T, h *restartProcessHarness, workspace, pool, val
 	ns := "pool.member." + strings.ToLower(value)
 	owner := ":pool-member-" + strings.ToLower(value)
 	childKey := "pool-child-" + strings.ToLower(value)
-	childCommand := "echo $$ > " + clojureString(filepath.Join(workspace, "pool-child.pid")) + "; sleep 300"
+	// Keep the control pipe beside the workspace. Probe config copying is
+	// intentionally strict and must not encounter this fixture-only FIFO.
+	childReleasePath := filepath.Join(filepath.Dir(workspace), filepath.Base(workspace)+".pool-child.release")
+	if err := syscall.Mkfifo(childReleasePath, 0o600); err != nil {
+		t.Fatalf("create %s child release pipe: %v", value, err)
+	}
+	t.Cleanup(func() { _ = os.Remove(childReleasePath) })
+	// The FIFO gives the owned child a deterministic readiness/cleanup
+	// boundary. It remains blocked in cat until custody cancellation closes
+	// the process, so liveness never depends on an arbitrary duration.
+	childCommand := "echo $$ > " + clojureString(filepath.Join(workspace, "pool-child.pid")) + "; exec cat " + clojureString(childReleasePath)
 	init := fmt.Sprintf(`(ns %s
   (:require [millstrand.api.current.alpha :as current]
             [millstrand.api.process.alpha :as process]
