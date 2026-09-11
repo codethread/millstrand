@@ -152,17 +152,15 @@
    (stage "ready")
    (workflow/step :resolve-pr "Confirm reviewed work and resolve its pull request" :self
                   (fn [{:keys [pr-number]}]
-                    (str
-                     (when pr-number (str "Use PR #" pr-number ". "))
-                     (format-alpha/prose
-                      "
-                        Reuse sufficient completed review. Resolve missing preparation
-                        through development and `review`; an approved proposal can also
-                        be landed as reviewed work.
+                    (format-alpha/prose
+                     "
+                       {pr}Reuse sufficient completed review. Resolve missing preparation
+                       through development and `review`; an approved proposal can also
+                       be landed as reviewed work.
 
-                        Push the clean branch. Reuse its open PR, draft or ready;
-                        create one only if absent. Confirm its branch and main target.
-                      " {}))))
+                       Push the clean branch. Reuse its open PR, draft or ready;
+                       create one only if absent. Confirm its branch and main target.
+                     " {:pr (if pr-number (str "Use PR #" pr-number ". ") "")})))
    (support/card-gate :mark-ready "Mark the optional card ready for landing" [:resolve-pr]
                       "me.workflows.card-actions/review!")
    (workflow/checkpoint :signoff "Authorize this work to land" :depends-on [:mark-ready]

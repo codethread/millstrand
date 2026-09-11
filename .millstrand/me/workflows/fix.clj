@@ -45,14 +45,17 @@
 (defn- fix-handoff-instruction
   "Hand the validated fix to shared review, preserving its recorded card."
   [{:keys [card branch worktree]}]
-  (str (format-alpha/reflow
-        "|Run focused cold tests and the relevant blocking quality gates. Use
-         |the supplied card, or read fix/card from this run's claim-trail step
-         |and substitute that id for <fix/card> below.")
-       "\n\n"
-       (review/handoff-instruction {:feature (or card "<fix/card>")
-                                    :branch branch :worktree worktree
-                                    :card (or card "<fix/card>")})))
+  (format-alpha/prose
+   "
+     Run focused cold tests and the relevant blocking quality gates. Use
+     the supplied card, or read fix/card from this run's claim-trail step
+     and substitute that id for <fix/card> below.
+
+     {handoff}
+   " {:handoff (review/handoff-instruction
+                {:feature (or card "<fix/card>")
+                 :branch branch :worktree worktree
+                 :card (or card "<fix/card>")})}))
 
 (workflow/defworkflow fix
   "Run one light bug fix through the shared review handoff."

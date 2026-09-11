@@ -1,7 +1,6 @@
 (ns me.workflows.review
   "The repository's shared final code review, before landing."
-  (:require [clojure.data.json :as json]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [ct.spools.delegation :as agents]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
@@ -33,17 +32,17 @@
 (defn handoff-instruction
   "Describe the repository review handoff with the caller's known work identity."
   [params]
-  (str (format-alpha/prose
-        "
-          Commit and push the validated branch. Read `strand workflow show review`
-          for its parameter contract, then start a new run with
-          `strand workflow start <run-id> --workflow review --params <json>`.
-          Complete this handoff after starting review.
+  (format-alpha/prose
+   "
+     Commit and push the validated branch. Read `strand workflow show review`
+     for its parameter contract, then start a new run with
+     `strand workflow start <run-id> --workflow review --params <json>`.
+     Complete this handoff after starting review.
 
-          Carry forward this work identity:
-        " {})
-       "\n\n"
-       (json/write-str (select-keys params [:feature :branch :worktree :card]))))
+     Carry forward this work identity:
+
+     {identity:json}
+   " {:identity (select-keys params [:feature :branch :worktree :card])}))
 
 (defn- review-specs
   "Build and validate the gate-ready change-review specs for one review run."
@@ -151,16 +150,14 @@
    (workflow/step :handoff-land "Hand the reviewed work to landing" :self
                   :depends-on [:final-ci-green]
                   (fn [params]
-                    (str
-                     (format-alpha/prose
-                      "
-                        Record review and validation evidence on the work task.
-                        If the user authorized landing, read `strand workflow show land`
-                        and start `strand workflow start <run-id> --workflow land
-                        --params <json>`. Otherwise report the reviewed work.
+                    (format-alpha/prose
+                     "
+                       Record review and validation evidence on the work task.
+                       If the user authorized landing, read `strand workflow show land`
+                       and start `strand workflow start <run-id> --workflow land
+                       --params <json>`. Otherwise report the reviewed work.
 
-                        Carry forward this work identity:
-                      " {})
-                     "\n\n"
-                     (json/write-str
-                      (select-keys params [:feature :branch :worktree :card])))))))
+                       Carry forward this work identity:
+
+                       {identity:json}
+                     " {:identity (select-keys params [:feature :branch :worktree :card])})))))

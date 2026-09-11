@@ -63,16 +63,17 @@
                   :depends-on [:fold]
                   :attributes {"workflow/action-ref" "story.finish"}
                   (fn [{:keys [module] :as params}]
-                    (str (format-alpha/reflow
-                          (format
-                           "|Delete `\"%s\"` from quality.api-form/pending when this is an API
-                            |conversion; run the focused cold tests and `make fmt-check lint
-                            |reflect-check docs-check`; `make api-docs` on docstring changes.
-                            |Finish this wave before handing the whole change to review."
-                           module))
-                         "\n\n"
-                         (review/handoff-instruction
-                          (assoc params :branch "<branch>")))))))
+                    (format-alpha/prose
+                     "
+                       Delete `{module:json}` from quality.api-form/pending for an API
+                       conversion. Run focused cold tests and `make fmt-check lint
+                       reflect-check docs-check`; run `make api-docs` on docstring changes.
+                       Finish this wave before handing the whole change to review.
+
+                       {handoff}
+                     " {:module module
+                        :handoff (review/handoff-instruction
+                                  (assoc params :branch "<branch>"))})))))
 
 (workflow/defworkflow story-keep
   "Keep a module's per-concern split."
@@ -88,19 +89,19 @@
                   :self
                   :attributes {"workflow/action-ref" "story.finish"}
                   (fn [{:keys [module] :as params}]
-                    (str (format-alpha/reflow
-                          (format
-                           "|The split stands: internal/<concern> files stay, named by meaning,
-                            |gated dependency rules apply (internal never requires alpha; only
-                            |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
-                            |from quality.api-form/pending when this is an API conversion;
-                            |focused cold tests; `make fmt-check lint reflect-check docs-check`;
-                            |`make api-docs` on docstring changes. Finish this wave before
-                            |handing the whole change to review."
-                           module))
-                         "\n\n"
-                         (review/handoff-instruction
-                          (assoc params :branch "<branch>")))))))
+                    (format-alpha/prose
+                     "
+                       Keep internal/<concern> files named by meaning. Internal never
+                       requires alpha; only its own alpha, internal siblings, and tests
+                       reach internal. Delete `{module:json}` from quality.api-form/pending
+                       for an API conversion. Run focused cold tests and `make fmt-check
+                       lint reflect-check docs-check`; run `make api-docs` on docstring
+                       changes. Finish this wave before handing the whole change to review.
+
+                       {handoff}
+                     " {:module module
+                        :handoff (review/handoff-instruction
+                                  (assoc params :branch "<branch>"))})))))
 
 (workflow/defworkflow story
   "Run one module-form refactor wave through validation and review handoff."

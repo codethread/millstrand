@@ -276,7 +276,8 @@
               :positionals [{:name :entry-id :spec ::non-blank}]}
     "await" {:doc "Wait for a reserved turn; timeout never dequeues it."
              :hook-class :read :deadline-class :unbounded
-             :flags {:timeout-secs {:type :int :spec ::timeout-secs}}
+             :flags {:timeout-secs {:type :int :spec ::timeout-secs
+                                    :doc "Seconds to wait; defaults to 300."}}
              :positionals [{:name :entry-id :required? true :spec ::non-blank}]}
     "withdraw" {:doc "Stop a named landing and release its turn with an explicit reason."
                 :hook-class :mutating :deadline-class :unbounded
