@@ -87,6 +87,7 @@ func validatePoolProbeManifest(m poolProbeManifest) error {
 		return errors.New("JVM pool probe manifest must contain members")
 	}
 	seen := map[string]bool{}
+	privatePaths := make([]string, 0, len(m.Members)*4)
 	for i, member := range m.Members {
 		if member.OriginalConfigDir == "" || member.OriginalSourceCWD == "" || member.ProbeConfigDir == "" || member.ProbeStateDir == "" || member.ProbeDataDir == "" || member.MemberDiagnostic == "" || member.Name == "" || member.CandidateWeaverID == "" || member.CandidateGenerationID == "" {
 			return fmt.Errorf("invalid JVM pool probe member %d", i)
@@ -103,6 +104,7 @@ func validatePoolProbeManifest(m poolProbeManifest) error {
 		if !pathBelow(m.ProbeRoot, member.ProbeConfigDir) || !pathBelow(m.ProbeRoot, member.ProbeStateDir) || !pathBelow(m.ProbeRoot, member.ProbeDataDir) || !pathBelow(m.ProbeRoot, member.MemberDiagnostic) {
 			return fmt.Errorf("probe member %s has a path outside private probe root", member.OriginalConfigDir)
 		}
+		privatePaths = append(privatePaths, member.ProbeConfigDir, member.ProbeStateDir, member.ProbeDataDir, member.MemberDiagnostic)
 		if i > 0 && m.Members[i-1].OriginalConfigDir >= member.OriginalConfigDir {
 			return errors.New("JVM pool probe members must be sorted by original_config_dir")
 		}
@@ -112,12 +114,26 @@ func validatePoolProbeManifest(m poolProbeManifest) error {
 			}
 		}
 	}
+	for i, path := range privatePaths {
+		for _, other := range privatePaths[:i] {
+			if pathsOverlap(path, other) {
+				return fmt.Errorf("probe member private paths overlap: %s and %s", path, other)
+			}
+		}
+		if pathsOverlap(path, m.Result) || pathsOverlap(path, m.CollectiveDiagnostic) {
+			return fmt.Errorf("probe member private path %s overlaps a probe artifact", path)
+		}
+	}
 	return nil
 }
 
 func pathBelow(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func pathsOverlap(a, b string) bool {
+	return a == b || pathBelow(a, b) || pathBelow(b, a)
 }
 
 func validateProbeBaseline(value map[string]any) error {
@@ -262,15 +278,56 @@ func decodePoolProbeResult(data []byte, manifest poolProbeManifest) (poolProbeRe
 	return result, nil
 }
 
+func canonicalProbePath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", errors.New("path is required")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	abs = filepath.Clean(abs)
+	missing := []string{}
+	for current := abs; ; current = filepath.Dir(current) {
+		real, evalErr := filepath.EvalSymlinks(current)
+		if evalErr == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				real = filepath.Join(real, missing[i])
+			}
+			return filepath.Clean(real), nil
+		}
+		if !os.IsNotExist(evalErr) {
+			return "", evalErr
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", evalErr
+		}
+		missing = append(missing, filepath.Base(current))
+	}
+}
+
 func poolProbeManifestForHost(host *weaverHost, snapshot jvmpool.PoolSnapshot, source, root string) (poolProbeManifest, error) {
 	probeID := newOpaqueID("probe")
-	probeRoot := filepath.Join(root, "jvm-pools", "pool-probes", probeID)
-	manifest := poolProbeManifest{Format: poolProbeFormat, JVMPool: host.Pool, ProbeID: probeID, CandidateHostID: newOpaqueID("probe-host"), CandidateGeneration: newOpaqueID("probe-host-generation"), ProbeRoot: probeRoot, MillstrandSource: source, Result: filepath.Join(probeRoot, "result.json"), CollectiveDiagnostic: filepath.Join(probeRoot, "collective.jsonl")}
+	canonicalRoot, err := canonicalProbePath(root)
+	if err != nil {
+		return poolProbeManifest{}, fmt.Errorf("canonicalize probe root %s: %w", root, err)
+	}
+	canonicalSource, err := canonicalProbePath(source)
+	if err != nil {
+		return poolProbeManifest{}, fmt.Errorf("canonicalize Millstrand source %s: %w", source, err)
+	}
+	probeRoot := filepath.Join(canonicalRoot, "jvm-pools", "pool-probes", probeID)
+	manifest := poolProbeManifest{Format: poolProbeFormat, JVMPool: host.Pool, ProbeID: probeID, CandidateHostID: newOpaqueID("probe-host"), CandidateGeneration: newOpaqueID("probe-host-generation"), ProbeRoot: probeRoot, MillstrandSource: canonicalSource, Result: filepath.Join(probeRoot, "result.json"), CollectiveDiagnostic: filepath.Join(probeRoot, "collective.jsonl")}
 	for _, registered := range snapshot.Members {
-		memberRoot := filepath.Join(probeRoot, "members", filepath.Base(registered.ConfigDir))
+		identity, err := config.CanonicalConfigIdentity(registered.ConfigDir)
+		if err != nil {
+			return poolProbeManifest{}, fmt.Errorf("canonicalize JVM pool member %s: %w", registered.ConfigDir, err)
+		}
+		memberRoot := filepath.Join(probeRoot, "members", "member-"+config.WorldHash(identity))
 		var baseline map[string]any
 		for _, member := range host.Members {
-			if member.World.ConfigDir != registered.ConfigDir {
+			if member.World.ConfigDir != identity {
 				continue
 			}
 			status, err := poolProbeBaselineStatus(member.Identity)
@@ -283,7 +340,7 @@ func poolProbeManifestForHost(host *weaverHost, snapshot jvmpool.PoolSnapshot, s
 			}
 			baseline = map[string]any{"status": "admitted", "projection": projection}
 		}
-		world, err := config.RuntimeWorld(registered.ConfigDir)
+		world, err := config.RuntimeWorld(identity)
 		if err != nil {
 			return poolProbeManifest{}, err
 		}
@@ -291,7 +348,11 @@ func poolProbeManifestForHost(host *weaverHost, snapshot jvmpool.PoolSnapshot, s
 		if err != nil {
 			return poolProbeManifest{}, err
 		}
-		manifest.Members = append(manifest.Members, poolProbeMember{OriginalConfigDir: registered.ConfigDir, OriginalSourceCWD: registered.SourceCWD, ProbeConfigDir: filepath.Join(memberRoot, "config"), ProbeStateDir: filepath.Join(memberRoot, "state"), ProbeDataDir: filepath.Join(memberRoot, "data"), MemberDiagnostic: filepath.Join(memberRoot, "diagnostic.jsonl"), Name: name, CandidateWeaverID: newOpaqueID("probe-weaver"), CandidateGenerationID: newOpaqueID("probe-generation"), OldMemberBaseline: baseline})
+		canonicalSourceCWD, err := canonicalProbePath(registered.SourceCWD)
+		if err != nil {
+			return poolProbeManifest{}, fmt.Errorf("canonicalize JVM pool member source cwd %s: %w", registered.SourceCWD, err)
+		}
+		manifest.Members = append(manifest.Members, poolProbeMember{OriginalConfigDir: identity, OriginalSourceCWD: canonicalSourceCWD, ProbeConfigDir: filepath.Join(memberRoot, "config"), ProbeStateDir: filepath.Join(memberRoot, "state"), ProbeDataDir: filepath.Join(memberRoot, "data"), MemberDiagnostic: filepath.Join(memberRoot, "diagnostic.jsonl"), Name: name, CandidateWeaverID: newOpaqueID("probe-weaver"), CandidateGenerationID: newOpaqueID("probe-generation"), OldMemberBaseline: baseline})
 	}
 	return manifest, validatePoolProbeManifest(manifest)
 }
@@ -303,7 +364,7 @@ var poolProbeBaselineStatus = runtimeStatusWithRegistryProjection
 
 var poolProbeRuntime = runPooledProbeProcess
 
-const pooledProbeExpression = `(require 'clojure.data.json 'millstrand.core.weaver.pool 'millstrand.core.weaver.pool-wire) (let [manifest (millstrand.core.weaver.pool-wire/read-probe-manifest (System/getenv "MILLSTRAND_POOL_PROBE_MANIFEST"))] (millstrand.core.weaver.pool/probe! manifest {:runtime-coordinate {:local/root (System/getenv "MILLSTRAND_POOL_PROBE_SOURCE")}}))`
+const pooledProbeExpression = `(require 'clojure.data.json 'millstrand.core.weaver.pool 'millstrand.core.weaver.pool-wire) (try (let [manifest (millstrand.core.weaver.pool-wire/read-probe-manifest (System/getenv "MILLSTRAND_POOL_PROBE_MANIFEST"))] (millstrand.core.weaver.pool/probe! manifest {:runtime-coordinate {:local/root (System/getenv "MILLSTRAND_POOL_PROBE_SOURCE")}}) (System/exit 0)) (catch Throwable throwable (binding [*out* *err*] (prn throwable)) (System/exit 1)))`
 
 func runPooledProbeProcess(manifest poolProbeManifest) (poolProbeResult, error) {
 	args := []string{"-Srepro", "-Sdeps", fmt.Sprintf("{:deps {org.clojure/clojure {:mvn/version \"1.12.0\"} org.clojure/data.json {:mvn/version \"2.5.1\"} org.clojure/tools.deps {:mvn/version \"0.31.1642\"}} :paths [%q]}", filepath.Join(manifest.MillstrandSource, "src")), "-M", "-e", pooledProbeExpression}
@@ -311,6 +372,9 @@ func runPooledProbeProcess(manifest poolProbeManifest) (poolProbeResult, error) 
 	cmd.Dir = manifest.MillstrandSource
 	cmd.Env = append(withoutLaunchToken(os.Environ()), "MILLSTRAND_POOL_PROBE_MANIFEST="+filepath.Join(manifest.ProbeRoot, "manifest.json"), "MILLSTRAND_POOL_PROBE_SOURCE="+manifest.MillstrandSource)
 	if err := atomicPoolJSON(filepath.Join(manifest.ProbeRoot, "manifest.json"), manifest); err != nil {
+		return poolProbeResult{}, err
+	}
+	if err := preparePoolProbeConfigs(manifest); err != nil {
 		return poolProbeResult{}, err
 	}
 	var stderr cappedBuffer
@@ -324,7 +388,101 @@ func runPooledProbeProcess(manifest poolProbeManifest) (poolProbeResult, error) 
 	if err != nil {
 		return poolProbeResult{}, fmt.Errorf("pooled replacement probe did not write result: %w", err)
 	}
-	return decodePoolProbeResult(data, manifest)
+	result, err := decodePoolProbeResult(data, manifest)
+	if err != nil {
+		return poolProbeResult{}, err
+	}
+	if !result.Success {
+		return result, fmt.Errorf("pooled replacement probe reported failure at %s", result.Stage)
+	}
+	return result, nil
+}
+
+func preparePoolProbeConfigs(manifest poolProbeManifest) error {
+	for _, member := range manifest.Members {
+		if err := copyPoolProbeConfig(member.OriginalConfigDir, member.ProbeConfigDir); err != nil {
+			return fmt.Errorf("copy JVM pool member config %s to %s: %w", member.OriginalConfigDir, member.ProbeConfigDir, err)
+		}
+	}
+	return nil
+}
+
+func copyPoolProbeConfig(source, target string) error {
+	canonicalSource, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return fmt.Errorf("resolve source: %w", err)
+	}
+	sourceInfo, err := os.Stat(canonicalSource)
+	if err != nil {
+		return fmt.Errorf("stat source: %w", err)
+	}
+	if !sourceInfo.IsDir() {
+		return errors.New("source is not a directory")
+	}
+	target = filepath.Clean(target)
+	if pathsOverlap(canonicalSource, target) {
+		return fmt.Errorf("source and destination overlap")
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return fmt.Errorf("create destination: %w", err)
+	}
+	return filepath.Walk(canonicalSource, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(canonicalSource, path)
+		if err != nil {
+			return err
+		}
+		destination := target
+		if relative != "." {
+			destination = filepath.Join(target, relative)
+		}
+		if info.IsDir() {
+			if err := os.MkdirAll(destination, info.Mode().Perm()); err != nil {
+				return err
+			}
+			return os.Chmod(destination, info.Mode().Perm())
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := os.Stat(path)
+			if err != nil {
+				return fmt.Errorf("resolve symlink: %w", err)
+			}
+			if resolved.IsDir() {
+				return errors.New("symlinked directories are not supported")
+			}
+			info = resolved
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported source entry mode %s", info.Mode())
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return err
+		}
+		input, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		output, err := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		_, copyErr := io.Copy(output, input)
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+		if closeInputErr != nil {
+			return closeInputErr
+		}
+		return os.Chmod(destination, info.Mode().Perm())
+	})
 }
 
 func withoutLaunchToken(environment []string) []string {
@@ -351,6 +509,9 @@ func executePooledProbe(manifest poolProbeManifest) (poolProbeResult, error) {
 	}
 	if err := atomicPoolJSON(manifest.Result, result); err != nil {
 		return poolProbeResult{}, err
+	}
+	if !result.Success {
+		return result, fmt.Errorf("pooled replacement probe reported failure at %s", result.Stage)
 	}
 	return result, nil
 }
