@@ -1,12 +1,15 @@
 {:paths ["."]
  :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
-        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/config"}
+        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "14a8b256e7ca92cec7b756bdd1ed71dccb897d8b" :deps/root "spools/config"}
+        ct.spools/harness-core {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "harness-core"}
+        ct.spools/codex-harness {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "codex-harness"}
         ct.spools/agent-cli {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "agent-cli"}
         ct.spools/bench {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "bench"}
         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "3604419e406b3c426acd738bc2f0033cdb4edb25" :deps/root "spools/workflow"}
         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/chime"}
-        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}}
+        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}
+        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "291c11e21b3371d608b81380ae07a2578d1f49e5" :deps/root "spools/kanban"}}
  :aliases
  {:dev
   {:extra-paths ["."]
