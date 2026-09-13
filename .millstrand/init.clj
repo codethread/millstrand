@@ -22,8 +22,9 @@
 (runtime/module! runtime :millstrand/spools-unsafe-text-search
                  {:ns 'millstrand.spools.unsafe-text-search})
 
-;; Register shared identity, Workflow, Harnesses, aliases, and reviewers before
-;; repository-specific policy. Executor activation remains deliberately last.
+;; Register shared identity, Workflow, Harnesses, aliases, reviewers, Kanban,
+;; and landing before repository-specific policy. Executor activation remains
+;; deliberately last.
 (codethread/register! runtime)
 
 ;; Devflow is an ordinary workspace dependency. Its contribution is the stage
@@ -38,7 +39,9 @@
 ;; repository keeps its adapter election and workspace-specific policy local.
 (runtime/module! runtime :devflow/kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter
-                  :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
+                  :after [:millstrand/spools-devflow
+                          :millhouse/spools-kanban
+                          :millhouse/spools-workflow]
                   :required? true})
 (runtime/module! runtime :codethread/config
                  {:ns 'ct.spools.codethread.config
@@ -52,11 +55,6 @@
                  {:ns 'millhouse.spools.chime
                   :required? true})
 
-;; --- kanban board -------------------------------------------------------------
-;; Kanban is the Millhouse root that owns this workspace's board surface.
-(runtime/module! runtime :millstrand/spools-kanban
-                 {:ns 'millhouse.spools.kanban
-                  :required? true})
 ;; --- cron timer engine ------------------------------------------------------
 ;; Cron owns job publication and scheduling. :me/config selects the local NVD
 ;; scan job after this module is available.
@@ -69,7 +67,8 @@
                  {:file "me/config.clj"
                   :after [:millstrand/spools-batteries
                           :millhouse/spools-workflow
-                          :millstrand/spools-kanban
+                          :millhouse/spools-kanban
+                          :millhouse/spools-land
                           :millhouse/spools-chime
                           :millhouse/spools-cron
                           :codethread/config]
@@ -88,7 +87,9 @@
 ;; executor's initial scan can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
-                  :after [:millhouse/spools-workflow :me/config]
+                  :after [:millhouse/spools-workflow
+                          :millhouse/spools-land
+                          :me/config]
                   :required? true})
 
 ;; Activate the sole Harnesses agent executor after all shared and local

@@ -1,5 +1,5 @@
 (ns millstrand.ct.review-workflow-test
-  "Exercise the shared review and its development-workflow handoffs."
+  "Exercise Millstrand's full review and development-workflow handoffs."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
@@ -27,7 +27,7 @@
   [qualified-symbol]
   @(requiring-resolve qualified-symbol))
 
-(deftest shared-review-fans-in-resolves-and-validates-before-handoff
+(deftest millstrand-review-fans-in-resolves-and-validates-before-handoff
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :millhouse/spools-workflow
@@ -38,10 +38,10 @@
                           {:commit-range (str (str/join (repeat 40 "a")) ".."
                                               (str/join (repeat 40 "b")))
                            :files ["src/example.clj"]})
-            run-id "shared-review"
+            run-id "millstrand-review"
             advance #(workflow/complete! run-id {:by "test-agent"})]
         (workflow/start! run-id
-                         (workflow-definition 'me.workflows.review/review)
+                         (workflow-definition 'me.workflows.review/millstrand-review)
                          params)
         (advance)
         (is (= "shell" (:gate (first (workflow/ready run-id)))))
@@ -117,7 +117,7 @@
               params (assoc work :feature run-id :review-target target
                             :review-id run-id)]
           (workflow/start! run-id
-                           (workflow-definition 'me.workflows.review/review)
+                           (workflow-definition 'me.workflows.review/millstrand-review)
                            params)
           (workflow/complete! run-id {:by "test-agent"})
           (workflow/complete! run-id {:by "test-agent"})
@@ -159,7 +159,7 @@
     (fn [rt _]
       (test-support/activate-spool! rt :millhouse/spools-workflow
                                     'millhouse.spools.workflow)
-      (let [definition (requiring-resolve 'me.workflows.review/review)
+      (let [definition (requiring-resolve 'me.workflows.review/millstrand-review)
             params (assoc work :review-target "external-task")
             failure (try
                       (workflow/start! "missing-review-id" definition params)
@@ -172,11 +172,11 @@
 (deftest review-handoff-preserves-identity-and-defers-parameter-discovery
   (let [instruction (review/handoff-instruction
                      (assoc work :card "card-id" :module "example"))]
-    (is (str/includes? instruction "strand workflow show review"))
+    (is (str/includes? instruction "strand workflow show millstrand-review"))
     (is (= (assoc work :card "card-id")
            (json/read-str (last (str/split instruction #"\n\n")) :key-fn keyword)))))
 
-(deftest development-workflows-hand-off-to-shared-review
+(deftest development-workflows-hand-off-to-millstrand-review
   (doseq [[definition params]
           [[(workflow-definition 'me.workflows.story/story-fold)
             (assoc work :module "example")]
@@ -187,5 +187,5 @@
     (let [compiled (workflow/compile definition params {:run-id "review-handoff"})
           instructions (keep #(get-in % [:attributes "workflow/instruction"])
                              (:strands compiled))]
-      (is (some #(str/includes? % "--workflow review") instructions))
+      (is (some #(str/includes? % "--workflow millstrand-review") instructions))
       (is (not-any? #(str/includes? % "--workflow land") instructions)))))
