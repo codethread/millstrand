@@ -712,6 +712,43 @@
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest fresh-runtime-probe-startup-requires-candidate-only-dependency
+  (let [world (temp-world)
+        dependency-root (io/file (:config-dir world) ".." "probe-bootstrap")
+        source-root (io/file dependency-root "src")
+        source-file (io/file source-root "probe" "candidate_bootstrap.clj")
+        outer-loader (clojure.lang.DynamicClassLoader.
+                      (.getContextClassLoader (Thread/currentThread)))]
+    (io/make-parents source-file)
+    (spit source-file
+          "(ns probe.candidate-bootstrap)\n(def loaded :candidate-only)\n")
+    (spit (io/file dependency-root "deps.edn") "{:paths [\"src\"]}\n")
+    (spit (io/file (:config-dir world) "deps.edn")
+          "{:deps {probe/bootstrap {:local/root \"../probe-bootstrap\"}}}\n")
+    (spit (io/file (:config-dir world) "init.clj")
+          (str "(require '[probe.candidate-bootstrap :as bootstrap])\n"
+               "(assert (= :candidate-only bootstrap/loaded))\n"))
+    (try
+      (let [result
+            (binding [basis/*create-basis*
+                      (fn [{:keys [project extra aliases args]}]
+                        {:libs (merge (:deps project) (:deps extra)
+                                      (:extra-deps args))
+                         :classpath-roots [(.getCanonicalPath source-root)]
+                         :argmap {:aliases aliases}})]
+              (clojure.lang.Var/pushThreadBindings
+               {clojure.lang.Compiler/LOADER outer-loader})
+              (try
+                (weaver-runtime/fresh-runtime-probe!
+                 world {:old-generation-baseline
+                        {:status :admitted :projection {}}
+                        :runtime-coordinate (runtime-coordinate)})
+                (finally
+                  (clojure.lang.Var/popThreadBindings))))]
+        (is (true? (:success result)) (pr-str (:failure result))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest fresh-runtime-probe-loads-namespace-modules-from-candidate-basis
   (let [world (temp-world)
         module-root (io/file (:config-dir world) ".." "probe-module")

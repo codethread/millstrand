@@ -276,7 +276,9 @@
                          ((requiring-resolve
                            'millstrand.core.weaver.module-refresh/with-startup-file)
                           (assoc startup-file :layer layer)
-                          #(with-generation-classloader runtime (fn [] (load-file file))))))
+                          #(with-runtime-and-generation-classloader
+                             runtime
+                             (fn [] (load-file file))))))
                 (catch Throwable t
                   (throw (ex-info "Selected workspace startup file failed to load"
                                   {:config-dir (:config-dir world)
