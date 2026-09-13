@@ -37,6 +37,10 @@ if [ -z "$millhouse_url" ] || [ -z "$millhouse_sha" ] || [ -z "$millhouse_root" 
   echo "spool-suite-gate: extracted an empty Millhouse URL, SHA, or dependency root" >&2
   exit 1
 fi
+if [[ ! "$millhouse_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "spool-suite-gate: Millhouse Workflow must use a full lowercase Git SHA: $millhouse_sha" >&2
+  exit 1
+fi
 
 temp_root="$(mktemp -d)"
 trap 'rm -rf "${temp_root:?}"' EXIT
@@ -54,6 +58,16 @@ else
     git -C "$millhouse_checkout" fetch -q origin
   fi
   git -C "$millhouse_checkout" checkout -q "$millhouse_sha"
+fi
+
+materialized_sha="$(git -C "$millhouse_checkout" rev-parse --verify 'HEAD^{commit}')"
+if [ "$materialized_sha" != "$millhouse_sha" ]; then
+  echo "spool-suite-gate: materialized Millhouse $materialized_sha, expected $millhouse_sha" >&2
+  exit 1
+fi
+if ! git -C "$millhouse_checkout" diff --quiet HEAD --; then
+  echo "spool-suite-gate: materialized Millhouse checkout differs from $millhouse_sha" >&2
+  exit 1
 fi
 
 consumer_root="$millhouse_checkout/$millhouse_root"
