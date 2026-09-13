@@ -31,7 +31,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 
 ## Delegation
 
-Farm work out as tracked agent runs (`strand agent …`); never harness-native subagents (recon-only). Load `strand prime agent` first. Multiple agents are valid, especially for recon.
+Farm work out as tracked agent runs (`strand agent assign`/`run`); never harness-native subagents (recon-only). Load `strand prime agent` first. Multiple agents are valid, especially for recon.
 
 | Scenario | Seat |
 | --- | --- |
@@ -43,11 +43,11 @@ Farm work out as tracked agent runs (`strand agent …`); never harness-native s
 
 | Step | Command |
 | --- | --- |
-| Run | `strand agent delegate <task-id> [--harness …]` |
-| Await | `strand agent await <run-id>` · `strand agent await --under <root>` |
-| Review | `strand agent review <task-id> [--roster …] [--base …]` (task strand, never the kanban card) |
+| Run | `strand agent assign <agent> --task <task-id> --cwd <workdir>` |
+| Await | `strand await --query agent-run-settled --param run-id=<run-id> --min-count 1` |
+| Review | `strand agent review --cwd <workdir> [--base <ref>] [--agent NAME|--label LABEL]` |
 | Verify | Re-run Done-when in the task cwd, inspect the diff, then `strand update <task-id> --state closed` |
-| Resume | `strand agent retry <id>` (`--fresh` cold) |
+| Resume | `strand agent resume --run-id <run-id> --prompt <continuation>` |
 
 Load `strand prime agent` before delegating — run success never closes the served task.
 

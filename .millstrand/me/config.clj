@@ -1,8 +1,6 @@
 (ns me.config
   "Select this repository's workspace-owned Millstrand declarations."
-  (:require [me.agents.delegation-contracts :as delegation-contracts]
-            [me.agents.reviewers]
-            [me.jobs.nvd-scan :as nvd-scan]
+  (:require [me.jobs.nvd-scan :as nvd-scan]
             [me.notifications.attention :as attention]
             [me.policy.config :as policy]
             [me.workflows.common :as common]
@@ -44,7 +42,6 @@
 (workflow/use-workflow! fix/fix)
 (workflow/use-workflow! release/release)
 
-(lifecycle/use-resource! delegation-contracts/delegation-contracts)
 (chime/use-rule! attention/hitl-checkpoint-ready-rule)
 (chime/use-rule! attention/kanban-completed-rule)
 (chime/use-rule! attention/parked-run-rule)

@@ -3,10 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [ct.spools.delegation :as agents]
-            [me.workflows.fix :as fix]
             [me.workflows.review :as review]
-            [me.workflows.story :as story]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
@@ -15,15 +12,26 @@
 (def ^:private work
   {:feature "feature-task" :branch "feature/review" :worktree "/tmp/review-fixture"})
 
+(def ^:private successful-review
+  (str "AUTOMATIC_REVIEW_SUCCESS "
+       "{\"status\":\"success\","
+       "\"base\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+       "\"head\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
+       "\"reviewers\":[{\"name\":\"correctness\",\"run-id\":\"reviewer-1\"}],"
+       "\"verdict\":\"no-findings\"}\n\n"
+       "No findings."))
+
+(defn- workflow-definition
+  "Resolve a workspace workflow declaration without teaching clj-kondo its
+  Vars."
+  [qualified-symbol]
+  @(requiring-resolve qualified-symbol))
+
 (deftest shared-review-fans-in-resolves-and-validates-before-handoff
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :millhouse/spools-workflow
                                     'millhouse.spools.workflow)
-      (agents/defroster! :change-review
-        {:seats [{:name "correctness" :harness :luna-low :brief "Review behavior."}
-                 {:name "docs" :harness :terra-med :brief "Review the documented contract."}]
-         :synthesis {:harness :sol-med}})
       (let [task (:id (weaver/add! rt {:title "Review task" :attributes {:kind "task"}}))
             params (assoc work :review-target task :review-id "review-pass"
                           :change-context
@@ -32,20 +40,57 @@
                            :files ["src/example.clj"]})
             run-id "shared-review"
             advance #(workflow/complete! run-id {:by "test-agent"})]
-        (workflow/start! run-id #'review/review params)
+        (workflow/start! run-id
+                         (workflow-definition 'me.workflows.review/review)
+                         params)
         (advance)
         (is (= "shell" (:gate (first (workflow/ready run-id)))))
         (advance)
-        (let [[first-seat second-seat :as seats] (workflow/ready run-id)]
-          (is (= 2 (count seats)))
-          (is (every? #(= "subagent" (:gate %)) seats))
-          (workflow/complete! run-id {:step (:id first-seat) :by "test-agent"})
-          (is (= [(:id second-seat)] (mapv :id (workflow/ready run-id))))
-          (advance))
-        (is (= "Synthesize the change review findings"
-               (:title (first (workflow/ready run-id)))))
+        (let [review-gate (first (workflow/ready run-id))
+              gate-strand (weaver/show rt (:id review-gate))
+              prompt (attr-get gate-strand :harness/prompt)]
+          (is (= "agent" (:gate review-gate)))
+          (is (= "Run and synthesize the frozen Harnesses review"
+                 (:title review-gate)))
+          (is (= "coordinator" (attr-get gate-strand :harness/alias)))
+          (is (= (:worktree work) (attr-get gate-strand :harness/cwd)))
+          (is (str/includes? prompt "review_head=$(git rev-parse"))
+          (is (str/includes? prompt "--base \"$review_base\""))
+          (is (str/includes? prompt "--branch \"$review_head\""))
+          (is (str/includes? prompt "agent-run-settled"))
+          (is (str/includes? prompt "status=stopped"))
+          (is (str/includes? prompt "substatus=completed"))
+          (is (str/includes? prompt "settled=true"))
+          (is (str/includes? prompt "non-blank"))
+          (is (str/includes? prompt "--timeout 60s"))
+          (is (str/includes? prompt "--timeout-secs 40"))
+          (is (not (str/includes? prompt "agent stop")))
+          (is (str/includes? prompt "AUTOMATIC_REVIEW_FAILURE"))
+          (is (str/includes? prompt "new unique `review-id`"))
+          (is (str/includes? prompt "AUTOMATIC_REVIEW_SUCCESS"))
+          (is (every? #(str/includes?
+                        % "--workspace \"$MILLSTRAND_WORKSPACE\"")
+                      (re-seq #"(?m)^\s*strand .+$" prompt)))
+          (is (= [(:id review-gate)]
+                 (mapv :id (workflow/ready run-id)))))
+        (workflow/complete! run-id
+                            {:by "coordinator-run"
+                             :attributes {"harness/result" successful-review}})
+        (let [verification-gate (first (workflow/ready run-id))
+              gate-strand (weaver/show rt (:id verification-gate))]
+          (is (= "Verify automatic review completion evidence"
+                 (:title verification-gate)))
+          (is (= "code" (:gate verification-gate)))
+          (is (= "me.workflows.review/verify-automatic-review!"
+                 (attr-get gate-strand :code/fn)))
+          (is (= "verified"
+                 (get ((requiring-resolve
+                        'me.workflows.review/verify-automatic-review!)
+                       (attr-get gate-strand :code/params))
+                      "status"))))
         (advance)
-        (is (= "Resolve the review findings" (:title (first (workflow/ready run-id)))))
+        (is (= "Resolve the review findings"
+               (:title (first (workflow/ready run-id)))))
         (advance)
         (is (= "Validate the reviewed branch HEAD" (:title (first (workflow/ready run-id)))))
         (advance)
@@ -59,6 +104,71 @@
         (is (workflow/done? run-id))
         (is (empty? (weaver/list rt [:= [:attr "kind"] "merge-queue-entry"] {})))))))
 
+(deftest automatic-review-verification-blocks-failure-and-accepts-positive-evidence
+  (doseq [[run-id result expected]
+          [["failed-review" "Automatic review did not complete successfully." :blocked]
+           ["successful-review" successful-review :passed]]]
+    (with-runtime
+      (fn [rt _]
+        (test-support/activate-spool! rt :millhouse/spools-workflow
+                                      'millhouse.spools.workflow)
+        (let [target (:id (weaver/add! rt {:title run-id
+                                           :attributes {:kind "task"}}))
+              params (assoc work :feature run-id :review-target target
+                            :review-id run-id)]
+          (workflow/start! run-id
+                           (workflow-definition 'me.workflows.review/review)
+                           params)
+          (workflow/complete! run-id {:by "test-agent"})
+          (workflow/complete! run-id {:by "test-agent"})
+          (workflow/complete! run-id
+                              {:by "coordinator-run"
+                               :attributes {"harness/result" result}})
+          (let [verification-gate (first (workflow/ready run-id))]
+            (test-support/activate-spool!
+             rt :millhouse/spools-workflow-providers 'millhouse.spools.workflow.spool
+             :after [:millhouse/spools-workflow])
+            (case expected
+              :blocked
+              (let [failed-gate
+                    (test-support/poll-until
+                     #(let [gate (weaver/show rt (:id verification-gate))]
+                        (when (attr-get gate :gate/error) gate))
+                     {:timeout-ms (test-support/await-budget-ms)
+                      :on-timeout #(throw
+                                    (ex-info "Verification did not fail"
+                                             {:gate (weaver/show
+                                                     rt (:id verification-gate))
+                                              :ready (workflow/ready run-id)}))})]
+                (is (str/includes? (attr-get failed-gate :gate/error)
+                                   "missing its success sentinel"))
+                (is (= [(:id verification-gate)]
+                       (mapv :id (workflow/ready run-id)))))
+
+              :passed
+              (is (= "Resolve the review findings"
+                     (:title
+                      (test-support/poll-until
+                       #(let [step (first (workflow/ready run-id))]
+                          (when (= "Resolve the review findings" (:title step)) step))
+                       {:timeout-ms (test-support/await-budget-ms)
+                        :on-timeout #(throw (ex-info "Verification did not pass" {}))})))))))))))
+
+(deftest review-requires-a-non-blank-review-id
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/spools-workflow
+                                    'millhouse.spools.workflow)
+      (let [definition (requiring-resolve 'me.workflows.review/review)
+            params (assoc work :review-target "external-task")
+            failure (try
+                      (workflow/start! "missing-review-id" definition params)
+                      nil
+                      (catch clojure.lang.ExceptionInfo exception
+                        exception))]
+        (is (= :workflow/params-invalid (:reason (ex-data failure))))
+        (is (str/includes? (:explain (ex-data failure)) ":review-id"))))))
+
 (deftest review-handoff-preserves-identity-and-defers-parameter-discovery
   (let [instruction (review/handoff-instruction
                      (assoc work :card "card-id" :module "example"))]
@@ -68,9 +178,12 @@
 
 (deftest development-workflows-hand-off-to-shared-review
   (doseq [[definition params]
-          [[story/story-fold (assoc work :module "example")]
-           [story/story-keep (assoc work :module "example")]
-           [fix/fix (assoc work :subject "Fix the behavior" :card "card-id")]]]
+          [[(workflow-definition 'me.workflows.story/story-fold)
+            (assoc work :module "example")]
+           [(workflow-definition 'me.workflows.story/story-keep)
+            (assoc work :module "example")]
+           [(workflow-definition 'me.workflows.fix/fix)
+            (assoc work :subject "Fix the behavior" :card "card-id")]]]
     (let [compiled (workflow/compile definition params {:run-id "review-handoff"})
           instructions (keep #(get-in % [:attributes "workflow/instruction"])
                              (:strands compiled))]

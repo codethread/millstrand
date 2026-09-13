@@ -138,13 +138,13 @@
                       |conversion records that there are none and completes.")))
    (workflow/gate :intent-review
                   (fn [{:keys [feature]}] (str "Adversarial intent review for " feature))
-                  :subagent
+                  :agent
                   :depends-on [:overall-changes]
                   :attributes {"workflow/action-ref" "story.intent-review"
-                               "agent-run/harness" (fn [{:keys [reviewer-harness]}]
-                                                     reviewer-harness)
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "agent-run/prompt"
+                               "harness/alias" (fn [{:keys [reviewer-harness]}]
+                                                 reviewer-harness)
+                               "harness/cwd" (fn [{:keys [worktree]}] worktree)
+                               "harness/prompt"
                                (fn [{:keys [feature module]}]
                                  (str "Adversarial intent review for " feature ". "
                                       (format-alpha/reflow
@@ -213,13 +213,13 @@
                       |run green before completing.")))
    (workflow/gate :split-review
                   (fn [{:keys [module]}] (str "Swift adversarial review of the " module " split"))
-                  :subagent
+                  :agent
                   :depends-on [:public-tests]
                   :attributes {"workflow/action-ref" "story.split-review"
-                               "agent-run/harness" (fn [{:keys [reviewer-harness]}]
-                                                     reviewer-harness)
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "agent-run/prompt"
+                               "harness/alias" (fn [{:keys [reviewer-harness]}]
+                                                 reviewer-harness)
+                               "harness/cwd" (fn [{:keys [worktree]}] worktree)
+                               "harness/prompt"
                                (fn [{:keys [module]}]
                                  (str "Adversarial review of the fresh per-concern split"
                                       " of module `" module "` "

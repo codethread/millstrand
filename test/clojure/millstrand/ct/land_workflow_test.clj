@@ -1,7 +1,6 @@
 (ns millstrand.ct.land-workflow-test
   "Exercise ordinary landing transitions and card actions in disposable runtimes."
   (:require [clojure.test :refer [deftest is]]
-            [me.workflows.land :as land]
             [me.workflows.card-actions :as card-actions]
             [millhouse.spools.kanban :as kanban]
             [millhouse.spools.workflow :as workflow]
@@ -47,7 +46,9 @@
 
 (defn- start-land!
   [run-id params]
-  (workflow/start! run-id #'land/land params))
+  (workflow/start! run-id
+                   @(requiring-resolve 'me.workflows.land/land)
+                   params))
 
 (defn- complete-ready!
   [run-id]
@@ -167,7 +168,7 @@
   (first (filter #(= id (:id %)) (:steps definition))))
 
 (deftest merge-graph-releases-before-housekeeping-and-has-one-quality-path
-  (let [definition land/land-merge
+  (let [definition @(requiring-resolve 'me.workflows.land/land-merge)
         ids (mapv :id (:steps definition))]
     (is (= [:take-turn :prepare-merge :merge-pr :pull-main :release-turn
             :remove-branch-worktree :tidy-resources :finish-card]
