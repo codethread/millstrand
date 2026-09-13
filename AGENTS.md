@@ -24,6 +24,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 ## Rules
 
 Never stop the mill; only the user may stop it.
+
 - **Never restart a running weaver** without explicit user sign-off. Pickup ladder: `make build` (Go CLI); `runtime/refresh!` (config/startup/module source); targeted `(require 'ns :reload)` only for already-loaded base-classpath namespaces; `runtime/reload-code!` for code-only synced roots. Recipes: `docs/spools/customisation.md`.
 - **Kill by PID only** — never `pkill -f <pattern>` (prompts can quote the pattern and strafe siblings).
 - **Disposable workspaces for workspace-backed tests** (weaver-world fixtures, smoke config) — never the shared `.millstrand` world. Use `--workspace` from `mktemp -d`; guard with `${ws:?}`. Ordinary suite runs: see the `testing` skill.
