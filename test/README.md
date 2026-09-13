@@ -36,7 +36,7 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Restart process acceptance | `make test-restart-acceptance` | Builds repository-local `mill` and `strand`, then runs the tagged `TestDisposableWeaverRestartAcceptance` against disposable Mill and Weaver processes. This is a mandatory `make land-quality` check, separate from the bounded Go suite. |
 | Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, which invokes `make build`, copies the built `bin/mill` and `bin/strand` entrypoints into its disposable fixture, and covers public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
 | Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned Millhouse source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
-| External Workflow consumer | `make spool-suite-gate` | Runs the pinned Millhouse Workflow, Workflow CLI, and workflow-run CLI tests against this checkout. This opt-in check is not part of `make land-quality`. |
+| External Workflow consumer | `make spool-suite-gate` | Checks clean, immutable suite materialization, then runs the pinned Millhouse Workflow, Workflow CLI, and workflow-run CLI tests against this checkout. This opt-in check is not part of `make land-quality`. |
 
 The focused cold runner accepts only registered serial or parallel namespaces and rejects unknown names. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
 

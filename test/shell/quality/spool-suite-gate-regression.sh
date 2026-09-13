@@ -79,7 +79,7 @@ if run_gate not-a-sha "$invalid_output"; then
   echo "spool-suite-gate regression: malformed SHA was accepted" >&2
   exit 1
 fi
-grep -Fq "must use a full lowercase Git SHA: not-a-sha" "$invalid_output"
+grep -Fq "must use a full 40-hex Git SHA: not-a-sha" "$invalid_output"
 
 wrong_output="$temp_root/wrong-head.out"
 if run_gate "$wrong_sha" "$wrong_output"; then
@@ -89,7 +89,8 @@ fi
 grep -Fq "cached Millhouse $fixture_sha, expected $wrong_sha" "$wrong_output"
 
 valid_output="$temp_root/valid.out"
-run_gate "$fixture_sha" "$valid_output"
+uppercase_sha="$(printf '%s' "$fixture_sha" | tr '[:lower:]' '[:upper:]')"
+run_gate "$uppercase_sha" "$valid_output"
 grep -Fq "spool-suite-gate: OK (Millhouse Workflow@$fixture_sha)" "$valid_output"
 
 echo "spool-suite-gate regression: immutable clean materialization verified"

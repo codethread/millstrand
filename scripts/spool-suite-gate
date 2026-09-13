@@ -37,10 +37,11 @@ if [ -z "$millhouse_url" ] || [ -z "$millhouse_sha" ] || [ -z "$millhouse_root" 
   echo "spool-suite-gate: extracted an empty Millhouse URL, SHA, or dependency root" >&2
   exit 1
 fi
-if [[ ! "$millhouse_sha" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "spool-suite-gate: Millhouse Workflow must use a full lowercase Git SHA: $millhouse_sha" >&2
+if [[ ! "$millhouse_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "spool-suite-gate: Millhouse Workflow must use a full 40-hex Git SHA: $millhouse_sha" >&2
   exit 1
 fi
+millhouse_sha="$(printf '%s' "$millhouse_sha" | tr '[:upper:]' '[:lower:]')"
 
 temp_root="$(mktemp -d)"
 trap 'rm -rf "${temp_root:?}"' EXIT
