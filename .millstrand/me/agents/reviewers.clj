@@ -29,7 +29,7 @@
   "Check changed tests for sleeps and arbitrary timing waits."
   {:seat ['luna 'reviewer]
    :labels ["PR" "Tests" "Concurrency"]
-   :glob ["test/**"
+   :glob ["test/clojure/**"
           "cli/*_test.go"
           "cli/**/*_test.go"
           "tools/*_test.go"

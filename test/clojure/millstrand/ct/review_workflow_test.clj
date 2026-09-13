@@ -70,16 +70,17 @@
        "@@ -1 +1 @@\n-old\n+new\n"))
 
 (def ^:private renamed-test-patch
-  (str "diff --git a/test/old_test.clj b/src/new.clj\n"
+  (str "diff --git a/test/clojure/old_test.clj b/src/new.clj\n"
        "similarity index 100%\n"
-       "rename from test/old_test.clj\n"
+       "rename from test/clojure/old_test.clj\n"
        "rename to src/new.clj\n"))
 
 (def ^:private removed-test-patch
-  (str "diff --git a/test/removed_test.clj b/test/removed_test.clj\n"
+  (str "diff --git a/test/clojure/removed_test.clj "
+       "b/test/clojure/removed_test.clj\n"
        "deleted file mode 100644\n"
        "index 3367afd..0000000\n"
-       "--- a/test/removed_test.clj\n"
+       "--- a/test/clojure/removed_test.clj\n"
        "+++ /dev/null\n"
        "@@ -1 +0,0 @@\n-old\n"))
 
@@ -275,6 +276,13 @@
                                                ".millstrand/init.clj"))
           go-test-change (start-review! ctx (modified-patch
                                              "cli/integration_test.go"))
+          non-clojure-test-change
+          (start-review!
+           ctx
+           (apply str (map modified-patch
+                           ["test/README.md"
+                            "test/fixtures/clojure/example.clj"
+                            "test/shell/example.sh"])))
           no-selection (start-review! ctx (modified-patch "Makefile"))
           renamed (start-review! ctx renamed-test-patch)
           removed (start-review! ctx removed-test-patch)
@@ -297,7 +305,7 @@
         (is (= ["docs-and-tests" "runtime-correctness" "source-form"
                 "test-sleeps" "workspace-runtime-policy"]
                (mapv :name catalog)))
-        (is (= ["test/**" "cli/*_test.go" "cli/**/*_test.go"
+        (is (= ["test/clojure/**" "cli/*_test.go" "cli/**/*_test.go"
                 "tools/*_test.go" "tools/**/*_test.go"
                 "spools/*/test/**"]
                (:glob (some #(when (= "test-sleeps" (:name %)) %)
@@ -309,6 +317,12 @@
                (mapv :reviewer (:runs workspace-change))))
         (is (= ["test-sleeps"]
                (mapv :reviewer (:runs go-test-change))))
+        (is (not-any? #{"test-sleeps"}
+                      (mapv :reviewer (:runs non-clojure-test-change))))
+        (is (some #(= {:reviewer "test-sleeps"
+                       :reason "glob-mismatch"}
+                      %)
+                  (:skips non-clojure-test-change)))
         (is (= "no-matching-reviewers" (:reason no-selection)))
         (is (empty? (:runs no-selection)))
         (is (every? #(= "glob-mismatch" (:reason %))
