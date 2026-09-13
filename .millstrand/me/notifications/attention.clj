@@ -3,9 +3,7 @@
 
   Developers bind how they are notified in gitignored init.local.clj with
   (chime/set-notifier! {:argv [...]})."
-  (:require [millstrand.api.current.alpha :as current]
-            [millstrand.api.runtime.alpha :as runtime]
-            [millhouse.spools.chime :refer [defrule]]))
+  (:require [millhouse.spools.chime :refer [defrule]]))
 
 (defn- config-attr
   "Read strand attribute k, tolerating keyword- or string-keyed maps."
@@ -40,44 +38,24 @@
 (def ^:private sqlite-timestamp-formatter
   (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
 
-(def ^:private timestamp-state-version 1)
-(def ^:private timestamp-failure-memory 100)
-
-(defn- new-timestamp-state []
-  {:logged-ts-parse-failures (atom [])})
-
-(defn- logged-ts-parse-failures []
-  (:logged-ts-parse-failures
-   (runtime/spool-state (current/runtime) ::timestamp-state
-                        {:version timestamp-state-version}
-                        new-timestamp-state)))
-
 (defn- strand-age-ms
-  "Milliseconds since a strand's last mutation, parsing SQLite's UTC
-  `yyyy-MM-dd HH:mm:ss` updated_at. Returns nil when absent or unparseable.
+  "Return milliseconds since a strand's last mutation.
 
-  A parse failure would silently disable the parked-run detector for that strand
-  (its whole point is catching silent failures), so an unparseable timestamp is
-  warned to stderr once per distinct value rather than swallowed — a timestamp
-  format drift surfaces instead of defeating the detector unnoticed."
+  Parse SQLite's UTC `yyyy-MM-dd HH:mm:ss` updated_at at this boundary. Return
+  nil when the value is absent; throw with strand and raw timestamp context when
+  it is malformed."
   [strand]
-  (when-let [ts (:updated_at strand)]
+  (when-let [timestamp (:updated_at strand)]
     (try
       (- (System/currentTimeMillis)
-         (-> (java.time.LocalDateTime/parse ts sqlite-timestamp-formatter)
+         (-> (java.time.LocalDateTime/parse timestamp sqlite-timestamp-formatter)
              (.toInstant java.time.ZoneOffset/UTC)
              (.toEpochMilli)))
-      (catch java.time.format.DateTimeParseException e
-        (when-not (some #(= ts %) @(logged-ts-parse-failures))
-          (swap! (logged-ts-parse-failures)
-                 #(vec (take-last timestamp-failure-memory (conj % ts))))
-          (binding [*out* *err*]
-            (println (str "[attention] WARN parked-run detector could not parse strand updated_at;"
-                          " expected UTC format yyyy-MM-dd HH:mm:ss; check the weaver's"
-                          " updated_at source and reload after correcting it "
-                          (pr-str {:strand (:id strand) :updated_at ts
-                                   :exception/message (ex-message e)})))))
-        nil))))
+      (catch java.time.format.DateTimeParseException cause
+        (throw (ex-info "Parked-run detector could not parse strand updated_at"
+                        {:strand (:id strand)
+                         :updated_at timestamp}
+                        cause))))))
 
 (defrule parked-run
   "Notify when a ready pending Harnesses run has sat unclaimed past the threshold.

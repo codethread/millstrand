@@ -18,6 +18,7 @@
    'millstrand.api.registry.alpha-test
    'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test
    'millstrand.examples-test
+   'millstrand.ct.attention-test
    'millstrand.ct.release-workflow-test
    'millstrand.ct.review-workflow-test
    'millstrand.cutover.vocab-reset-test
