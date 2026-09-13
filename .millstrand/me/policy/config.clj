@@ -2,9 +2,9 @@
   "Named queries for the repository workspace.
 
   Thin glue only: `ct.spools.devflow` owns the feature lifecycle,
-  `millhouse.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
-  `strand agent` surface plus the `agent-plan` pattern (all activated from
-  init.clj). This file registers named queries. Sibling init.clj modules hold
+  `millhouse.spools.workflow` is its generic CLI, Harnesses owns the
+  `strand agent` surface and tracked-run queries (activated from init.clj).
+  This file registers named queries. Sibling init.clj modules hold
   the rest of the repo policy: hand-authored modules under me/workflows/,
   reviewer rosters in me/agents/reviewers.clj, chime attention rules
   in me/notifications/attention.clj, and the NVD scan cron job in
@@ -58,8 +58,8 @@
   {:usage "strand ready --query work"}
   [:and
    [:= :state "active"]
-   [:or [:missing [:attr "agent-run/run"]]
-    [:not [:= [:attr "agent-run/run"] "true"]]]
+   [:or [:missing [:attr "harness/run"]]
+    [:not [:= [:attr "harness/run"] "true"]]]
    [:or [:missing [:attr "kanban/lane"]]
     [:not [:= [:attr "kanban/lane"] "refinement"]]]
    [:or

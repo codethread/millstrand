@@ -35,18 +35,17 @@
       :edges [{:type "depends-on" :to 'start}]}]))
 
 ;; ---------------------------------------------------------------------------
-;; delegate-pipeline weave pattern
+;; tracked-agent pipeline weave pattern
 ;; ---------------------------------------------------------------------------
 
 (s/def ::body ::non-blank-string)
 (s/def ::harness ::non-blank-string)
 (s/def ::cwd ::non-blank-string)
-(s/def ::max-attempts pos-int?)
 (s/def ::id ::non-blank-string)
 (s/def ::run_id ::non-blank-string)
 (s/def ::accept boolean?)
 (s/def ::pipeline-task (s/keys :req-un [::id ::title]
-                               :opt-un [::body ::harness ::cwd ::max-attempts]))
+                               :opt-un [::body ::harness ::cwd]))
 (s/def ::pipeline-tasks (s/coll-of ::pipeline-task :kind vector? :min-count 1))
 (s/def ::tasks ::pipeline-tasks)
 (s/def ::delegate-pipeline-input
@@ -67,11 +66,11 @@
   (or (get task k) (get task (name k))))
 
 (defn- pipeline-task-prompt
-  "Return the prompt for one delegate-pipeline task.
+  "Return the prompt for one tracked-agent pipeline task.
 
   Carries no worker-contract text: a gate's run serves its gate strand, so the
-  agent-run preamble already delivers the worker contract and prepending it
-  here would inject it twice."
+  Harnesses' agent executor already delivers the worker contract and prepending
+  it here would inject it twice."
   [run-id item]
   (str "Delegated pipeline run: " run-id "\n"
        "Task: " (task-value item :title) "\n\n"
@@ -94,8 +93,8 @@
           strands)))
 
 (millstrand/defpattern delegate-pipeline
-  "Create a sequential chain-loop workflow of subagent gates. Input:
-  {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
+  "Create a sequential chain-loop workflow of tracked-agent gates. Input:
+  {run_id,tasks:[{id,title,body?,harness?,cwd?}],harness?,cwd?,accept?}."
   {:spec ::delegate-pipeline-input}
   [{:keys [input]}]
   (let [{:keys [run_id tasks harness cwd accept]} input
@@ -103,16 +102,14 @@
                    :task
                    (fn [{:keys [item]}]
                      (str "Delegate pipeline task " (task-value item :id)))
-                   :subagent
+                   :agent
                    :loop {:each :tasks :chain true}
-                   :attributes {"agent-run/harness" (fn [{:keys [item harness]}]
-                                                      (or (task-value item :harness) harness))
-                                "agent-run/prompt" (fn [{:keys [run-id item]}]
-                                                     (pipeline-task-prompt run-id item))
-                                "agent-run/cwd" (fn [{:keys [item cwd]}]
-                                                  (or (task-value item :cwd) cwd))
-                                "agent-run/max-attempts" (fn [{:keys [item]}]
-                                                           (task-value item :max-attempts))
+                   :attributes {"harness/alias" (fn [{:keys [item harness]}]
+                                                  (or (task-value item :harness) harness))
+                                "harness/prompt" (fn [{:keys [run-id item]}]
+                                                   (pipeline-task-prompt run-id item))
+                                "harness/cwd" (fn [{:keys [item cwd]}]
+                                                (or (task-value item :cwd) cwd))
                                 "delegate-pipeline/task" (fn [{:keys [item]}]
                                                            (task-value item :id))})
         accept-checkpoint (workflow/checkpoint

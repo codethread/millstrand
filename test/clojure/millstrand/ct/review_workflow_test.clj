@@ -3,7 +3,6 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [ct.spools.delegation :as agents]
             [me.workflows.fix :as fix]
             [me.workflows.review :as review]
             [me.workflows.story :as story]
@@ -20,10 +19,6 @@
     (fn [rt _]
       (test-support/activate-spool! rt :millhouse/spools-workflow
                                     'millhouse.spools.workflow)
-      (agents/defroster! :change-review
-        {:seats [{:name "correctness" :harness :luna-low :brief "Review behavior."}
-                 {:name "docs" :harness :terra-med :brief "Review the documented contract."}]
-         :synthesis {:harness :sol-med}})
       (let [task (:id (weaver/add! rt {:title "Review task" :attributes {:kind "task"}}))
             params (assoc work :review-target task :review-id "review-pass"
                           :change-context
@@ -36,16 +31,14 @@
         (advance)
         (is (= "shell" (:gate (first (workflow/ready run-id)))))
         (advance)
-        (let [[first-seat second-seat :as seats] (workflow/ready run-id)]
-          (is (= 2 (count seats)))
-          (is (every? #(= "subagent" (:gate %)) seats))
-          (workflow/complete! run-id {:step (:id first-seat) :by "test-agent"})
-          (is (= [(:id second-seat)] (mapv :id (workflow/ready run-id))))
-          (advance))
-        (is (= "Synthesize the change review findings"
+        (is (= "Start the tracked Harnesses review"
                (:title (first (workflow/ready run-id)))))
         (advance)
-        (is (= "Resolve the review findings" (:title (first (workflow/ready run-id)))))
+        (is (= "Await and synthesize review findings"
+               (:title (first (workflow/ready run-id)))))
+        (advance)
+        (is (= "Resolve the review findings"
+               (:title (first (workflow/ready run-id)))))
         (advance)
         (is (= "Validate the reviewed branch HEAD" (:title (first (workflow/ready run-id)))))
         (advance)

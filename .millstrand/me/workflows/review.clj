@@ -1,11 +1,7 @@
 (ns me.workflows.review
   "The repository's shared final code review, before landing."
   (:require [clojure.spec.alpha :as s]
-            [ct.spools.delegation :as agents]
-            [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
-            [millstrand.api.spool.alpha :refer [attr-get fail!]]
-            [millstrand.api.weaver.alpha :as weaver]
             [millhouse.spools.workflow :as workflow]
             [me.workflows.support :as support]))
 
@@ -21,13 +17,11 @@
          #(boolean (re-matches #"(?i)[0-9a-f]{40}\.\.[0-9a-f]{40}" %))))
 (s/def ::files (s/coll-of ::non-blank-string :kind vector? :min-count 1))
 (s/def ::change-context
-  (s/and :ct.spools.delegation/change-context
-         #(s/valid? ::commit-range (:commit-range %))
-         #(s/valid? ::files (:files %))))
+  (s/keys :req-un [::commit-range ::files]))
 (s/def ::review-params
   (s/keys :req-un [::feature ::branch ::worktree
-                   ::review-target ::review-id ::change-context]
-          :opt-un [::card]))
+                   ::review-target]
+          :opt-un [::card ::review-id ::change-context]))
 
 (defn handoff-instruction
   "Describe the repository review handoff with the caller's known work identity."
@@ -44,40 +38,6 @@
      {identity:json}
    " {:identity (select-keys params [:feature :branch :worktree :card])}))
 
-(defn- review-specs
-  "Build and validate the gate-ready change-review specs for one review run."
-  [{:keys [review-target review-id change-context]}]
-  (let [target (weaver/show (current/runtime) review-target)]
-    (when (= "true" (attr-get target :kanban/card))
-      (fail! "Change review targets a task strand, never a kanban card"
-             {:review-target review-target :kanban/card "true"}))
-    (when-not (or (= "true" (attr-get target :kanban/task))
-                  (= "task" (attr-get target :kind)))
-      (fail! "Change review target must be a task strand"
-             {:review-target review-target
-              :kanban/task (attr-get target :kanban/task)
-              :kind (attr-get target :kind)}))
-    (agents/roster-review-specs
-     :change-review
-     {:target review-target
-      :review-id review-id
-      :change-context change-context})))
-
-(defn- reviewer-specs
-  "Return loop items for the change review fan-out."
-  [params]
-  (mapv #(assoc % :id (:name %)) (:reviewers (review-specs params))))
-
-(defn- synthesis-specs
-  "Return the single synthesis item as a loop collection."
-  [params]
-  [(assoc (:synthesizer (review-specs params)) :id :synthesis)])
-
-(defn- item-attr
-  "Read a string-keyed roster attribute from a loop item."
-  [item key]
-  (get (:attrs item) key))
-
 (workflow/defworkflow review
   "Review and validate implemented work without authorizing a merge."
   {:entrypoints #{:start}
@@ -87,9 +47,9 @@
                 :branch "Branch containing the committed change."
                 :worktree "Absolute path to the branch's worktree."
                 :card "Optional kanban card to move into review."
-                :review-target "Task strand receiving findings; never a kanban card."
-                :review-id "Unique identifier for this review pass."
-                :change-context "Current merge-base-to-HEAD range (full SHAs) and changed files."}}
+                :review-target "Task strand receiving the review handoff."
+                :review-id "Optional identifier for this review pass."
+                :change-context "Optional captured range and changed files."}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Review: " branch))
    {:attributes {"workflow/family" "review"}}
@@ -100,43 +60,44 @@
                          (support/sh-gate support/land-quality-gate-script "review-quality" branch))
                        5400
                        "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
-   (workflow/gate :reviewer
-                  (fn [{:keys [item]}] (str "Review change: " (:name item)))
-                  :subagent
+   (workflow/step :start-review "Start the tracked Harnesses review" :self
                   :depends-on [:ci-green]
-                  :loop {:each reviewer-specs}
-                  :attributes {"agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
-                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "panel/blackboard" (fn [{:keys [item]}]
-                                                    (item-attr item "panel/blackboard"))
-                               "review/roster" (fn [{:keys [item]}]
-                                                 (item-attr item "review/roster"))
-                               "panel/pass" (fn [{:keys [item]}]
-                                              (item-attr item "panel/pass"))
-                               "review/focus" (fn [{:keys [item]}]
-                                                (item-attr item "review/focus"))}
-                  "Await this reviewer's findings on the review task.")
-   (workflow/gate :review-synthesis
-                  "Synthesize the change review findings"
-                  :subagent
-                  :depends-on [:reviewer]
-                  :loop {:each synthesis-specs}
-                  :attributes {"agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
-                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
-                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
-                               "panel/blackboard" (fn [{:keys [item]}]
-                                                    (item-attr item "panel/blackboard"))
-                               "review/roster" (fn [{:keys [item]}]
-                                                 (item-attr item "review/roster"))
-                               "panel/pass" (fn [{:keys [item]}]
-                                              (item-attr item "panel/pass"))
-                               "panel/synthesis" (fn [{:keys [item]}]
-                                                   (item-attr item "panel/synthesis"))}
-                  "Await the synthesis of this pass's reviewer findings.")
+                  (fn [{:keys [branch worktree review-target review-id]}]
+                    (format-alpha/prose
+                     "
+                       Start the repository review from the pushed branch. Harnesses
+                       captures the diff and fans out the selected repository lenses:
+
+                       ```text
+                       strand agent review --cwd {worktree} --branch {branch} --label PR
+                       ```
+
+                       Use `--agent NAME` to narrow the pass when needed. Keep the
+                       returned run ids, and associate this pass with task
+                       `{review-target}`{suffix}.
+                     " {:worktree worktree
+                        :branch branch
+                        :review-target review-target
+                        :suffix (if review-id (str " (" review-id ")") ".")})))
+   (workflow/step :review-findings "Await and synthesize review findings" :self
+                  :depends-on [:start-review]
+                  (format-alpha/prose
+                   "
+                     Await every returned run with the positive-evidence query:
+
+                     ```text
+                     strand await --query agent-run-settled --param run-id=RUN_ID --min-count 1
+                     strand agent show RUN_ID
+                     ```
+
+                     Record the combined P1/P2 verdict and each resolution on the
+                     review task before completing this step. Follow up with a
+                     focused `strand agent review --agent NAME` pass for material
+                     repairs.
+                   " {}))
 
    (workflow/step :resolve-review "Resolve the review findings" :self
-                  :depends-on [:review-synthesis]
+                  :depends-on [:review-findings]
                   (format-alpha/prose
                    "
                      Resolve the synthesis findings and commit and push repairs.

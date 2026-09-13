@@ -5,8 +5,7 @@
   (chime/set-notifier! {:argv [...]})."
   (:require [millstrand.api.current.alpha :as current]
             [millstrand.api.runtime.alpha :as runtime]
-            [millhouse.spools.chime :refer [defrule]]
-            [ct.spools.agent-run :as shuttle]))
+            [millhouse.spools.chime :refer [defrule]]))
 
 (defn- config-attr
   "Read strand attribute k, tolerating keyword- or string-keyed maps."
@@ -81,22 +80,21 @@
         nil))))
 
 (defrule parked-run
-  "Notify when a ready pending agent run has sat unclaimed past the threshold.
+  "Notify when a ready pending Harnesses run has sat unclaimed past the threshold.
 
-  This is the silent-parking detector: the morning incident left runs ready and
-  pending forever because scan! launched them onto a nil executor. A run that is
-  ready (blockers cleared), still `pending`, not tracked in-flight, and older
-  than the threshold is one the launch path should have spawned but did not."
+  This is the silent-parking detector: a run that is ready (blockers cleared),
+  still pending, and older than the threshold is one the launch path should
+  have scheduled but did not."
   [{:keys [strand ready-ids]}]
   (when (and (= "active" (:state strand))
-             (= "true" (config-attr strand :agent-run/run))
-             (= "pending" (config-attr strand :agent-run/phase))
+             (= "true" (config-attr strand :harness/run))
+             (= "ready" (config-attr strand :harness/status))
+             (= "pending" (config-attr strand :harness/substatus))
              (contains? ready-ids (:id strand))
-             (not (contains? (shuttle/in-flight-run-ids) (:id strand)))
              (when-let [age (strand-age-ms strand)]
                (>= age parked-run-threshold-ms)))
-    {:title (str "Agent run parked: " (:title strand))
-     :body (str "Agent run " (:id strand) " has been ready and pending for over "
-                (quot parked-run-threshold-ms 60000) " minutes with no in-flight claim."
-                " This is the silent-parking signature — verify the weaver's agent-run"
+    {:title (str "Harness run parked: " (:title strand))
+     :body (str "Harness run " (:id strand) " has been ready and pending for over "
+                (quot parked-run-threshold-ms 60000) " minutes without a scheduler transition."
+                " This is the silent-parking signature — verify the weaver's Harnesses"
                 " executors are healthy and the run was not dropped by a reload.")}))

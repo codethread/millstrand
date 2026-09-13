@@ -38,57 +38,22 @@
 (runtime/module! runtime :millhouse/spools-identity
                  {:ns 'millhouse.spools.identity
                   :required? true})
-(runtime/module! runtime :millstrand/spools-shuttle
-                 {:ns 'ct.spools.agent-run
+(runtime/module! runtime :harnesses
+                 {:ns 'ct.spools.harnesses.spool
                   :after [:millhouse/spools-identity]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-harness-core
-                 {:ns 'ct.spools.harness-core
-                  :after [:millhouse/spools-identity]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-codex-harness
-                 {:ns 'ct.spools.codex-harness
-                  :after [:millstrand/spools-harness-core]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-agent-cli
-                 {:ns 'ct.spools.agent-cli
-                  :after [:millstrand/spools-harness-core :millstrand/spools-codex-harness]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-delegation
-                 {:ns 'ct.spools.delegation
-                  :after [:millstrand/spools-shuttle]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-bench
-                 {:ns 'ct.spools.bench
-                  :after [:millstrand/spools-shuttle]
                   :required? true})
 
 ;; --- repo policy over the peer spools ---------------------------------------
 ;; Codethread publishes the shared harness tools and seat aliases. This
 ;; repository keeps reviewer rosters and task/review policy local.
-(runtime/module! runtime :codethread/config-agents
-                 {:ns 'ct.spools.codethread.agents
-                  :after [:millstrand/spools-shuttle]
-                  :required? true})
-(runtime/module! runtime :codethread/config-help
-                 {:ns 'ct.spools.codethread.help
-                  :after [:millstrand/spools-batteries]
-                  :required? true})
-(runtime/module! runtime :codethread/config-devflow
-                 {:ns 'ct.spools.codethread.devflow
-                  :required? true})
 (runtime/module! runtime :devflow/kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter
                   :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
                   :required? true})
 (runtime/module! runtime :codethread/config
                  {:ns 'ct.spools.codethread.config
-                  :after [:codethread/config-agents
-                          :codethread/config-help
-                          :codethread/config-devflow
+                  :after [:harnesses
                           :millstrand/spools-batteries
-                          :millstrand/spools-shuttle
-                          :millstrand/spools-delegation
                           :devflow/kanban-adapter]
                   :required? true})
 ;; --- chime notification engine ---------------------------------------------
@@ -115,26 +80,32 @@
                  {:file "me/config.clj"
                   :after [:millstrand/spools-batteries
                           :millhouse/spools-workflow
-                          :millstrand/spools-delegation
-                          :millstrand/spools-shuttle
                           :millstrand/spools-kanban
                           :millhouse/spools-chime
                           :millhouse/spools-cron
                           :codethread/config]
                   :required? true})
 
+;; Reviewer declarations are repository policy over Harnesses' shared
+;; reviewer kind and alias catalog.
+(runtime/module! runtime :me/reviewers
+                 {:file "me/agents/reviewers.clj"
+                  :after [:me/config :harnesses :codethread/config]
+                  :required? true})
+
 ;; Activate the consolidated providers after every workflow definition so the
-;; executors' initial scans can resolve all persisted gate symbols.
+;; executor's initial scan can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
                   :after [:millhouse/spools-workflow :me/config]
                   :required? true})
 
-;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
-;; scan, so every harness alias Codethread agents registers must already exist or a
+;; The Harnesses agent executor activates last: its lifecycle resource runs an initial
+;; gate scan, so every shared alias must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
-(runtime/module! runtime :millstrand/spools-treadle
-                 {:ns 'ct.spools.executors.subagent
-                  :after [:millstrand/spools-shuttle :millhouse/spools-workflow
-                          :codethread/config :me/config]
+(runtime/module! runtime :harnesses/agent-executor
+                 {:ns 'ct.spools.harnesses.executors.agent.spool
+                  :after [:harnesses :millhouse/spools-workflow
+                          :millhouse/spools-workflow-providers
+                          :codethread/config :me/config :me/reviewers]
                   :required? true})

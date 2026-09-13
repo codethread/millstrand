@@ -23,8 +23,8 @@
   [:and
    [:= :state "active"]
    [:or
-    [:missing [:attr "agent-run/run"]]
-    [:not [:= [:attr "agent-run/run"] "true"]]]
+    [:missing [:attr "harness/run"]]
+    [:not [:= [:attr "harness/run"] "true"]]]
    [:or
     [:missing [:attr "kanban/lane"]]
     [:not [:= [:attr "kanban/lane"] "refinement"]]]
