@@ -27,7 +27,7 @@
      :source "src/millstrand/test/alpha.clj"
      :outfile "docs/api/test.api.md"}]))
 
-(defn- checkout-root [^java.io.File source-file]
+(defn- producer-root [^java.io.File source-file]
   (some (fn [^java.io.File candidate]
           (when (.isFile (io/file candidate "spool.edn"))
             candidate))
@@ -41,7 +41,7 @@
         (throw (ex-info "API source is not a directory-backed classpath resource"
                         {:resource resource :outfile outfile :url (some-> url str)})))
       (let [source-file (io/file (.toURI url))
-            root (checkout-root source-file)]
+            root (producer-root source-file)]
         (when-not root
           (throw (ex-info "API source has no producer spool.edn ancestor"
                           {:resource resource :outfile outfile
