@@ -38,6 +38,66 @@
      {identity:json}
    " {:identity (select-keys params [:feature :branch :worktree :card])}))
 
+(defn- automatic-review-prompt
+  "Return the coordinator contract for one frozen Harnesses review pass."
+  [{:keys [branch worktree review-target review-id]}]
+  (format-alpha/prose
+   "
+     Orchestrate the repository's automatic review pass for branch `{branch}`
+     in `{worktree}`. The review handoff target is `{review-target}`{suffix}.
+
+     First verify that the checked-out branch is `{branch}`, the worktree is
+     clean, and these three full commit SHAs are identical:
+
+     - `git rev-parse --verify \"{head-ref}\"`
+     - `git rev-parse --verify \"{upstream-ref}\"`
+     - the content of
+       `$(git rev-parse --git-path millstrand-land-quality-head)`
+
+     Stop on any mismatch. The preceding quality gate applies only to that
+     pushed HEAD; reviewing another commit would invalidate its evidence.
+
+     Resolve the immutable review range:
+
+     ```sh
+     review_head=$(git rev-parse --verify \"{head-ref}\")
+     review_base=$(git merge-base origin/main \"$review_head\")
+     strand agent review --cwd \"{worktree}\" --base \"$review_base\" --branch \"$review_head\" --label PR
+     ```
+
+     Do not substitute a mutable branch name for either SHA. Require the
+     review command to return `status=scheduled` and at least one run. Await
+     every returned run separately:
+
+     ```sh
+     strand await --query agent-run-settled --param run-id=RUN_ID --min-count 1
+     strand agent show RUN_ID
+     ```
+
+     Settlement alone is not success. Every shown run must have
+     `status=stopped`, `substatus=completed`, `settled=true`, and a non-blank
+     `result`. If review setup fails or any run lacks that positive evidence,
+     stop this orchestration run with:
+
+     ```sh
+     strand agent stop \"$MILLSTRAND_RUN_ID\" --reason \"automatic review did not complete successfully\"
+     ```
+
+     Do not return a success message after stopping. A stopped child without
+     `substatus=completed` is a failed review, never a pass.
+
+     After every reviewer succeeds, synthesize their results. Your final
+     response must begin with `SUCCESS` and include the frozen base and head
+     SHAs, every reviewer name and run id, and one deduplicated P1/P2 verdict.
+     Preserve concrete paths and lines. P1/P2 findings belong to the following
+     resolve-review step; failed or missing reviewer evidence blocks this gate.
+   " {:branch branch
+      :worktree worktree
+      :review-target review-target
+      :head-ref "HEAD^{commit}"
+      :upstream-ref "@{upstream}^{commit}"
+      :suffix (if review-id (str " (pass " review-id ")") "")}))
+
 (workflow/defworkflow review
   "Review and validate implemented work without authorizing a merge."
   {:entrypoints #{:start}
@@ -60,48 +120,27 @@
                          (support/sh-gate support/land-quality-gate-script "review-quality" branch))
                        5400
                        "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
-   (workflow/step :start-review "Start the tracked Harnesses review" :self
+   (workflow/gate :automatic-review "Run and synthesize the frozen Harnesses review"
+                  :agent
                   :depends-on [:ci-green]
-                  (fn [{:keys [branch worktree review-target review-id]}]
-                    (format-alpha/prose
-                     "
-                       Start the repository review from the pushed branch. Harnesses
-                       captures the diff and fans out the selected repository lenses:
-
-                       ```text
-                       strand agent review --cwd {worktree} --branch {branch} --label PR
-                       ```
-
-                       Use `--agent NAME` to narrow the pass when needed. Keep the
-                       returned run ids, and associate this pass with task
-                       `{review-target}`{suffix}.
-                     " {:worktree worktree
-                        :branch branch
-                        :review-target review-target
-                        :suffix (if review-id (str " (" review-id ")") ".")})))
-   (workflow/step :review-findings "Await and synthesize review findings" :self
-                  :depends-on [:start-review]
+                  :attributes {"harness/alias" "coordinator"
+                               "harness/cwd" (fn [{:keys [worktree]}] worktree)
+                               "harness/prompt" automatic-review-prompt}
                   (format-alpha/prose
                    "
-                     Await every returned run with the positive-evidence query:
-
-                     ```text
-                     strand await --query agent-run-settled --param run-id=RUN_ID --min-count 1
-                     strand agent show RUN_ID
-                     ```
-
-                     Record the combined P1/P2 verdict and each resolution on the
-                     review task before completing this step. Follow up with a
-                     focused `strand agent review --agent NAME` pass for material
-                     repairs.
+                     Review orchestration is automatic. A failed child review leaves
+                     this gate blocked; repair or retry it without completing the gate
+                     by hand.
                    " {}))
 
    (workflow/step :resolve-review "Resolve the review findings" :self
-                  :depends-on [:review-findings]
+                  :depends-on [:automatic-review]
                   (format-alpha/prose
                    "
-                     Resolve the synthesis findings and commit and push repairs.
-                     Obtain focused follow-up review for material code changes.
+                     Read the automatic-review gate's `harness/result`. Record its
+                     combined verdict and each resolution on the review task. Resolve
+                     every P1/P2 finding, then commit and push repairs. Obtain focused
+                     follow-up review for material code changes.
                    " {}))
    (support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
                        (fn [{:keys [branch]}]

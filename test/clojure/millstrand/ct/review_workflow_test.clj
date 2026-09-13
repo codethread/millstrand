@@ -3,9 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [me.workflows.fix :as fix]
             [me.workflows.review :as review]
-            [me.workflows.story :as story]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
@@ -13,6 +11,12 @@
 
 (def ^:private work
   {:feature "feature-task" :branch "feature/review" :worktree "/tmp/review-fixture"})
+
+(defn- workflow-definition
+  "Resolve a workspace workflow declaration without teaching clj-kondo its
+  Vars."
+  [qualified-symbol]
+  @(requiring-resolve qualified-symbol))
 
 (deftest shared-review-fans-in-resolves-and-validates-before-handoff
   (with-runtime
@@ -27,15 +31,32 @@
                            :files ["src/example.clj"]})
             run-id "shared-review"
             advance #(workflow/complete! run-id {:by "test-agent"})]
-        (workflow/start! run-id #'review/review params)
+        (workflow/start! run-id
+                         (workflow-definition 'me.workflows.review/review)
+                         params)
         (advance)
         (is (= "shell" (:gate (first (workflow/ready run-id)))))
         (advance)
-        (is (= "Start the tracked Harnesses review"
-               (:title (first (workflow/ready run-id)))))
-        (advance)
-        (is (= "Await and synthesize review findings"
-               (:title (first (workflow/ready run-id)))))
+        (let [review-gate (first (workflow/ready run-id))
+              gate-strand (weaver/show rt (:id review-gate))
+              prompt (attr-get gate-strand :harness/prompt)]
+          (is (= "agent" (:gate review-gate)))
+          (is (= "Run and synthesize the frozen Harnesses review"
+                 (:title review-gate)))
+          (is (= "coordinator" (attr-get gate-strand :harness/alias)))
+          (is (= (:worktree work) (attr-get gate-strand :harness/cwd)))
+          (is (str/includes? prompt "review_head=$(git rev-parse"))
+          (is (str/includes? prompt "--base \"$review_base\""))
+          (is (str/includes? prompt "--branch \"$review_head\""))
+          (is (str/includes? prompt "agent-run-settled"))
+          (is (str/includes? prompt "status=stopped"))
+          (is (str/includes? prompt "substatus=completed"))
+          (is (str/includes? prompt "settled=true"))
+          (is (str/includes? prompt "non-blank"))
+          (is (str/includes? prompt "strand agent stop"))
+          (is (str/includes? prompt "SUCCESS"))
+          (is (= [(:id review-gate)]
+                 (mapv :id (workflow/ready run-id)))))
         (advance)
         (is (= "Resolve the review findings"
                (:title (first (workflow/ready run-id)))))
@@ -61,9 +82,12 @@
 
 (deftest development-workflows-hand-off-to-shared-review
   (doseq [[definition params]
-          [[story/story-fold (assoc work :module "example")]
-           [story/story-keep (assoc work :module "example")]
-           [fix/fix (assoc work :subject "Fix the behavior" :card "card-id")]]]
+          [[(workflow-definition 'me.workflows.story/story-fold)
+            (assoc work :module "example")]
+           [(workflow-definition 'me.workflows.story/story-keep)
+            (assoc work :module "example")]
+           [(workflow-definition 'me.workflows.fix/fix)
+            (assoc work :subject "Fix the behavior" :card "card-id")]]]
     (let [compiled (workflow/compile definition params {:run-id "review-handoff"})
           instructions (keep #(get-in % [:attributes "workflow/instruction"])
                              (:strands compiled))]

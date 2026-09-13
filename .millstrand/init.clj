@@ -1,14 +1,15 @@
 ;; Startup entrypoint for the repo's canonical coordination world.
 ;;
-;; Dependency spools remain independent runtime modules. All repository-owned
-;; Clojure lives under me/ and is loaded through the single :me/config module.
-;; Its sibling namespaces define authoring Vars; me/config.clj selects them into
-;; one owner-complete contribution.
+;; Dependency spools remain independent runtime modules. Repository-owned
+;; Clojure lives under me/: me/config.clj selects the runtime policy into one
+;; owner-complete contribution, and me/reviewers layers the repository lens over
+;; the shared reviewer catalog.
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and refresh.
 ;; Read docs/reference.md before changing this config, and smoke-test changes in
 ;; a disposable world first.
-(require '[millstrand.api.current.alpha :as current]
+(require '[ct.spools.codethread.bootstrap :as codethread]
+         '[millstrand.api.current.alpha :as current]
          '[millstrand.api.runtime.alpha :as runtime])
 
 (def runtime (current/runtime))
@@ -18,13 +19,13 @@
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries})
 
-;; --- workflow engine + shell executor -------------------------------------
-;; The engine's collected open-kind and lifecycle declarations own Workflow
-;; definition/executor publication and its process-lifetime vocabulary seed.
-(runtime/module! runtime :millhouse/spools-workflow
-                 {:ns 'millhouse.spools.workflow})
 (runtime/module! runtime :millstrand/spools-unsafe-text-search
                  {:ns 'millstrand.spools.unsafe-text-search})
+
+;; Register shared identity, Workflow, Harnesses, aliases, and reviewers before
+;; repository-specific policy. Executor activation remains deliberately last.
+(codethread/register! runtime)
+
 ;; Devflow is an ordinary workspace dependency. Its contribution is the stage
 ;; `defworkflow` entries its load collects.
 (runtime/module! runtime :millstrand/spools-devflow
@@ -32,28 +33,16 @@
                   :after [:millhouse/spools-workflow]
                   :required? true})
 
-;; --- peer coordination spools -----------------------------------------------
-;; These sibling modules collect owner-complete contributions from source.
-;; Named lifecycle resources own their runtime setup and removal.
-(runtime/module! runtime :millhouse/spools-identity
-                 {:ns 'millhouse.spools.identity
-                  :required? true})
-(runtime/module! runtime :harnesses
-                 {:ns 'ct.spools.harnesses.spool
-                  :after [:millhouse/spools-identity]
-                  :required? true})
-
 ;; --- repo policy over the peer spools ---------------------------------------
-;; Codethread publishes the shared harness tools and seat aliases. This
-;; repository keeps reviewer rosters and task/review policy local.
+;; Codethread publishes shared harness tools, aliases, and review lenses. This
+;; repository keeps its adapter election and workspace-specific policy local.
 (runtime/module! runtime :devflow/kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter
                   :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
                   :required? true})
 (runtime/module! runtime :codethread/config
                  {:ns 'ct.spools.codethread.config
-                  :after [:harnesses
-                          :millstrand/spools-batteries
+                  :after [:millstrand/spools-batteries
                           :devflow/kanban-adapter]
                   :required? true})
 ;; --- chime notification engine ---------------------------------------------
@@ -90,7 +79,9 @@
 ;; reviewer kind and alias catalog.
 (runtime/module! runtime :me/reviewers
                  {:file "me/agents/reviewers.clj"
-                  :after [:me/config :harnesses :codethread/config]
+                  :after [:me/config
+                          :millstrand/spools-harnesses
+                          :codethread/config-reviewers]
                   :required? true})
 
 ;; Activate the consolidated providers after every workflow definition so the
@@ -100,12 +91,11 @@
                   :after [:millhouse/spools-workflow :me/config]
                   :required? true})
 
-;; The Harnesses agent executor activates last: its lifecycle resource runs an initial
-;; gate scan, so every shared alias must already exist or a
-;; durable ready gate would be stamped gate/error on every cold start.
-(runtime/module! runtime :harnesses/agent-executor
-                 {:ns 'ct.spools.harnesses.executors.agent.spool
-                  :after [:harnesses :millhouse/spools-workflow
-                          :millhouse/spools-workflow-providers
-                          :codethread/config :me/config :me/reviewers]
-                  :required? true})
+;; Activate the sole Harnesses agent executor after all shared and local
+;; aliases, reviewers, workflows, and provider executors are reconciled.
+(codethread/register-executor!
+ runtime [:devflow/kanban-adapter
+          :codethread/config
+          :me/config
+          :me/reviewers
+          :millhouse/spools-workflow-providers])

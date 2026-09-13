@@ -13,10 +13,11 @@
  ;; "scripts" is on the test path so the one-shot cutover scripts under
  ;; scripts/cutover can be exercised by a registered test namespace rather than
  ;; only standalone; the runner's registry, not the classpath, decides what runs.
- {:test {:extra-paths ["test/clojure" "scripts" "spools/batteries/src" "spools/unsafe-text-search/src"]
+ {:test {:extra-paths ["test/clojure" "scripts" "spools/unsafe-text-search/src"]
          :extra-deps {;; Test-only ergonomics: readable nested-map/JSON assertions
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
+                      io.millstrand/batteries {:local/root "spools/batteries"}
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
                       millstrand/workspace-config {:local/root ".millstrand"}
                       org.clojure/test.check {:mvn/version "1.1.1"}
