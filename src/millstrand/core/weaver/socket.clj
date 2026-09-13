@@ -190,8 +190,11 @@
     frame))
 
 (defn- transport-error [request-id e]
-  (let [frame {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
-               "error" {"type" "transport" "code" "transport/server-error" "message" (ex-message e) "details" {}}}]
+  (let [message (ex-message e)
+        frame {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
+               "error" {"type" "transport" "code" "transport/server-error"
+                        "message" (if (str/blank? message) "Request failed" message)
+                        "details" {}}}]
     (when-not (s/valid? :millstrand.core.mill-protocol/error-response frame)
       (throw (ex-info "Transport error response does not match the shared wire spec"
                       {:response frame})))
@@ -216,25 +219,55 @@
 (defn- uninitialized-db-exception []
   (ex-info "Database is not initialized; run `mill init` first" {:code "database/not-initialized"}))
 
+(def ^:private error-rendering-fallback
+  {"protocol_version" protocol/version
+   "request_id" nil
+   "ok" false
+   "result" nil
+   "error" {"type" "transport"
+            "code" "transport/server-error"
+            "message" "Request failed and its error could not be rendered"
+            "details" {}}})
+
+(defn- error-rendering-fallback-frame [request-id]
+  ;; Reuse the complete envelope and allocate only the request-id-bearing map.
+  ;; In particular, do not inspect an OutOfMemoryError or validate/render the
+  ;; fallback while the JVM may still be under memory pressure.
+  (assoc error-rendering-fallback "request_id" request-id))
+
 (defn- error-frame
-  "Turn a thrown exception into a single error frame, honoring the domain vs
-  transport taxonomy and the uninitialized-db domain remap."
+  "Turn a Throwable into a single error frame.
+
+  Errors raised while serving a decoded request are request-scoped: the socket
+  reports them and remains available. If rendering itself fails, return the
+  minimal transport fallback rather than abandoning the connection."
   [request-id e]
-  (cond
-    (instance? clojure.lang.ExceptionInfo e) (domain-error request-id e)
-    (uninitialized-db-error? e) (domain-error request-id (uninitialized-db-exception))
-    :else (transport-error request-id e)))
+  (if (instance? OutOfMemoryError e)
+    (error-rendering-fallback-frame request-id)
+    (try
+      (cond
+        (instance? clojure.lang.ExceptionInfo e) (domain-error request-id e)
+        (uninitialized-db-error? e) (domain-error request-id (uninitialized-db-exception))
+        :else (transport-error request-id e))
+      (catch Throwable _
+        (error-rendering-fallback-frame request-id)))))
 
 (defn- error-frame-with-context
   "Attach the decoded request identity to producer failures before rendering."
   [request-id operation e]
-  (let [details (assoc (or (ex-data e) {})
-                       :request/id request-id
-                       :request/operation operation)]
-    (if (instance? clojure.lang.ExceptionInfo e)
-      (error-frame request-id
-                   (ex-info (or (ex-message e) "Request operation failed") details e))
-      (assoc-in (error-frame request-id e) ["error" "details"] (json-safe-value details)))))
+  (if (instance? OutOfMemoryError e)
+    (error-rendering-fallback-frame request-id)
+    (try
+      (let [details (assoc (or (ex-data e) {})
+                           :request/id request-id
+                           :request/operation operation)]
+        (if (instance? clojure.lang.ExceptionInfo e)
+          (error-frame request-id
+                       (ex-info (or (ex-message e) "Request operation failed") details e))
+          (assoc-in (error-frame request-id e) ["error" "details"]
+                    (json-safe-value details))))
+      (catch Throwable _
+        (error-rendering-fallback-frame request-id)))))
 
 (defn- string-map? [m] (and (map? m) (every? string? (vals m))))
 
@@ -474,7 +507,8 @@
                      (run-payload-hooks-if-mutating! runtime entry (:hook-class classes)
                                                      request-id args {})
                      nil
-                     (catch Exception e (error-frame-with-context request-id "invoke" e)))]
+                     (catch Throwable e
+                       (error-frame-with-context request-id "invoke" e)))]
     (if hook-error
       (write-frame! hook-error)
       (do
@@ -485,10 +519,10 @@
                                    (assoc envelope :emit! emit!))]
             (try
               (write-frame! (stream-terminator request-id true result nil))
-              (catch Exception e
+              (catch Throwable e
                 (write-frame! (stream-terminator request-id false nil
                                                  (get (result-not-encodable request-id e) "error"))))))
-          (catch Exception e
+          (catch Throwable e
             (write-frame! (stream-terminator request-id false nil
                                              (get (error-frame-with-context request-id "invoke" e) "error")))))))))
 
@@ -502,12 +536,13 @@
                  {:value (invoke-with-deadline runtime (:name entry) (get args "argv")
                                                envelope (effective-deadline-ms
                                                          (:deadline-class classes) envelope))}
-                 (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))]
+                 (catch Throwable e
+                   {:error (error-frame-with-context request-id "invoke" e)}))]
     (if-let [error (:error result)]
       (write-frame! error)
       (try
         (write-frame! (success request-id (:value result)))
-        (catch Exception e
+        (catch Throwable e
           (write-frame! (result-not-encodable request-id e)))))))
 
 (defn- handle-invoke!
@@ -517,7 +552,8 @@
   [runtime request-id args write-frame!]
   (let [op-name (get args "name")
         entry (try {:ok ((api 'resolve-op) runtime (symbol op-name))}
-                   (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))]
+                   (catch Throwable e
+                     {:error (error-frame-with-context request-id "invoke" e)}))]
     (if-let [err (:error entry)]
       (write-frame! err)
       (let [entry (:ok entry)
@@ -526,18 +562,20 @@
             ;; hook gating; a retired-sugar or malformed shape redirects loudly
             ;; here (DELTA-Dtf-002.CC3) rather than reaching the handler.
             alias (try {:result (help/help-alias-result runtime entry (get args "argv") envelope)}
-                       (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))
+                       (catch Throwable e
+                         {:error (error-frame-with-context request-id "invoke" e)}))
             ;; The leaf walk resolves the gating/deadline classes pre-hook; an
             ;; unresolvable verb fails here, after the alias check so `--help`
             ;; shapes never reach the walk.
             classes (when-not (or (:error alias) (some? (:result alias)))
                       (try {:ok (invoked-leaf-classes entry (get args "argv"))}
-                           (catch Exception e {:error (error-frame-with-context request-id "invoke" e)})))]
+                           (catch Throwable e
+                             {:error (error-frame-with-context request-id "invoke" e)})))]
         (cond
           (:error alias) (write-frame! (:error alias))
           (some? (:result alias)) (write-frame! (try
                                                   (success request-id (:result alias))
-                                                  (catch Exception e
+                                                  (catch Throwable e
                                                     (result-not-encodable request-id e))))
           (:error classes) (write-frame! (:error classes))
           (:stream? entry) (handle-stream-invoke! runtime request-id args entry
@@ -574,13 +612,8 @@
                                                   (true? (get (get req "arguments")
                                                               "include_registry_projection")))))
                 "invoke" (handle-invoke! runtime request-id (get req "arguments") write-frame!)))
-            (catch Exception e
-              (let [details (assoc (or (ex-data e) {})
-                                   :request/id request-id
-                                   :request/operation operation)]
-                (write-frame! (error-frame request-id
-                                           (ex-info (or (ex-message e) "Request operation failed")
-                                                    details e)))))))))))
+            (catch Throwable e
+              (write-frame! (error-frame-with-context request-id operation e)))))))))
 
 (defn start!
   "Start the JSON socket server for `runtime-state` at `socket-path`."

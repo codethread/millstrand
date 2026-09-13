@@ -41,13 +41,20 @@
   ([start-options f]
    (let [db-file (db-test/temp-db-file)
          world (or (:world start-options) (temp-world))
-         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false :generation-basis (or (:generation-basis start-options) (test-support/generation-basis (:config-dir world)))))]
+         options (assoc (or start-options {})
+                        :world world
+                        :publish? false
+                        :generation-basis
+                        (or (:generation-basis start-options)
+                            (test-support/generation-basis (:config-dir world))))
+         rt (weaver-runtime/start! db-file options)]
      (try
        (weaver-runtime/with-runtime-binding rt #(f rt db-file))
        (finally
          (weaver-runtime/stop! rt)
          (db-test/delete-sqlite-family! db-file)
          (delete-tree! (io/file (:config-dir world))))))))
+
 (defn test-op [{:op/keys [name argv]}]
   {:operation name :argv argv})
 
@@ -92,6 +99,25 @@
   [{emit! :op/emit!}]
   (emit! {"i" 0})
   (throw (ex-info "stream blew up" {:code "stream/failed"})))
+
+(defn assertion-error-op
+  "Throw an Error reachable through ordinary Clojure assertion use."
+  [_ctx]
+  (assert false "op assertion failed"))
+
+(defn stack-overflow-error-op
+  "Throw a direct StackOverflowError without consuming the test thread's stack."
+  [_ctx]
+  (throw (StackOverflowError. "op stack overflow")))
+
+(defn deeply-nested-error-op
+  "Throw ex-data deep enough to overflow the recursive error renderer."
+  [_ctx]
+  (throw (ex-info "deep error details"
+                  {:code "op/deep-error"
+                   :nested (reduce (fn [nested _] {:next nested})
+                                   :leaf
+                                   (range 20000))})))
 
 (defn slow-op
   "Sleep past any short deadline, recording that it ran to completion."
@@ -230,6 +256,11 @@
               :flags {:flag {:type :string}}
               :positionals [{:name :args :variadic? true}]}})
 
+(def ^:private flat-read-unbounded
+  {:arg-spec {:hook-class :read
+              :deadline-class :unbounded
+              :positionals [{:name :args :variadic? true}]}})
+
 (def ^:private flat-mutating-unbounded
   {:stream? true
    :arg-spec {:hook-class :mutating
@@ -327,6 +358,11 @@
 (defn rejecting-hook [ctx]
   (swap! hook-contexts conj ctx)
   (throw (ex-info "mutation rejected" {:code "policy/rejected" :ctx ctx})))
+
+(defn asserting-payload-hook
+  "Throw an AssertionError from the pre-header payload-hook boundary."
+  [_ctx]
+  (assert false "payload hook assertion failed"))
 
 (defn non-json-rejecting-hook [_ctx]
   (throw (ex-info "non-json rejected" {:code "policy/non-json"
@@ -684,6 +720,37 @@
             (is (= "domain" (get-in terminator ["error" "type"])))
             (is (= "stream/failed" (get-in terminator ["error" "code"])))))))))
 
+(deftest json-socket-stream-invoke-returns-errors-for-throwables
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'stream-assert flat-mutating-unbounded
+                           'millstrand.core.weaver.socket-test/assertion-error-op)
+      (let [m (:metadata rt)]
+        (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
+                         (.connect (UnixDomainSocketAddress/of (:socket-path m))))
+                    rdr (BufferedReader. (InputStreamReader. (Channels/newInputStream ch)))
+                    wrt (BufferedWriter. (OutputStreamWriter. (Channels/newOutputStream ch)))]
+          (.write wrt (json/write-str (invoke-frame rt "stream-assert" [])))
+          (.newLine wrt)
+          (.flush wrt)
+          (is (true? (get (json/read-str (.readLine rdr)) "stream")))
+          (let [terminator (json/read-str (.readLine rdr))]
+            (is (true? (get terminator "done")))
+            (is (false? (get terminator "success")))
+            (is (= "transport" (get-in terminator ["error" "type"])))
+            (is (str/includes? (get-in terminator ["error" "message"])
+                               "op assertion failed")))))
+      (hooks/register-hook! rt :assert-payload #{:payload/received}
+                            'millstrand.core.weaver.socket-test/asserting-payload-hook {})
+      (let [response (invoke-request rt "stream-assert" [])]
+        (is (false? (get response "ok")) "the hook fails before the stream header")
+        (is (= "domain" (get-in response ["error" "type"])))
+        (is (= "hook/failed" (get-in response ["error" "code"])))
+        (is (= "class java.lang.AssertionError"
+               (get-in response ["error" "details" "exception/class"])))
+        (is (str/includes? (get-in response ["error" "details" "exception/message"])
+                           "payload hook assertion failed"))))))
+
 (deftest json-socket-stream-op-fixture-file-loads-and-runs
   ;; Guards the shipped test/fixtures/clojure/stream-op-init.clj that tasks 8/10 load
   ;; from a disposable workspace init.clj.
@@ -903,6 +970,49 @@
         (is (string? (get-in response ["error" "details" "opaque"])))
         (is (= "test-request" (get-in response ["error" "details" "request/id"])))
         (is (= "invoke" (get-in response ["error" "details" "request/operation"])))))))
+
+(deftest json-socket-invoke-returns-errors-for-throwables
+  (with-runtime
+    (fn [rt _]
+      (doseq [[name arg-spec handler]
+              [['assert-direct flat-read-unbounded
+                'millstrand.core.weaver.socket-test/assertion-error-op]
+               ['assert-deadline flat-read-standard
+                'millstrand.core.weaver.socket-test/assertion-error-op]
+               ['overflow-direct flat-read-unbounded
+                'millstrand.core.weaver.socket-test/stack-overflow-error-op]
+               ['overflow-deadline flat-read-standard
+                'millstrand.core.weaver.socket-test/stack-overflow-error-op]]]
+        (weaver/register-op! rt name arg-spec handler))
+      (doseq [[name cause]
+              [["assert-direct" "op assertion failed"]
+               ["assert-deadline" "op assertion failed"]
+               ["overflow-direct" "op stack overflow"]
+               ["overflow-deadline" "op stack overflow"]]]
+        (let [response (invoke-request rt name [])]
+          (is (false? (get response "ok")) name)
+          (is (= "transport" (get-in response ["error" "type"])) name)
+          (is (= "transport/server-error" (get-in response ["error" "code"])) name)
+          (is (str/includes? (get-in response ["error" "message"]) cause) name)
+          (is (= "test-request"
+                 (get-in response ["error" "details" "request/id"])) name)
+          (is (= "invoke"
+                 (get-in response ["error" "details" "request/operation"])) name))))))
+
+(deftest json-socket-invoke-falls-back-when-error-details-overflow-rendering
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'deep-error flat-read-unbounded
+                           'millstrand.core.weaver.socket-test/deeply-nested-error-op)
+      (let [response (invoke-request rt "deep-error" [])]
+        (is (false? (get response "ok")))
+        (is (= "transport" (get-in response ["error" "type"])))
+        (is (= "transport/server-error" (get-in response ["error" "code"])))
+        (is (= "Request failed and its error could not be rendered"
+               (get-in response ["error" "message"])))
+        (is (= {} (get-in response ["error" "details"]))))
+      (is (true? (get (socket-request rt "status" {}) "ok"))
+          "a request-scoped Error does not stop the socket server"))))
 
 (deftest json-socket-rejects-opaque-success-results
   (with-runtime
