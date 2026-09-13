@@ -1,4 +1,4 @@
-.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo-configs kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop
+.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo kondo-import kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search kondo-lint kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
@@ -11,7 +11,10 @@ help:
 		'  make test-restart-acceptance  Run built-binary restart and JVM-pool acceptance' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \
-		'  make lint               Run Clojure, convention, and Go linters' \
+		'  make lint               Run Kondo, Splint, convention, and Go linters' \
+		'  make kondo              Import dependency configs, then lint every Clojure root' \
+		'  make kondo-import       Refresh imported configs from each resolved classpath' \
+		'  make kondo-lint         Lint every Clojure root using imported configs' \
 		'  make reflect-check      Fail on reflected Java interop' \
 		'  make identity-check     Audit active files for stale product identity' \
 		'  make ci-config-check    Verify CI invokes identity and documentation gates' \
@@ -142,7 +145,7 @@ test-restart-acceptance: build
 test-e2e:
 	clojure -M:e2e
 
-lint: lint-clj lint-splint lint-conventions lint-go
+lint: kondo lint-splint lint-conventions lint-go
 
 check-clj-kondo:
 	@command -v $(CLJ_KONDO) >/dev/null 2>&1 || { \
@@ -156,15 +159,20 @@ check-clj-kondo:
 		exit 1; \
 	fi
 
-kondo-configs: kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search
+# Keep import and source analysis as separate contracts. `kondo` sequences them
+# explicitly so parallel Make invocation cannot lint against stale imports.
+kondo: kondo-import
+	@$(MAKE) --no-print-directory kondo-lint
 
-kondo-configs-root: check-clj-kondo
+kondo-import: kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search
+
+kondo-import-root: check-clj-kondo
 	@echo "==> root clj-kondo imports"
 	@rm -rf .clj-kondo/imports
 	@classpath="$$(clojure -Spath -M:test)"; \
 	$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
-kondo-configs-millstrand: check-clj-kondo
+kondo-import-workspace: check-clj-kondo
 	@echo "==> .millstrand clj-kondo imports"
 	@cd .millstrand && \
 		rm -rf .clj-kondo/imports && \
@@ -172,7 +180,7 @@ kondo-configs-millstrand: check-clj-kondo
 		classpath="$$(clojure -Spath -M:dev)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
-kondo-configs-batteries: check-clj-kondo
+kondo-import-batteries: check-clj-kondo
 	@echo "==> spools/batteries clj-kondo imports"
 	@cd spools/batteries && \
 		rm -rf .clj-kondo/imports && \
@@ -180,7 +188,7 @@ kondo-configs-batteries: check-clj-kondo
 		classpath="$$(clojure -Spath -M:test)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
-kondo-configs-unsafe-text-search: check-clj-kondo
+kondo-import-unsafe-text-search: check-clj-kondo
 	@echo "==> spools/unsafe-text-search clj-kondo imports"
 	@cd spools/unsafe-text-search && \
 		rm -rf .clj-kondo/imports && \
@@ -188,24 +196,24 @@ kondo-configs-unsafe-text-search: check-clj-kondo
 		classpath="$$(clojure -Spath -M:test)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
-lint-clj: lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search
+kondo-lint: kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search
 
-lint-clj-root: kondo-configs-root
+kondo-lint-root: check-clj-kondo
 	@echo "==> root clj-kondo"
-	@$(CLJ_KONDO) --repro --parallel --lint src test/clojure
+	@$(CLJ_KONDO) --repro --parallel --lint src test/clojure test/fixtures/clojure
 	@$(CLJ_KONDO) --repro --parallel --lint dev
 	@$(CLJ_KONDO) --repro --parallel --lint scripts
 	@$(CLJ_KONDO) --repro --parallel --lint resources/clj-kondo.exports .clj-kondo/hooks
 
-lint-clj-millstrand: kondo-configs-millstrand
+kondo-lint-workspace: check-clj-kondo
 	@echo "==> .millstrand clj-kondo"
 	@cd .millstrand && $(CLJ_KONDO) --repro --parallel --lint init.clj me
 
-lint-clj-batteries: kondo-configs-batteries
+kondo-lint-batteries: check-clj-kondo
 	@echo "==> spools/batteries clj-kondo"
 	@cd spools/batteries && $(CLJ_KONDO) --repro --parallel --lint src
 
-lint-clj-unsafe-text-search: kondo-configs-unsafe-text-search
+kondo-lint-unsafe-text-search: check-clj-kondo
 	@echo "==> spools/unsafe-text-search clj-kondo"
 	@cd spools/unsafe-text-search && $(CLJ_KONDO) --repro --parallel --lint src
 

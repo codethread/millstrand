@@ -12,7 +12,7 @@
 
 (def ^:private config-import-command
   ["sh" "-c"
-   "clojure -M:lint --lint \"$(clojure -Spath)\" --dependencies --parallel --copy-configs --skip-lint"])
+   "clojure -M:lint --lint \"$(clojure -Spath)\" --copy-configs --skip-lint"])
 
 (def ^:private source-lint-command
   ["clojure" "-M:lint" "--lint" "src" "--cache" "false"])
@@ -79,6 +79,7 @@
    "  \"Consumer source covering Millstrand's public authoring forms.\"\n"
    "  (:require [millstrand.api.lifecycle.alpha :as lifecycle]\n"
    "            [millstrand.api.authoring.alpha :as authoring]\n"
+   "            [millstrand.api.current.alpha :as current]\n"
    "            [millstrand.api.millstrand.alpha :as millstrand]\n"
    "            [millstrand.test.alpha :as test]))\n"
    "\n"
@@ -142,6 +143,9 @@
    "  \"Reference every Var synthesized by an exported core form.\"\n"
    "  []\n"
    "  [echo active task validate report tool])\n"
+   "\n"
+   "(current/with-runtime ::runtime\n"
+   "  (current/runtime))\n"
    "\n"
    "(lifecycle/defseed bootstrap \"Bootstrap the consumer.\"\n"
    "  {:apply 'example.consumer/apply-it})\n"
@@ -351,13 +355,26 @@
         "  \"A sample workflow.\"\n"
         "  {:entrypoints #{:start} :defaults {}}\n"
         "  (workflow/workflow (fn [_] \"done\")\n"
+        "    (workflow/step :done \"Done\" :self)))\n"
+        "(workflow/use-workflow! sample-workflow)\n\n"
+        "(workflow/defworkflow! selected-workflow\n"
+        "  \"A selected workflow.\"\n"
+        "  {:entrypoints #{:start} :defaults {}}\n"
+        "  (workflow/workflow (fn [_] \"done\")\n"
         "    (workflow/step :done \"Done\" :self)))\n\n"
         "(workflow/defexecutor sample-executor\n"
         "  \"A sample executor.\"\n"
         "  {}\n"
         "  [_]\n"
+        "  nil)\n"
+        "(workflow/use-executor! sample-executor-stalled?)\n\n"
+        "(workflow/defexecutor! selected-executor\n"
+        "  \"A selected executor.\"\n"
+        "  {}\n"
+        "  [_]\n"
         "  nil)\n\n"
-        "(sample-executor-stalled? nil)\n"))
+        "(sample-executor-stalled? nil)\n"
+        "(selected-executor-stalled? nil)\n"))
       (.mkdirs (io/file root ".clj-kondo"))
       (let [{:keys [exit output import-exit import-output lint-exit lint-output]}
             (run-consumer-kondo! root)
