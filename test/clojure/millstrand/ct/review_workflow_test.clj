@@ -279,10 +279,10 @@
           non-clojure-test-change
           (start-review!
            ctx
-           (apply str (map modified-patch
-                           ["test/README.md"
-                            "test/fixtures/clojure/example.clj"
-                            "test/shell/example.sh"])))
+           (str/join (map modified-patch
+                          ["test/README.md"
+                           "test/fixtures/clojure/example.clj"
+                           "test/shell/example.sh"])))
           no-selection (start-review! ctx (modified-patch "Makefile"))
           renamed (start-review! ctx renamed-test-patch)
           removed (start-review! ctx removed-test-patch)
