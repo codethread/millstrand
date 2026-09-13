@@ -168,16 +168,17 @@ kondo-import: kondo-import-root kondo-import-workspace kondo-import-batteries ko
 
 kondo-import-root: check-clj-kondo
 	@echo "==> root clj-kondo imports"
-	@rm -rf .clj-kondo/imports
-	@classpath="$$(clojure -Spath -M:test)"; \
-	$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
+	@mkdir -p .clj-kondo && \
+		rm -rf .clj-kondo/imports && \
+		classpath="$$(clojure -Srepro -Spath -M:test)" && \
+		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
 kondo-import-workspace: check-clj-kondo
 	@echo "==> .millstrand clj-kondo imports"
 	@cd .millstrand && \
 		rm -rf .clj-kondo/imports && \
 		mkdir -p .clj-kondo && \
-		classpath="$$(clojure -Spath -M:dev)" && \
+		classpath="$$(clojure -Srepro -Spath -M:dev)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
 kondo-import-batteries: check-clj-kondo
@@ -185,7 +186,7 @@ kondo-import-batteries: check-clj-kondo
 	@cd spools/batteries && \
 		rm -rf .clj-kondo/imports && \
 		mkdir -p .clj-kondo && \
-		classpath="$$(clojure -Spath -M:test)" && \
+		classpath="$$(clojure -Srepro -Spath -M:test)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
 kondo-import-unsafe-text-search: check-clj-kondo
@@ -193,7 +194,7 @@ kondo-import-unsafe-text-search: check-clj-kondo
 	@cd spools/unsafe-text-search && \
 		rm -rf .clj-kondo/imports && \
 		mkdir -p .clj-kondo && \
-		classpath="$$(clojure -Spath -M:test)" && \
+		classpath="$$(clojure -Srepro -Spath -M:test)" && \
 		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
 
 kondo-lint: kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search

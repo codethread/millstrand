@@ -520,17 +520,18 @@ Add Millstrand and clj-kondo to the consumer's tools.deps configuration, then im
 
 ```clojure
 {:aliases
- {:lint {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
+ {:lint {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
          :main-opts ["-m" "clj-kondo.main"]}}}
 ```
 
 ```sh
-mkdir -p .clj-kondo
-clojure -M:lint --lint "$(clojure -Spath)" --dependencies --parallel --copy-configs --skip-lint
-clojure -M:lint --lint src
+mkdir -p .clj-kondo && \
+  classpath="$(clojure -Srepro -Spath)" && \
+  clojure -Srepro -M:lint --lint "$classpath" --copy-configs --skip-lint
+clojure -Srepro -M:lint --lint src
 ```
 
-The `:lint` alias must run `clj-kondo.main` and provide the clj-kondo dependency. The first command copies the export into `.clj-kondo/imports/io.millstrand/millstrand`; the second command auto-loads that imported config. The checked-in consumer proof in Millstrand creates this layout in a temporary directory and runs both commands against all listed forms.
+The `:lint` alias must run `clj-kondo.main` and provide the clj-kondo dependency. The first command copies the export into `.clj-kondo/imports/io.millstrand/millstrand`; it stops before Kondo when classpath resolution fails. The second command auto-loads the imported config. The checked-in consumer proof in Millstrand creates this layout in a temporary directory and runs both commands against all listed forms.
 
 Millstrand owns this export's config and hook source. Keep the export limited to public Millstrand authoring analysis. Repository policy linters, third-party config, and forms owned by another spool stay in their owning project. When a public form's argument shape or binding behavior changes, update the export and the temporary consumer proof together. The export directory must remain on the producer's consumed classpath through `resources`.
 

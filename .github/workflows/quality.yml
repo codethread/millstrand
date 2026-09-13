@@ -164,7 +164,7 @@ jobs:
         with:
           cli: latest
           clj-kondo: 2026.08.04
-      - run: make lint-clj
+      - run: make kondo
 
   splint:
     name: splint

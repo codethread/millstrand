@@ -12,7 +12,9 @@
 
 (def ^:private config-import-command
   ["sh" "-c"
-   "clojure -M:lint --lint \"$(clojure -Spath)\" --copy-configs --skip-lint"])
+   (str "mkdir -p .clj-kondo && "
+        "classpath=\"$(clojure -Srepro -Spath)\" && "
+        "clojure -Srepro -M:lint --lint \"$classpath\" --copy-configs --skip-lint")])
 
 (def ^:private source-lint-command
   ["clojure" "-M:lint" "--lint" "src" "--cache" "false"])
