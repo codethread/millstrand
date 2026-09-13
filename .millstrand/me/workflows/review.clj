@@ -241,7 +241,7 @@
                 :branch "Branch containing the committed change."
                 :worktree "Absolute path to the branch's worktree."
                 :card "Optional kanban card to move into review."
-                :review-target "External work/task identity carried into handoff, not a same-runtime child-write target. Findings stay on gate/result; resolution records them on the work task."
+                :review-target "External work/task identity for the handoff, not a same-runtime target. Findings stay on gate/result; resolution records them on the work task."
                 :review-id "Non-blank identifier unique to this review pass; use a new value for every retry."
                 :change-context "Optional captured range and changed files."}}
   (workflow/workflow
