@@ -346,3 +346,7 @@ The same REPL can ask the language about itself — every namespace, function, a
 `dir` lists a namespace. `doc` prints a docstring. `source` shows the function. `apropos` finds names. An agent can discover the surface from inside the process, not only from files on disk.
 
 The [Clojure crash course](./docs/clojure-crash-course.md) is enough to read the snippets on this page.
+
+## Development
+
+Follow the shared [Clojure lint and editor configuration](https://github.com/codethread/codethread.spool/blob/main/docs/processes/kondo-and-lsp.md) when refreshing static-analysis configuration.
