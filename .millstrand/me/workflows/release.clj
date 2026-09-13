@@ -1,6 +1,7 @@
 (ns me.workflows.release
   "The release workflow for versioned Millstrand publication."
   (:require [clojure.spec.alpha :as s]
+            [millhouse.spools.land.support :as land-support]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]
             [me.workflows.support :as support]))
@@ -50,8 +51,8 @@
                   :attributes
                   {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                    "shell/timeout-secs" 120
-                   "shell/argv" (support/sh-gate release-preflight-script
-                                                 "release-preflight")}
+                   "shell/argv" (land-support/sh-gate release-preflight-script
+                                                      "release-preflight")}
                   (format-alpha/prose
                    "
                    Require a clean worktree on `main` with no remote commits
@@ -125,9 +126,9 @@
                    "shell/timeout-secs" 1200
                    "shell/argv"
                    (fn [{:keys [version]}]
-                     (support/sh-gate release-identity-script
-                                      "release-identity"
-                                      version))}
+                     (land-support/sh-gate release-identity-script
+                                           "release-identity"
+                                           version))}
                   (format-alpha/prose
                    "
                    Build both CLIs and require their reported versions to match

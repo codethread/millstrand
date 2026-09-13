@@ -1,5 +1,5 @@
 (ns me.workflows.review
-  "The repository's shared final code review, before landing."
+  "Millstrand's full repository review, before shared landing."
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -8,6 +8,7 @@
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get fail! require-valid!]]
             [millstrand.api.weaver.alpha :as weaver]
+            [millhouse.spools.land.support :as land-support]
             [millhouse.spools.workflow :as workflow]
             [me.workflows.support :as support]))
 
@@ -115,13 +116,18 @@
      "verdict" (:verdict evidence)}))
 
 (defn handoff-instruction
-  "Describe the repository review handoff with the caller's known work identity."
+  "Describe the full Millstrand review handoff with known work identity."
   [params]
   (format-alpha/prose
    "
-     Commit and push the validated branch. Read `strand workflow show review`
-     for its parameter contract, then start a new run with
-     `strand workflow start <run-id> --workflow review --params <json>`.
+     Commit and push the validated branch. Read
+     `strand workflow show millstrand-review` for its parameter contract, then
+     start a new run:
+
+     ```sh
+     strand workflow start <run-id> --workflow millstrand-review --params <json>
+     ```
+
      Complete this handoff after starting review.
 
      Carry forward this work identity:
@@ -232,8 +238,8 @@
                                           "run-id" "RUN_ID")]
                   "verdict" "findings|no-findings"))}))
 
-(workflow/defworkflow review
-  "Review and validate implemented work without authorizing a merge."
+(workflow/defworkflow millstrand-review
+  "Run Millstrand's full review roster and validate the resulting branch."
   {:entrypoints #{:start}
    :param-spec ::review-params
    :defaults {}
@@ -246,14 +252,17 @@
                 :change-context "Optional captured range and changed files."}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Review: " branch))
-   {:attributes {"workflow/family" "review"}}
-   (support/card-gate :review-card "Move the optional card into review" []
-                      "me.workflows.card-actions/review!")
-   (support/shell-gate :ci-green "Validate the pushed branch before review" [:review-card]
-                       (fn [{:keys [branch]}]
-                         (support/sh-gate support/land-quality-gate-script "review-quality" branch))
-                       5400
-                       "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
+   {:attributes {"workflow/family" "millstrand-review"}}
+   (land-support/card-gate
+    :review-card "Move the optional card into review" []
+    "millhouse.spools.land.card-actions/review-card!")
+   (land-support/shell-gate :ci-green "Validate the pushed branch before review" [:review-card]
+                            (fn [{:keys [branch]}]
+                              (land-support/sh-gate
+                               land-support/land-quality-gate-script
+                               "review-quality" branch))
+                            5400
+                            "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
    (workflow/gate :automatic-review "Run and synthesize the frozen Harnesses review"
                   :agent
                   :depends-on [:ci-green]
@@ -298,11 +307,13 @@
                      task. Resolve every P1/P2 finding, then commit and push repairs.
                      Obtain focused follow-up review for material code changes.
                    " {}))
-   (support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
-                       (fn [{:keys [branch]}]
-                         (support/sh-gate support/land-quality-gate-script "land-quality" branch))
-                       5400
-                       "Validate the actual pushed HEAD after review repairs. Fix failures and clear gate/error to retry.")
+   (land-support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
+                            (fn [{:keys [branch]}]
+                              (land-support/sh-gate
+                               land-support/land-quality-gate-script
+                               "land-quality" branch))
+                            5400
+                            "Validate the actual pushed HEAD after review repairs. Fix failures and clear gate/error to retry.")
    (workflow/step :handoff-land "Hand the reviewed work to landing" :self
                   :depends-on [:final-ci-green]
                   (fn [params]

@@ -161,7 +161,8 @@
                                        "|Your FINAL MESSAGE becomes the gate's outcome
                                         |notes: put the full findings there, verdict
                                         |first. Do not write to workflow strands. Never
-                                        |the full roster lens - that runs in the shared review workflow.")))})
+                                        |the full roster lens - that runs in the
+                                        |Millstrand review workflow.")))})
    (workflow/step :resolve-intent
                   (fn [_] "Resolve intent-review findings")
                   :self

@@ -6,16 +6,13 @@
             [me.workflows.common :as common]
             [me.workflows.explore :as explore]
             [me.workflows.fix :as fix]
-            [me.workflows.land :as land]
-            [me.workflows.card-actions]
-            [me.workflows.merge-queue :as merge-queue]
+            [me.workflows.land]
             [me.workflows.review :as review]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
             [millhouse.spools.chime :as chime]
             [millhouse.spools.cron :as cron]
             [millhouse.spools.workflow :as workflow]
-            [millstrand.api.lifecycle.alpha :as lifecycle]
             [millstrand.api.millstrand.alpha :as millstrand]
             [millstrand.spools.batteries :as batteries]))
 
@@ -24,17 +21,12 @@
 (millstrand/use-query! policy/run-active)
 (millstrand/use-query! policy/kanban-feature-work)
 (millstrand/use-query! policy/workflow-runs)
-(millstrand/use-query! policy/merge-lock)
-(millstrand/use-query! policy/merge-queue)
 (millstrand/use-query! policy/work)
 
 (millstrand/use-pattern! common/macros-demo)
 (millstrand/use-pattern! common/delegate-pipeline)
 
-(workflow/use-workflow! land/land-abort)
-(workflow/use-workflow! land/land-merge)
-(workflow/use-workflow! land/land)
-(workflow/use-workflow! review/review)
+(workflow/use-workflow! review/millstrand-review)
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
 (workflow/use-workflow! story/story)
@@ -46,8 +38,3 @@
 (chime/use-rule! attention/kanban-completed-rule)
 (chime/use-rule! attention/parked-run-rule)
 (cron/use-job! nvd-scan/nvd-scan)
-
-(workflow/use-executor! merge-queue/merge-turn-stalled?)
-(workflow/use-executor! merge-queue/merge-release-stalled?)
-(lifecycle/use-resource! merge-queue/queue-handler)
-(millstrand/use-op! merge-queue/merge-queue)

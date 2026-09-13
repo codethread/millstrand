@@ -43,7 +43,7 @@
       branch worktree))))
 
 (defn- fix-handoff-instruction
-  "Hand the validated fix to shared review, preserving its recorded card."
+  "Hand the validated fix to Millstrand review, preserving its recorded card."
   [{:keys [card branch worktree]}]
   (format-alpha/prose
    "
@@ -58,7 +58,7 @@
                  :card (or card "<fix/card>")})}))
 
 (workflow/defworkflow fix
-  "Run one light bug fix through the shared review handoff."
+  "Run one light bug fix through the full Millstrand review handoff."
   {:entrypoints #{:start}
    :param-spec ::fix-params
    :defaults {}

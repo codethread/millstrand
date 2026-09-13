@@ -38,12 +38,16 @@ Pass `--workspace "$workspace"` on every other `mill` or `strand` command in tha
 
 ## How work flows
 
-Every piece of work takes the same shape, whoever does it:
+Every piece of work takes the same path:
 
-1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (see the [Kanban spool README](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban)); half-formed ideas sit in the refinement lane until you promote them.
-2. **The devflow lifecycle.** A coordinator agent runs a feature through [Devflow](https://github.com/codethread/devflow.spool#readme) — proposal, spec/plan, tasks, implementation — in its own worktree, delegating tasks to worker agents.
-3. **Adversarial review.** Finished changes are reviewed by the declared rosters in [`.millstrand/me/agents/reviewers.clj`](./.millstrand/me/agents/reviewers.clj): small single-concern reviewers, synthesized cross-vendor so no model family signs off its own work.
-4. **Landing.** A coordinator drives the `land` workflow: draft PR, local quality gates, roster sign-off, verified squash-merge, and the canonical main quality contract after pull-main. Read `strand --workspace "$workspace" workflow show land`, then use generic workflow verbs and the policy boundaries in `strand --workspace "$workspace" help land`.
+1. Create a non-`main` worktree for the branch.
+2. Claim the feature card and record that branch and worktree. See the [Kanban spool README](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban); half-formed ideas stay in refinement until promoted.
+3. Run the development workflow and its tasks. [Devflow](https://github.com/codethread/devflow.spool#readme) covers proposal, spec and plan, tasks, and implementation.
+4. Drive the shared `land` workflow. It validates the pushed HEAD, runs one basic review, admits approved work to the FIFO queue, merges the exact final HEAD, updates canonical `main`, finishes the card, and cleans the branch and worktree.
+
+Millstrand also registers `millstrand-review` for changes that warrant the full repository roster. Use it when a development workflow requires that handoff or when the extra scrutiny is useful; it is not a prerequisite for every landing.
+
+Read `strand --workspace "$workspace" workflow show land` and `strand --workspace "$workspace" prime merge-queue` before landing. Use generic workflow verbs to drive the run. Never edit or push directly to `main`; feature-branch pushes are expected.
 
 You sit at the edges: describe outcomes, decide checkpoints, read the board.
 

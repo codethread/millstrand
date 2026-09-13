@@ -1,12 +1,13 @@
 {:paths ["."]
  :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
-        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "8f7d99354fef66b43693fcb2002c6ccdd5001267" :deps/root "spools/config"}
+        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "b23d84b06af25c56c009f1697bd13f1ed739091c" :deps/root "spools/config"}
         ct.spools/harnesses {:git/url "https://github.com/codethread/harnesses.spool.git" :git/sha "e8a26477852216bca2579b050a2356c86af132b7" :deps/root "."}
-        millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "3604419e406b3c426acd738bc2f0033cdb4edb25" :deps/root "spools/workflow"}
+        millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "89e5e32f8a948547c233d5dd183bb73f9c5abe4a" :deps/root "spools/land"}
+        millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "3132c8f7f10455c893da28fef0e9ca0047560f82" :deps/root "spools/workflow"}
+        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "3132c8f7f10455c893da28fef0e9ca0047560f82" :deps/root "spools/kanban"}
         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/chime"}
-        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}
-        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "291c11e21b3371d608b81380ae07a2578d1f49e5" :deps/root "spools/kanban"}}
+        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}}
  :aliases
  {:dev
   {:extra-paths ["."]
