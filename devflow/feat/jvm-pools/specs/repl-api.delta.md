@@ -1,9 +1,13 @@
 # REPL API delta for JVM pools
 
 **Document ID:** `DELTA-Jvp-003`
+
 **Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
 **Feature:** [../proposal.md](../proposal.md)
+
 **Status:** Implemented and promoted to [REPL API root spec](../../../specs/repl-api.md#spec-003p11-jvm-pool-refresh)
+
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jvp-003.P1 Summary

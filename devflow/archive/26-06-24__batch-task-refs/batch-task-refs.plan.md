@@ -18,7 +18,7 @@ Deliver stdin-driven batch task creation for agents: one EDN vector creates mult
 ## PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-001.AA1 | `src/todo` database layer | Add atomic batch validation/creation helper and result shape. |
 | PLAN-001.AA2 | `src/todo` CLI layer | Add `batch` command, stdin EDN parsing, command validation, and output formatting. |
 | PLAN-001.AA3 | `src/todo` specs namespace | Add specs/predicates for batch task and edge input where useful. |

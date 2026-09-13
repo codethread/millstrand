@@ -7,25 +7,24 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 - Always read `./devflow/TENETS.md`
 - When designing features, also read `./devflow/PHILOSOPHY.md` and `./devflow/UBIQUITOUS-LANGUAGE.md`
 
-| Path | What |
-| --- | --- |
-| `src/millstrand/` | Core runtime (`api`, `core`, `repl`) |
-| `spools/` | Shipped spools (batteries, workflow, …) |
-| `cli/` | Go CLIs (`strand`, `mill`) |
-| `tools/` | Repo tools (`kanban-tree`) |
-| `.millstrand/` | This repo's coordination workspace (board, workflows, harnesses) |
+| Path              | What                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| `src/millstrand/` | Core runtime (`api`, `core`, `repl`)                             |
+| `spools/`         | Shipped spools (batteries, workflow, …)                          |
+| `cli/`            | Go CLIs (`strand`, `mill`)                                       |
+| `tools/`          | Repo tools (`kanban-tree`)                                       |
+| `.millstrand/`    | This repo's coordination workspace (board, workflows, harnesses) |
 
 ## Working here
 
 - Run `strand prime kanban`, claim a feature card, and use its recorded worktree.
 - Never edit `main` or push directly to `main`; feature-branch pushes are expected.
-- Inspect `strand workflow show land` and `strand prime merge-queue`, then drive
-  shared `land` for quality, one basic review, FIFO merge, card completion, and
-  branch/worktree cleanup.
+- Inspect `strand workflow show land` and `strand prime merge-queue`, then drive shared `land` for quality, one basic review, FIFO merge, card completion, and branch/worktree cleanup.
 
 ## Rules
 
 Never stop the mill; only the user may stop it.
+
 - **Never restart a running weaver** without explicit user sign-off. Pickup ladder: `make build` (Go CLI); `runtime/refresh!` (config/startup/module source); targeted `(require 'ns :reload)` only for already-loaded base-classpath namespaces; `runtime/reload-code!` for code-only synced roots. Recipes: `docs/spools/customisation.md`.
 - **Kill by PID only** — never `pkill -f <pattern>` (prompts can quote the pattern and strafe siblings).
 - **Disposable workspaces for workspace-backed tests** (weaver-world fixtures, smoke config) — never the shared `.millstrand` world. Use `--workspace` from `mktemp -d`; guard with `${ws:?}`. Ordinary suite runs: see the `testing` skill.
@@ -36,11 +35,11 @@ Never stop the mill; only the user may stop it.
 
 Farm work out as tracked agent runs (`strand agent assign`/`run`); never harness-native subagents (recon-only). Load `strand prime agent` first. Multiple agents are valid, especially for recon.
 
-| Scenario | Seat |
-| --- | --- |
+| Scenario                                              | Seat        |
+| ----------------------------------------------------- | ----------- |
 | Mechanical tasks, testing loops, supervised iteration | `luna-high` |
-| Reviews against code during iterative development | `terra-med` |
-| Council / guidance on complex matters | `sol-high` |
+| Reviews against code during iterative development     | `terra-med` |
+| Council / guidance on complex matters                 | `sol-high`  |
 
 ## Agent loop
 
@@ -48,7 +47,7 @@ Farm work out as tracked agent runs (`strand agent assign`/`run`); never harness
 | --- | --- |
 | Run | `strand agent assign <agent> --task <task-id> --cwd <workdir>` |
 | Await | `strand await --query agent-run-settled --param run-id=<run-id> --min-count 1` |
-| Review | `strand agent review --cwd <workdir> [--base <ref>] [--agent NAME|--label LABEL]` |
+| Review | `strand agent review --cwd <workdir> [--base <ref>] [--agent NAME | --label LABEL]` |
 | Verify | Re-run Done-when in the task cwd, inspect the diff, then `strand update <task-id> --state closed` |
 | Resume | `strand agent resume --run-id <run-id> --prompt <continuation>` |
 

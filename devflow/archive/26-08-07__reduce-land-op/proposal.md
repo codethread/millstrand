@@ -1,8 +1,11 @@
 # Reduce the land op proposal
 
 **Document ID:** `PROP-Rlo-001`
+
 **Last Updated:** 2026-07-27
+
 **Related RFCs:** None
+
 **Related root specs:** None; `land` is trusted repo configuration rather than a shipped API contract.
 
 ## PROP-Rlo-001.P1 Problem

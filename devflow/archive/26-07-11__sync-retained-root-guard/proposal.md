@@ -1,177 +1,61 @@
 # Sync retained-root guard: fail loudly when a session-retained spool root is deleted
 
-**Document ID:** `PROP-srr-001` **Last Updated:** 2026-07-11 **Related RFCs:** None. **Related brief:**
-[brief.md](./brief.md) (scope is the contract) **Kanban:** card `pn7wh` (p2). **Extracted from:**
-[`unify-spool-classpath`](../26-07-11__unify-spool-classpath/proposal.md) (`PROP-usc-001`), the "own the spool classpath"
-concern — this card is the mitigation; the classloader redesign is that card's. **Related root specs:**
-[Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004, the `spools.edn` allowlist and `sync!` semantics),
-[Alpha Surface](../../specs/alpha-surface.md) — SPEC-005.C2 marks `skein.api.runtime.alpha` as blessed API; its
-`sync!`/`syncs` delegation to `spool-sync` is a code fact (`alpha.clj:20-28`), and SPEC-005.C5 marks `spool-sync`
-(`skein.core.*`) internal and free to change. **Related sources:**
-`src/skein/core/weaver/spool_sync.clj` (`sync-approved-spools`, `sync-approved-spool!`,
-`add-root-paths-to-spool-loader!`), `src/skein/api/runtime/alpha.clj` (`sync!`, `reload!`),
-`src/skein/core/weaver/runtime.clj` (`reload-config!`, `clear-reload-state!`),
-`clojure/repl/deps.clj` (`add-libs`), `clojure/java/basis.clj` (`current-basis`),
-`clojure/java/basis/impl.clj` (`the-basis`, `update-basis!`), `test/skein/runtime_deps_test.clj`
-(`keep-add-libs-root!`).
+**Document ID:** `PROP-srr-001` **Last Updated:** 2026-07-11 **Related RFCs:** None. **Related brief:** [brief.md](./brief.md) (scope is the contract) **Kanban:** card `pn7wh` (p2). **Extracted from:** [`unify-spool-classpath`](../26-07-11__unify-spool-classpath/proposal.md) (`PROP-usc-001`), the "own the spool classpath" concern — this card is the mitigation; the classloader redesign is that card's. **Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004, the `spools.edn` allowlist and `sync!` semantics), [Alpha Surface](../../specs/alpha-surface.md) — SPEC-005.C2 marks `skein.api.runtime.alpha` as blessed API; its `sync!`/`syncs` delegation to `spool-sync` is a code fact (`alpha.clj:20-28`), and SPEC-005.C5 marks `spool-sync` (`skein.core.*`) internal and free to change. **Related sources:** `src/skein/core/weaver/spool_sync.clj` (`sync-approved-spools`, `sync-approved-spool!`, `add-root-paths-to-spool-loader!`), `src/skein/api/runtime/alpha.clj` (`sync!`, `reload!`), `src/skein/core/weaver/runtime.clj` (`reload-config!`, `clear-reload-state!`), `clojure/repl/deps.clj` (`add-libs`), `clojure/java/basis.clj` (`current-basis`), `clojure/java/basis/impl.clj` (`the-basis`, `update-basis!`), `test/skein/runtime_deps_test.clj` (`keep-add-libs-root!`).
 
-**Reading context.** A *spool* is trusted authorable Clojure approved in `spools.edn` and loaded into the weaver
-by `runtime/sync!`. `sync!` loads each approved `:local/root` by handing it to `clojure.repl.deps/add-libs`, which
-mutates a *process-global* runtime basis that persists for the JVM lifetime — the "session" in this document is one
-weaver JVM lifetime, and a "session-retained root" is a `:local/root` that any prior `add-libs` in that JVM merged
-into that basis. This feature adds one preflight to `sync!` and one loud failure; it changes no loader, no
-classloader, and no healthy-path behavior. Every point ID is a grepable anchor; source citations name a stable site
-(a fn, a config key) and any `file:line` is secondary, verified at authoring in the `sync-retained-root-guard`
-worktree.
+**Reading context.** A _spool_ is trusted authorable Clojure approved in `spools.edn` and loaded into the weaver by `runtime/sync!`. `sync!` loads each approved `:local/root` by handing it to `clojure.repl.deps/add-libs`, which mutates a _process-global_ runtime basis that persists for the JVM lifetime — the "session" in this document is one weaver JVM lifetime, and a "session-retained root" is a `:local/root` that any prior `add-libs` in that JVM merged into that basis. This feature adds one preflight to `sync!` and one loud failure; it changes no loader, no classloader, and no healthy-path behavior. Every point ID is a grepable anchor; source citations name a stable site (a fn, a config key) and any `file:line` is secondary, verified at authoring in the `sync-retained-root-guard` worktree.
 
 ## PROP-srr-001.P1 Problem
 
-`skein.api.runtime.alpha/sync!` (`runtime/alpha.clj:20-23`) delegates to
-`skein.core.weaver.spool-sync/sync-approved-spools` (`spool_sync.clj:484-493`), which resets skein's
-`:approved-spool-sync-state` atom, then maps `sync-approved-spool!` over the approved allowlist. For each approved
-local root, `sync-approved-spool!` (`spool_sync.clj:446-482`) calls, inside `with-spool-classloader`:
+`skein.api.runtime.alpha/sync!` (`runtime/alpha.clj:20-23`) delegates to `skein.core.weaver.spool-sync/sync-approved-spools` (`spool_sync.clj:484-493`), which resets skein's `:approved-spool-sync-state` atom, then maps `sync-approved-spool!` over the approved allowlist. For each approved local root, `sync-approved-spool!` (`spool_sync.clj:446-482`) calls, inside `with-spool-classloader`:
 
 ```clojure
 ;; spool_sync.clj:466-471
 (repl-deps/add-libs {lib {:local/root (:root entry)}})
 ```
 
-`add-libs` is not a per-lib operation. Its implementation (`clojure/repl/deps.clj:35-57`) reads the current runtime
-basis and re-resolves against the **entire retained universe** — but only when there is genuinely-new work to do:
+`add-libs` is not a per-lib operation. Its implementation (`clojure/repl/deps.clj:35-57`) reads the current runtime basis and re-resolves against the **entire retained universe** — but only when there is genuinely-new work to do:
 
-- `clojure/repl/deps.clj:41-45` — it derefs the process-global basis, and **filters the passed coordinates against
-  the libs already retained this JVM**, then `(when-not (empty? lib-coords) …)`. An `add-libs` for an already-retained
-  lib filters to empty and early-returns without re-resolving; only a genuinely-new coordinate reaches the tool call.
-- `clojure/repl/deps.clj:48` — that tool call is `{:existing libs, :add lib-coords, :procurer procurer}` →
-  `clojure.tools.deps/resolve-added-libs`. The **whole** retained `:libs` map is passed as `:existing` and
-  re-canonicalized alongside the one new coordinate.
-- `clojure/repl/deps.clj:53` — `(basis-impl/update-basis! update :libs merge added)` merges the newly-resolved libs
-  back into the global basis. `update-basis!` (`clojure/java/basis/impl.clj:48-51`) `swap!`s `@the-basis`, a
-  delay-wrapped process-global atom (`impl.clj:44-46`). This is the JVM-lifetime retention: nothing in skein or
-  tools.deps evicts a `:local/root` once added.
+- `clojure/repl/deps.clj:41-45` — it derefs the process-global basis, and **filters the passed coordinates against the libs already retained this JVM**, then `(when-not (empty? lib-coords) …)`. An `add-libs` for an already-retained lib filters to empty and early-returns without re-resolving; only a genuinely-new coordinate reaches the tool call.
+- `clojure/repl/deps.clj:48` — that tool call is `{:existing libs, :add lib-coords, :procurer procurer}` → `clojure.tools.deps/resolve-added-libs`. The **whole** retained `:libs` map is passed as `:existing` and re-canonicalized alongside the one new coordinate.
+- `clojure/repl/deps.clj:53` — `(basis-impl/update-basis! update :libs merge added)` merges the newly-resolved libs back into the global basis. `update-basis!` (`clojure/java/basis/impl.clj:48-51`) `swap!`s `@the-basis`, a delay-wrapped process-global atom (`impl.clj:44-46`). This is the JVM-lifetime retention: nothing in skein or tools.deps evicts a `:local/root` once added.
 
-**The failure.** When a session-retained local root is deleted from disk, the *next* `add-libs` that adds a
-not-yet-retained lib — for any spool, including an unrelated one — re-canonicalizes the deleted path while processing
-`:existing` and throws. The thrown error names the stale retained lib and its old path, not the spool being synced.
-`sync-approved-spool!` catches it into a `:runtime-add-failed` sync result (`spool_sync.clj:478-482`) attributed to
-the *new* lib, so the recorded failure blames the wrong spool. Observed on the live canonical weaver: deleting the
-vendored `skein.spools/kanban` root bricked `reload!`; the subsequent `codethread/kanban` sync — a genuinely-new
-coordinate, so it re-resolved — failed with an error citing the deleted `skein.spools/kanban` path. The remedy —
-recreate a stub directory at the deleted path so canonicalization succeeds until the next restart clears
-`the-basis` — had to be reverse-engineered from the stack trace.
+**The failure.** When a session-retained local root is deleted from disk, the _next_ `add-libs` that adds a not-yet-retained lib — for any spool, including an unrelated one — re-canonicalizes the deleted path while processing `:existing` and throws. The thrown error names the stale retained lib and its old path, not the spool being synced. `sync-approved-spool!` catches it into a `:runtime-add-failed` sync result (`spool_sync.clj:478-482`) attributed to the _new_ lib, so the recorded failure blames the wrong spool. Observed on the live canonical weaver: deleting the vendored `skein.spools/kanban` root bricked `reload!`; the subsequent `codethread/kanban` sync — a genuinely-new coordinate, so it re-resolved — failed with an error citing the deleted `skein.spools/kanban` path. The remedy — recreate a stub directory at the deleted path so canonicalization succeeds until the next restart clears `the-basis` — had to be reverse-engineered from the stack trace.
 
-**Why skein cannot already see this.** `reload!` (`runtime/alpha.clj:30-33`) → `reload-config!`
-(`runtime.clj:273-303`) → `clear-reload-state!` (`runtime.clj:262-271`) resets skein's
-`:approved-spool-sync-state` atom to `{}` on every reload, but does **not** touch tools.deps' `the-basis`. So after
-a reload skein's own sync state is empty while the retained universe is intact: the deleted-root fact lives only in
-`(:libs (clojure.java.basis/current-basis))`, which `sync!` never inspects before calling `add-libs`. The existing
-per-entry existence check (`spool_sync.clj:454`, `(not (.exists root-file))` → `:missing-root`) guards only the
-root of the entry *being synced*, never the retained universe that poisons the `add-libs` call.
+**Why skein cannot already see this.** `reload!` (`runtime/alpha.clj:30-33`) → `reload-config!` (`runtime.clj:273-303`) → `clear-reload-state!` (`runtime.clj:262-271`) resets skein's `:approved-spool-sync-state` atom to `{}` on every reload, but does **not** touch tools.deps' `the-basis`. So after a reload skein's own sync state is empty while the retained universe is intact: the deleted-root fact lives only in `(:libs (clojure.java.basis/current-basis))`, which `sync!` never inspects before calling `add-libs`. The existing per-entry existence check (`spool_sync.clj:454`, `(not (.exists root-file))` → `:missing-root`) guards only the root of the entry _being synced_, never the retained universe that poisons the `add-libs` call.
 
-This retention hazard is already known in-repo: `test/skein/runtime_deps_test.clj` carries `keep-add-libs-root!`
-whose comment states "tools.deps keeps add-libs local roots in JVM-global basis state. Retaining temp spool roots
-prevents later add-libs calls in this shard from failing while canonicalizing an earlier, now-deleted local/root
-coordinate." The test works *around* the hazard; this feature makes it a diagnosable failure.
+This retention hazard is already known in-repo: `test/skein/runtime_deps_test.clj` carries `keep-add-libs-root!` whose comment states "tools.deps keeps add-libs local roots in JVM-global basis state. Retaining temp spool roots prevents later add-libs calls in this shard from failing while canonicalizing an earlier, now-deleted local/root coordinate." The test works _around_ the hazard; this feature makes it a diagnosable failure.
 
 ## PROP-srr-001.P2 Goals
 
-- **PROP-srr-001.G1:** A preflight in `sync-approved-spools` that, before any `add-libs` runs, detects
-  session-retained `:local/root` libs whose path is missing from disk and has left the approved allowlist.
-- **PROP-srr-001.G2 (fail loudly, TEN-003):** On detection, throw an `ex-info` whose message and data name (a) the
-  retained lib coordinate, (b) the deleted path, and (c) both remedies — stub directory (until next restart) or
-  weaver restart — so the operator gets the failing value and the allowed alternatives without reading a stack
-  trace.
-- **PROP-srr-001.G3 (TEN-004, minimal surface):** One preflight, one failure. No new sync-state field, no new
-  config key, no change to `add-libs` call sites, `use!`, the classloader, or the per-entry `:missing-root` path.
+- **PROP-srr-001.G1:** A preflight in `sync-approved-spools` that, before any `add-libs` runs, detects session-retained `:local/root` libs whose path is missing from disk and has left the approved allowlist.
+- **PROP-srr-001.G2 (fail loudly, TEN-003):** On detection, throw an `ex-info` whose message and data name (a) the retained lib coordinate, (b) the deleted path, and (c) both remedies — stub directory (until next restart) or weaver restart — so the operator gets the failing value and the allowed alternatives without reading a stack trace.
+- **PROP-srr-001.G3 (TEN-004, minimal surface):** One preflight, one failure. No new sync-state field, no new config key, no change to `add-libs` call sites, `use!`, the classloader, or the per-entry `:missing-root` path.
 - **PROP-srr-001.G4:** Healthy syncs — every retained root still present on disk — behave exactly as today.
 
 ## PROP-srr-001.P3 Non-goals
 
-- **PROP-srr-001.NG1 — no classloader / retained-universe redesign.** The root cause is that `add-libs`
-  re-canonicalizes the whole retained `:libs` on every re-resolving add and never evicts a `:local/root`. Fixing that
-  (an isolated spool classloader that skein controls, or per-sync basis scoping) is the "own the spool classpath"
-  refinement card's, not this one (brief "Deliberately not built").
-- **PROP-srr-001.NG2 — no auto-repair.** The preflight does not create the stub directory, prune the retained
-  basis, or restart the weaver. Per TEN-003 it names the failing value and the allowed remedies and stops; the
-  operator chooses.
-- **PROP-srr-001.NG3 — no change to healthy-root behavior or to the per-entry `:missing-root` result**
-  (`spool_sync.clj:454`). The per-entry check guards the entry being synced; the preflight is disjoint — it flags
-  only retained roots that have *left* the allowlist, so a still-approved deleted root is left entirely to the
-  per-entry `:missing-root` path. Neither absorbs the other.
-- **PROP-srr-001.NG4 — no eviction of the retained basis.** This feature reads `the-basis`; it never mutates it.
-  Mutating a process-global tools.deps atom to "unretain" a root is exactly the redesign NG1 defers.
+- **PROP-srr-001.NG1 — no classloader / retained-universe redesign.** The root cause is that `add-libs` re-canonicalizes the whole retained `:libs` on every re-resolving add and never evicts a `:local/root`. Fixing that (an isolated spool classloader that skein controls, or per-sync basis scoping) is the "own the spool classpath" refinement card's, not this one (brief "Deliberately not built").
+- **PROP-srr-001.NG2 — no auto-repair.** The preflight does not create the stub directory, prune the retained basis, or restart the weaver. Per TEN-003 it names the failing value and the allowed remedies and stops; the operator chooses.
+- **PROP-srr-001.NG3 — no change to healthy-root behavior or to the per-entry `:missing-root` result** (`spool_sync.clj:454`). The per-entry check guards the entry being synced; the preflight is disjoint — it flags only retained roots that have _left_ the allowlist, so a still-approved deleted root is left entirely to the per-entry `:missing-root` path. Neither absorbs the other.
+- **PROP-srr-001.NG4 — no eviction of the retained basis.** This feature reads `the-basis`; it never mutates it. Mutating a process-global tools.deps atom to "unretain" a root is exactly the redesign NG1 defers.
 
 ## PROP-srr-001.P4 Proposed scope
 
-- **PROP-srr-001.S1 — retained-root preflight.** At the top of `sync-approved-spools` (`spool_sync.clj:484-493`),
-  once per sync and before any `add-libs` (`spool_sync.clj:466-471`), scan the session-retained universe —
-  `(:libs (clojure.java.basis/current-basis))`, the same accessor `add-libs` reads (`clojure/repl/deps.clj:41`), which
-  `current-basis` (`clojure/java/basis.clj:43-47`) derefs from the process-global `the-basis`. Flag every `:libs`
-  entry that (a) carries a `:local/root`, (b) whose `io/file` no longer `.exists`, **and** (c) is not in the current
-  approved allowlist. Maven-resolved deps carry no `:local/root` and are out of scope. Excluding still-approved roots
-  is deliberate: a deleted root that is still in `spools.edn` is left to the per-entry `:missing-root` check
-  (`spool_sync.clj:454`), so the preflight catches exactly the roots that have left the allowlist and would poison the
-  next re-resolving `add-libs` for an unrelated spool — the `skein.spools/kanban`→`codethread/kanban` case that
-  bricked the live weaver. When the basis is nil/empty (process not launched by the CLI) there are no retained local
-  roots and the preflight is a no-op (G4). No dependency is added: `clojure.java.basis` and `clojure.repl.deps` are
-  already on the runtime classpath.
-- **PROP-srr-001.S2 — loud failure (TEN-003).** On finding one or more retained-but-deleted roots the preflight
-  throws an `ex-info` before the map, giving the operator the failing value and the allowed alternatives:
-  - **Message:** states a session-retained spool root was deleted from disk and that `sync!` cannot proceed because
-    tools.deps will re-canonicalize the retained root on the next re-resolving `add-libs`; names the retained lib and
-    the deleted path in prose so the stack-trace-free reader sees the cause.
-  - **`ex-data`:** `:missing-roots` — a vector of `{:lib <retained lib symbol> :local/root <deleted path string>}`,
-    one per missing root, so the operator gets all of them at once rather than failing, fixing one, and re-failing;
-    `:remedy` — the allowed alternatives, named not applied (NG2): `:stub-dir` (recreate a bare directory at each
-    deleted path — a bare directory suffices for canonicalization — effective until the next weaver restart clears the
-    retained basis) and `:restart` (restart the weaver JVM, which discards `the-basis` and its retained roots; the
-    durable fix when the root is gone for good and its lib has left the allowlist); `:retained-universe-source` — the
-    accessor the operator or a future refinement can inspect, `clojure.java.basis/current-basis` `:libs`, so the
-    diagnostic is self-describing.
+- **PROP-srr-001.S1 — retained-root preflight.** At the top of `sync-approved-spools` (`spool_sync.clj:484-493`), once per sync and before any `add-libs` (`spool_sync.clj:466-471`), scan the session-retained universe — `(:libs (clojure.java.basis/current-basis))`, the same accessor `add-libs` reads (`clojure/repl/deps.clj:41`), which `current-basis` (`clojure/java/basis.clj:43-47`) derefs from the process-global `the-basis`. Flag every `:libs` entry that (a) carries a `:local/root`, (b) whose `io/file` no longer `.exists`, **and** (c) is not in the current approved allowlist. Maven-resolved deps carry no `:local/root` and are out of scope. Excluding still-approved roots is deliberate: a deleted root that is still in `spools.edn` is left to the per-entry `:missing-root` check (`spool_sync.clj:454`), so the preflight catches exactly the roots that have left the allowlist and would poison the next re-resolving `add-libs` for an unrelated spool — the `skein.spools/kanban`→`codethread/kanban` case that bricked the live weaver. When the basis is nil/empty (process not launched by the CLI) there are no retained local roots and the preflight is a no-op (G4). No dependency is added: `clojure.java.basis` and `clojure.repl.deps` are already on the runtime classpath.
+- **PROP-srr-001.S2 — loud failure (TEN-003).** On finding one or more retained-but-deleted roots the preflight throws an `ex-info` before the map, giving the operator the failing value and the allowed alternatives:
+    - **Message:** states a session-retained spool root was deleted from disk and that `sync!` cannot proceed because tools.deps will re-canonicalize the retained root on the next re-resolving `add-libs`; names the retained lib and the deleted path in prose so the stack-trace-free reader sees the cause.
+    - **`ex-data`:** `:missing-roots` — a vector of `{:lib <retained lib symbol> :local/root <deleted path string>}`, one per missing root, so the operator gets all of them at once rather than failing, fixing one, and re-failing; `:remedy` — the allowed alternatives, named not applied (NG2): `:stub-dir` (recreate a bare directory at each deleted path — a bare directory suffices for canonicalization — effective until the next weaver restart clears the retained basis) and `:restart` (restart the weaver JVM, which discards `the-basis` and its retained roots; the durable fix when the root is gone for good and its lib has left the allowlist); `:retained-universe-source` — the accessor the operator or a future refinement can inspect, `clojure.java.basis/current-basis` `:libs`, so the diagnostic is self-describing.
 
-  The exception propagates through `sync!` and, on the reload path, through `reload-config!` (`runtime.clj:282`)
-  exactly like any other startup-file failure — `reload-config!` already leaves partially-loaded state in place and
-  rethrows loudly (`runtime.clj:294-303`), so no reload-path change is needed. Unlike a `:runtime-add-failed` sync
-  result (`spool_sync.clj:478-482`), the preflight failure is attributed to the actually-broken retained lib, not to
-  whichever entry `add-libs` happened to be processing.
-- **PROP-srr-001.S3 — cold focused tests.** Extend `test/skein/runtime_deps_test.clj` (which already owns
-  add-libs-against-a-live-weaver coverage and documents this retention hazard in `keep-add-libs-root!`) to cover: a
-  retained root that has left the allowlist and been deleted fails loudly with an `ex-info` whose `:missing-roots`
-  names the lib and path and whose `:remedy` names `:stub-dir` and `:restart`; healthy retained roots are a no-op
-  (G4); multiple missing roots are all reported; and the `:stub-dir` remedy unblocks a re-sync. Each case that deletes
-  a retained root runs in an isolated worktree/temp world so the poisoned root does not leak into a sibling test
-  shard's process-global basis, consistent with `keep-add-libs-root!`'s shard-isolation caution. Cold focused gate:
-  `clojure -M:test skein.runtime-deps-test`. No Go, smoke, or api-docs surface changes.
+    The exception propagates through `sync!` and, on the reload path, through `reload-config!` (`runtime.clj:282`) exactly like any other startup-file failure — `reload-config!` already leaves partially-loaded state in place and rethrows loudly (`runtime.clj:294-303`), so no reload-path change is needed. Unlike a `:runtime-add-failed` sync result (`spool_sync.clj:478-482`), the preflight failure is attributed to the actually-broken retained lib, not to whichever entry `add-libs` happened to be processing.
+
+- **PROP-srr-001.S3 — cold focused tests.** Extend `test/skein/runtime_deps_test.clj` (which already owns add-libs-against-a-live-weaver coverage and documents this retention hazard in `keep-add-libs-root!`) to cover: a retained root that has left the allowlist and been deleted fails loudly with an `ex-info` whose `:missing-roots` names the lib and path and whose `:remedy` names `:stub-dir` and `:restart`; healthy retained roots are a no-op (G4); multiple missing roots are all reported; and the `:stub-dir` remedy unblocks a re-sync. Each case that deletes a retained root runs in an isolated worktree/temp world so the poisoned root does not leak into a sibling test shard's process-global basis, consistent with `keep-add-libs-root!`'s shard-isolation caution. Cold focused gate: `clojure -M:test skein.runtime-deps-test`. No Go, smoke, or api-docs surface changes.
 
 ## PROP-srr-001.P5 Open questions
 
-Open questions: **None.** The alternatives below were weighed and resolved at authoring; they are recorded so the
-plan author inherits the rationale.
+Open questions: **None.** The alternatives below were weighed and resolved at authoring; they are recorded so the plan author inherits the rationale.
 
-- **PROP-srr-001.Q1 — preflight vs. wrapping the `add-libs` failure? (resolved: preflight, S1).** Catching the
-  tools.deps canonicalization error inside `sync-approved-spool!` and rewriting it would still fire *after*
-  `add-libs`, would depend on parsing tools.deps' error shape (brittle across versions), and would attribute the
-  failure to whichever entry was mid-sync. **Adopted: a preflight that reads the same basis `add-libs` reads and fails
-  first, naming the real culprit.**
-- **PROP-srr-001.Q2 — read retained roots from skein's sync-state or tools.deps' basis? (resolved: the basis, S1).**
-  Skein's `:approved-spool-sync-state` records `:root` per synced lib (`spool_sync.clj:155-160`), but
-  `clear-reload-state!` (`runtime.clj:262-271`) empties it every reload while the retained universe survives — so
-  sync-state is blind to exactly the cross-reload case that bricked the live weaver. **Adopted:
-  `(:libs (clojure.java.basis/current-basis))`, the authoritative retained universe and the same value
-  `resolve-added-libs` re-canonicalizes.**
-- **PROP-srr-001.Q3 — fail the whole sync or record a per-lib sync result? (resolved: fail loudly, S2).** A soft
-  `:failed` sync result (like `:runtime-add-failed`) would let the poisoned sync limp on, and the next re-resolving
-  `add-libs` would still throw the misleading tools.deps error. A retained-but-deleted allowlist-orphan breaks the
-  *whole* `add-libs` universe, not one entry, so degrading it to a per-entry status understates the blast radius.
-  **Adopted: throw from `sync-approved-spools`, aborting the sync with a named cause and named remedies.**
-- **PROP-srr-001.Q4 — auto-stub or prune the retained basis? (resolved: report only, NG2/NG4).** The preflight
-  *could* `mkdir` the deleted path or `update-basis!` the stale lib out. Both are the redesign this card explicitly
-  defers, and both mutate global/on-disk state on the operator's behalf without sign-off. **Adopted: name the remedy,
-  do not apply it** — the stub-vs-restart choice is the operator's, and the durable fix is the refinement card's.
-- **PROP-srr-001.Q5 — should the preflight also catch a still-approved root deleted from disk? (resolved: no,
-  defer to per-entry, S1/NG3).** Narrowing the predicate to allowlist-orphans (S1) leaves a residual window: a root
-  that is still approved but deleted, hit while an unrelated spool adds a genuinely-new coordinate, still surfaces the
-  misleading tools.deps error rather than the preflight's. Widening the predicate to all missing retained roots would
-  abort the whole sync in the far more common case where the deleted root is still approved and today completes via
-  the soft `:missing-root` path — regressing G4/NG3. **Adopted: catch only allowlist-orphans now; the residual window
-  closes fully only with the classloader redesign (NG1).**
+- **PROP-srr-001.Q1 — preflight vs. wrapping the `add-libs` failure? (resolved: preflight, S1).** Catching the tools.deps canonicalization error inside `sync-approved-spool!` and rewriting it would still fire _after_ `add-libs`, would depend on parsing tools.deps' error shape (brittle across versions), and would attribute the failure to whichever entry was mid-sync. **Adopted: a preflight that reads the same basis `add-libs` reads and fails first, naming the real culprit.**
+- **PROP-srr-001.Q2 — read retained roots from skein's sync-state or tools.deps' basis? (resolved: the basis, S1).** Skein's `:approved-spool-sync-state` records `:root` per synced lib (`spool_sync.clj:155-160`), but `clear-reload-state!` (`runtime.clj:262-271`) empties it every reload while the retained universe survives — so sync-state is blind to exactly the cross-reload case that bricked the live weaver. **Adopted: `(:libs (clojure.java.basis/current-basis))`, the authoritative retained universe and the same value `resolve-added-libs` re-canonicalizes.**
+- **PROP-srr-001.Q3 — fail the whole sync or record a per-lib sync result? (resolved: fail loudly, S2).** A soft `:failed` sync result (like `:runtime-add-failed`) would let the poisoned sync limp on, and the next re-resolving `add-libs` would still throw the misleading tools.deps error. A retained-but-deleted allowlist-orphan breaks the _whole_ `add-libs` universe, not one entry, so degrading it to a per-entry status understates the blast radius. **Adopted: throw from `sync-approved-spools`, aborting the sync with a named cause and named remedies.**
+- **PROP-srr-001.Q4 — auto-stub or prune the retained basis? (resolved: report only, NG2/NG4).** The preflight _could_ `mkdir` the deleted path or `update-basis!` the stale lib out. Both are the redesign this card explicitly defers, and both mutate global/on-disk state on the operator's behalf without sign-off. **Adopted: name the remedy, do not apply it** — the stub-vs-restart choice is the operator's, and the durable fix is the refinement card's.
+- **PROP-srr-001.Q5 — should the preflight also catch a still-approved root deleted from disk? (resolved: no, defer to per-entry, S1/NG3).** Narrowing the predicate to allowlist-orphans (S1) leaves a residual window: a root that is still approved but deleted, hit while an unrelated spool adds a genuinely-new coordinate, still surfaces the misleading tools.deps error rather than the preflight's. Widening the predicate to all missing retained roots would abort the whole sync in the far more common case where the deleted root is still approved and today completes via the soft `:missing-root` path — regressing G4/NG3. **Adopted: catch only allowlist-orphans now; the residual window closes fully only with the classloader redesign (NG1).**

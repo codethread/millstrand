@@ -1,6 +1,7 @@
 Implement PLAN-Pnl-001.PH4: panel shape, compiler, spawner (A4, A5). FILE SCOPE: spools/agents/src/skein/spools/agents.clj and test/skein/agents_test.clj. Depends on PH1 (:resume spawn opt) and PH3 (fragments) already in tree.
 
 Work:
+
 - clojure.spec :skein.spools.agents/panel per plan A4: {:seats [{:name :harness :brief :scope? :continuity?}] :turns? {:rounds n} :blackboard? :target|:fresh :synthesis? {:harness :brief?}|:none}. Validation follows the house order: closed keys + uniqueness BEFORE spec conform (PLAN-Rfo-001.DN6). Defaults: turns {:rounds 1}, blackboard :target, continuity :fresh.
 - panel-specs (pure): INLINE panel values only (no registry — plan A5); target/blackboard directive + :review-id override like roster-review-specs; output: per-turn run specs {:name :harness :prompt :resume-prompt? :attrs :resume-ref?}, synthesis spec, :review-pass; output spec :skein.spools.agents/panel-specs; every run spec stamps shuttle/panel-seat, shuttle/panel-turn, review-pass/target attrs.
 - Turn wiring: turn row r depends-on EVERY seat run of row r-1 (barrier); rounds=1 degenerates to the review shape. :continuity :resume threads turn r>1 runs via spawn :resume pointing at that seat's previous turn run (resume-ref in specs; the spawner resolves it to run ids at spawn time); resumed turns use :resume-prompt, fresh turns the full :prompt.
@@ -10,6 +11,7 @@ Work:
 Tests: compiler output conforms to its spec (with/without synthesis, keyword+string harnesses); multi-round resumed panel against fake harnesses (barriers as depends-on edges, resume threading, prompt-form selection); fresh blackboard minting; loud failures (malformed panel, unknown keys, blank target with :target blackboard, continuity :resume on a harness without :resume fails AT SPAWN loudly).
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

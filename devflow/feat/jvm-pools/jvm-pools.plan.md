@@ -1,13 +1,21 @@
 # JVM pools plan
 
 **Document ID:** `PLAN-Jvp-001`
+
 **Feature:** `jvm-pools`
+
 **Proposal:** [proposal.md](./proposal.md)
+
 **RFC:** None
+
 **Root specs:** [CLI](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md)
+
 **Feature specs:** [CLI delta](./specs/cli.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [REPL API delta](./specs/repl-api.delta.md)
+
 **Implementation contract:** [implementation-contract.md](./implementation-contract.md)
+
 **Status:** Implemented
+
 **Last Updated:** 2026-09-11
 
 ## PLAN-Jvp-001.P1 Goal and scope

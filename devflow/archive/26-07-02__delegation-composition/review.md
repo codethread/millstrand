@@ -20,16 +20,6 @@ request-changes
 
 ## Coordinator fixes applied
 
-- Fixed the replacement reviewer's should-fix: shuttle gains
-  `set-default-review-contract!` (weaver-lifetime, like harness aliases);
-  `config/install!` sets it to `delegation-policy-text`, so `review!` and
-  `strand op agent review` consume the authoritative policy text by default
-  while explicit `:contract`/`--contract` still overrides. Regression tests in
-  shuttle and config suites.
-- Also fixed (found live, outside review scope): `agent ps --active` was
-  rejected by the new parse-argv flag handling ("Unknown flag"); bare-flag
-  handling restored with regression coverage.
-- Pipeline observation for the record: the original review run (i2jus) exited
-  0 with empty output, so its gate closed with no findings anywhere — gate
-  success does not verify contract fulfillment. Recorded in RFC outcomes as a
-  follow-up (result-validation hook for treadle/shuttle).
+- Fixed the replacement reviewer's should-fix: shuttle gains `set-default-review-contract!` (weaver-lifetime, like harness aliases); `config/install!` sets it to `delegation-policy-text`, so `review!` and `strand op agent review` consume the authoritative policy text by default while explicit `:contract`/`--contract` still overrides. Regression tests in shuttle and config suites.
+- Also fixed (found live, outside review scope): `agent ps --active` was rejected by the new parse-argv flag handling ("Unknown flag"); bare-flag handling restored with regression coverage.
+- Pipeline observation for the record: the original review run (i2jus) exited 0 with empty output, so its gate closed with no findings anywhere — gate success does not verify contract fulfillment. Recorded in RFC outcomes as a follow-up (result-validation hook for treadle/shuttle).

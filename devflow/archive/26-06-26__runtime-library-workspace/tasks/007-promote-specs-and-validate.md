@@ -21,7 +21,7 @@ Promote the runtime library workspace contracts into root specs and run full val
 
 - **RLW-TASK-007.D1:** Root specs are canonical for the shipped runtime library workspace behavior and no longer describe `load-plugin!` as public extension API.
 - **RLW-TASK-007.D2:** Full validation passes:
-  - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`
-  - `(cd cli && go test ./...)`
-  - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`
+    - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`
+    - `(cd cli && go test ./...)`
+    - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`
 - **RLW-TASK-007.D3:** `git status --short` shows no generated SQLite/runtime artifacts.

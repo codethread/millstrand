@@ -10,7 +10,7 @@
 
 A spool that tracks work it does not perform — a kanban card, a ticket, an intake form — knows there is a hand-off to a routine it cannot name when it is authored, and owns wrap-up afterwards: close the card, record the outcome, notify.
 
-The engine cannot express that hand-off *within one molecule*:
+The engine cannot express that hand-off _within one molecule_:
 
     step a  ->  <routine selected at run time>  ->  step c
 
@@ -21,14 +21,14 @@ That refusal is correct. `defer` was specified as terminal deliberately (PROP-Wc
 Two corrections to how this gap was first framed, both from review (`per7e`, `9d4yx`):
 
 - **A root transfer does not destroy the run.** `continue-plan` pours the replacement under the same run id (`internal/routing.clj:391-400`), as the shipped contract states (`spools/workflow.md:467-477`). What is replaced is the current root and its implicit context.
-- **The wrap-up already has somewhere to live.** User code can bind the tracker's defer to an *adapter* workflow it owns; the adapter makes a fixed `call` to the routine and then defers to the tracker's wrap-up. The routine needs only the `:call` entrypoint — it does not have to declare an exit back. This was probed end to end against this checkout and drives the whole motivating case under one run id (RFC-Dyc-001.REC1, note `9d4yx`).
+- **The wrap-up already has somewhere to live.** User code can bind the tracker's defer to an _adapter_ workflow it owns; the adapter makes a fixed `call` to the routine and then defers to the tracker's wrap-up. The routine needs only the `:call` entrypoint — it does not have to declare an exit back. This was probed end to end against this checkout and drives the whole motivating case under one run id (RFC-Dyc-001.REC1, note `9d4yx`).
 
 So the problem is narrower than it looked. What remains genuinely unavailable is: one molecule spanning the hand-off, the tracker's root context surviving it, and an allowlist large enough that per-target adapters become a burden.
 
 ## PROP-Dyc-001.P2 Goals
 
 - **PROP-Dyc-001.G1:** A tracking workflow can reach a routine it cannot name at authoring time and still run its own wrap-up afterwards, through a supported and discoverable route.
-- **PROP-Dyc-001.G2:** The publishing spool names *where* the hand-off is without naming what fills it; user code that can see both spools names what it may reach.
+- **PROP-Dyc-001.G2:** The publishing spool names _where_ the hand-off is without naming what fills it; user code that can see both spools names what it may reach.
 - **PROP-Dyc-001.G3:** No new engine vocabulary unless a consumer needs a property userland composition cannot supply (TEN-004).
 - **PROP-Dyc-001.G4:** If vocabulary is added, every failure mode — unknown target, missing entrypoint, cycle, rejected params — fails before any mutation and leaves the hand-off ready to retry (TEN-003).
 
@@ -44,7 +44,7 @@ So the problem is narrower than it looked. What remains genuinely unavailable is
 
 **Decision, 2026-07-26, code owner:** build Scope B, designed greenfield. The instruction was "if this were greenfield, what design would we build without accidental constraints holding us back — that's the design." Scope A ships alongside it: the adapter composition stays a legitimate answer for the cases where a genuine transfer of ownership is what the author means, and the recipe documents it. Q1 is answered; the single-molecule property is wanted on its own merits.
 
-Greenfield framing that governs the design work: `call` and the runtime-selected hand-off are not two constructs, they are one construct on two axes — *does control return* and *when is the target known*. Today's vocabulary populates three of the four cells (`call`, `defer`, checkpoint `:next`) and leaves returns × runtime-selected empty. The design pins that cell as a first-class role rather than bolting a second mode onto `call`, and the binding authority boundary is generalised across every hand-off kind rather than being defer-specific.
+Greenfield framing that governs the design work: `call` and the runtime-selected hand-off are not two constructs, they are one construct on two axes — _does control return_ and _when is the target known_. Today's vocabulary populates three of the four cells (`call`, `defer`, checkpoint `:next`) and leaves returns × runtime-selected empty. The design pins that cell as a first-class role rather than bolting a second mode onto `call`, and the binding authority boundary is generalised across every hand-off kind rather than being defer-specific.
 
 ### Scope A — document the composition (ships alongside)
 
@@ -68,7 +68,7 @@ Settled design constraints, from review, that the build must honour:
 
 ## PROP-Dyc-001.P5 Open questions
 
-- **PROP-Dyc-001.Q1:** *Answered (P4 decision).* Scope B is built; Scope A ships alongside.
+- **PROP-Dyc-001.Q1:** _Answered (P4 decision)._ Scope B is built; Scope A ships alongside.
 - **PROP-Dyc-001.Q2:** The declaration representation. `::procedure` already accepts a bare keyword as a registered target (`workflow.clj:1215-1224`), so a hand-off marker cannot be an untagged keyword. The greenfield answer is a distinct builder producing its own role, with the binding authority generalised across hand-off kinds — the spec deltas settle the exact shape.
 - **PROP-Dyc-001.Q3:** The verb name. It must not collide with the existing worker grammar or read as a synonym for `continue`. Settled in the spec deltas.
 - **PROP-Dyc-001.Q4:** Whether the binding surface keeps the name `bind-defers` once it binds more than defers, and if renamed, whether the old name stays as an alias. TEN-000@1 permits the rename without migration; the spec deltas decide.

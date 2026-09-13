@@ -23,18 +23,18 @@ The tenets already license the fix. TEN-003 (FAIL LOUDLY) contains its own escap
 - **R1 (deep module):** "We should provide deep-modules and swallow the complexity."
 - **R2 (target shape):** the user sketched exactly this consumer surface:
 
-  ```clojure
-  ;; in the spool namespace — the single authored declaration
-  (def spool
-    {:contribute ...
-     :reconcile ...})
+    ```clojure
+    ;; in the spool namespace — the single authored declaration
+    (def spool
+      {:contribute ...
+       :reconcile ...})
 
-  ;; in consuming config — world policy only, the rest automatic
-  (runtime/module! runtime :skein/spools-shuttle
-                   {:ns 'ct.spools.agent-run
-                    :spools ['ct.spools/agent-run]
-                    :required? true})
-  ```
+    ;; in consuming config — world policy only, the rest automatic
+    (runtime/module! runtime :skein/spools-shuttle
+                     {:ns 'ct.spools.agent-run
+                      :spools ['ct.spools/agent-run]
+                      :required? true})
+    ```
 
 - **R3 (convention is API, not a fail-loud violation):** "i just want to cut down on ceremony by introducing 'magic' function names, because whether the namespace declares the correct def name, or the module! call writes the correct keys, they are both a form of contract users read from the docs." And: "we can make the naming convention part of the api." Implementers must not read TEN-003 as forbidding convention-based resolution — the loudness moves inside the deep module (G5), it does not get relaxed.
 - **R4 (reload semantics inviolable):** "To be clear, i don't want to break any of runtime/reload semantics we have worked hard to build." See NG1.
@@ -105,9 +105,9 @@ The window is a landing-order necessity inside one epic, not a compatibility shi
 ## PROP-Dsp-001.P8 Suggested slicing
 
 - **S1 (core):** coordinator resolution (G1/G2) + resolved-state retention and status/plan exposure (G2a) + Phase A transitional precedence + G5 loud paths + `::spool` spec in `skein.api.spool.alpha` (G6) + repository lint and ratchet tests (G6a) + Phase A SPEC deltas (G9, including the Q3 C19 wording for user review) + coordinator tests. The coordinator gates include:
-  - a precedence-window matrix proving explicit values win per key, absent fields come from `spool`, and complete legacy explicit declarations still work with no `spool` var;
-  - a true `:load :image` path with only a preloaded namespace as setup, no source collection/load and no injected callable, covering both success and missing-`spool` failure;
-  - a last-good sequence in which entry points resolve successfully, a later evaluation fails, `reload-code!` runs, and the module is then removed by omission. The prior reconciler must run exactly once with `:removed`; teardown, dependency ordering, and exposed last-good status must remain intact.
+    - a precedence-window matrix proving explicit values win per key, absent fields come from `spool`, and complete legacy explicit declarations still work with no `spool` var;
+    - a true `:load :image` path with only a preloaded namespace as setup, no source collection/load and no injected callable, covering both success and missing-`spool` failure;
+    - a last-good sequence in which entry points resolve successfully, a later evaluation fails, `reload-code!` runs, and the module is then removed by omission. The prior reconciler must run exactly once with `:removed`; teardown, dependency ordering, and exposed last-good status must remain intact.
 - **S2 (in-tree):** 7 datum renames, 5 file-module `def spool` additions, init.clj in-tree conversion, parity-test narrowing, `activate-spool!` new signature and fixture sweep, docs (testing.md / writing-shared-spools.md / customisation.md), `make api-docs`.
 - **S3 (siblings, pre-v1 break authorized):** `spool` exports + `module` deletions + own-surface conversions + markers + release-exception records naming the Phase A merge as the first compatible Skein commit, with suites green against skein-src main. Do not add a false `:skein/min` floor.
 - **S4 (cutover):** pin bumps, init.clj sibling conversion, core test/fixture sweep, grammar-key removal + narrowed-parity-test deletion, Phase C spec delta, canonical world refresh + live verification.

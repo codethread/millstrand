@@ -2,15 +2,11 @@
 
 Document ID: `TASK-Alr-020`
 
-This page records the AFK rehearsal for `PROP-Alr-001.C2/DW3` and the ordered ceremony for the real cutover.
-A worker may rehearse against a SQLite copy only. A worker never runs the canonical cutover and never restarts the canonical weaver.
-The live execution is Task 22 (`TASK-Alr-022`), owned by the coordinator with explicit user sign-off at the restart.
+This page records the AFK rehearsal for `PROP-Alr-001.C2/DW3` and the ordered ceremony for the real cutover. A worker may rehearse against a SQLite copy only. A worker never runs the canonical cutover and never restarts the canonical weaver. The live execution is Task 22 (`TASK-Alr-022`), owned by the coordinator with explicit user sign-off at the restart.
 
 ## Rehearsal recipe
 
-The rehearsal uses the live canonical database as a source file, but never mutates it.
-Resolve the live SQLite path from `mill weaver status`; do not assume `data/skein.sqlite` under the workspace.
-The live file lives under the weaver state directory, for example `~/.local/state/skein/weavers/<hash>/data/skein.sqlite`.
+The rehearsal uses the live canonical database as a source file, but never mutates it. Resolve the live SQLite path from `mill weaver status`; do not assume `data/skein.sqlite` under the workspace. The live file lives under the weaver state directory, for example `~/.local/state/skein/weavers/<hash>/data/skein.sqlite`.
 
 ```sh
 set -euo pipefail
@@ -81,48 +77,46 @@ Rows rewritten: 70
   treadle/superseded-by            1
 ```
 
-Smoke command note: this headless worker was not allowed to start a disposable weaver.
-The smoke commands above are the exact commands for the coordinator to run in a disposable world with a running weaver.
-The script rehearsal itself did run against a copied SQLite file and did not touch the canonical database.
+Smoke command note: this headless worker was not allowed to start a disposable weaver. The smoke commands above are the exact commands for the coordinator to run in a disposable world with a running weaver. The script rehearsal itself did run against a copied SQLite file and did not touch the canonical database.
 
 ## Canonical cutover ceremony
 
 This ceremony is for Task 22. Workers do not run it.
 
 1. Quiet the board.
-   - Confirm no in-flight shuttle runs or open gates are mid-transition.
-   - Hold new delegation while the database rewrite and restart happen.
+    - Confirm no in-flight shuttle runs or open gates are mid-transition.
+    - Hold new delegation while the database rewrite and restart happen.
 2. Resolve the canonical world's live database path.
 
-   ```sh
-   canonical=/Users/ct/dev/projects/skein-src/.skein
-   status_json=$(./bin/mill weaver status --workspace "${canonical:?}")
-   db=$(printf '%s' "${status_json:?}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["database_path"])')
-   ```
+    ```sh
+    canonical=/Users/ct/dev/projects/skein-src/.skein
+    status_json=$(./bin/mill weaver status --workspace "${canonical:?}")
+    db=$(printf '%s' "${status_json:?}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["database_path"])')
+    ```
 
-   Use the `database_path` field. It must point under the weaver state directory, not workspace-local `data/`.
+    Use the `database_path` field. It must point under the weaver state directory, not workspace-local `data/`.
 
 3. Run the Task 19 cutover script against the canonical live database.
 
-   ```sh
-   PATH="/opt/homebrew/opt/openjdk/bin:$PATH" \
-     clojure -Sdeps '{:paths ["scripts"]}' \
-     -M -m cutover.agent-layer-rename \
-     --db "${db:?}"
-   ```
+    ```sh
+    PATH="/opt/homebrew/opt/openjdk/bin:$PATH" \
+      clojure -Sdeps '{:paths ["scripts"]}' \
+      -M -m cutover.agent-layer-rename \
+      --db "${db:?}"
+    ```
 
 4. HARD STOP: user-signed weaver restart.
-   - Stop here until the coordinator has explicit user approval.
-   - Only the coordinator and user may perform this restart.
-   - This is the `PROP-Alr-001.C4/DW4` gate and the execution point named by Task 22.
+    - Stop here until the coordinator has explicit user approval.
+    - Only the coordinator and user may perform this restart.
+    - This is the `PROP-Alr-001.C4/DW4` gate and the execution point named by Task 22.
 
 5. After the signed restart, run the `PROP-Alr-001.C5` smoke:
 
-   ```sh
-   strand agent status
-   strand ready --query stalled-gates
-   strand kanban board
-   strand list --query agent-failures
-   ```
+    ```sh
+    strand agent status
+    strand ready --query stalled-gates
+    strand kanban board
+    strand list --query agent-failures
+    ```
 
 The ceremony ends at the signed restart gate for this worker-owned document. The canonical run, restart, and post-restart smoke belong to Task 22.

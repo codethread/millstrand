@@ -1,6 +1,6 @@
 # Customising your workspace
 
-Millstrand's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `millstrand.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
+Millstrand's core is deliberately small; most of what your workspace _means_ lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `millstrand.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
 
 If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first. The [reference](../reference.md) maps Millstrand's specifications, guides, and generated API documentation. Per-function API detail is deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every `millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
 
@@ -40,8 +40,7 @@ Keep generated startup small. Put personal activation in `init.local.clj` and pe
 
 ## Startup files
 
-The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Missing files are skipped; present
-failing files fail loudly with file context. The generated `init.clj` is intentionally small:
+The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Missing files are skipped; present failing files fail loudly with file context. The generated `init.clj` is intentionally small:
 
 ```clojure
 ;; deps.edn
@@ -70,8 +69,7 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
 
 The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded modules then publish no batteries ops.
 
-`millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand —
-not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
+`millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand — not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
 
 Startup files matter because runtime registries are weaver-lifetime state: named queries, weave patterns, and event handlers registered from a live REPL vanish with the process. Anything you want after every restart belongs in startup-loaded code. Put durable behavior in a module source and activate that module from `init.clj`:
 
@@ -96,8 +94,7 @@ Inside the weaver REPL, `millstrand.repl/register-query!` is the same operation 
 
 ## Trying config changes in a disposable world
 
-Config runs with weaver authority, and startup failures fail loudly — so try changes somewhere disposable
-before they reach the workspace you rely on. A throwaway world costs one `mktemp`:
+Config runs with weaver authority, and startup failures fail loudly — so try changes somewhere disposable before they reach the workspace you rely on. A throwaway world costs one `mktemp`:
 
 ```sh
 ws="$(mktemp -d)"
@@ -107,13 +104,9 @@ mill weaver start --workspace "${ws:?}"
 mill weaver stop --workspace "${ws:?}"
 ```
 
-The `${ws:?}` guard makes an empty variable fail the command instead of silently resolving to your real
-workspace. If the candidate config is wrong, startup tells you with file context, and you throw the directory
-away.
+The `${ws:?}` guard makes an empty variable fail the command instead of silently resolving to your real workspace. If the candidate config is wrong, startup tells you with file context, and you throw the directory away.
 
-Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md)
-weaver worlds take `:deps-edn`, `:init-clj`, and `:files` fixtures, so a test exercises exactly the artifacts
-this page has you writing.
+Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md) weaver worlds take `:deps-edn`, `:init-clj`, and `:files` fixtures, so a test exercises exactly the artifacts this page has you writing.
 
 ## Reloading a live weaver
 
@@ -131,18 +124,13 @@ Direct registrations are the one thing refresh can drop. A direct write is not s
 
 Recovering it takes one look first. The registry is owner-partitioned and layered: a direct entry lives in your partition, while a module or spool owns its own partition. The refresh that dropped your entry may have published a module that now owns the same name, and `register-*!` refuses a name another owner supplies. Read the current owner before acting. If the module's version is the one you want, leave it. If you want yours above it, `replace-*!` records the override intent and carries the shadow across refresh. To end that experiment, `unregister-*!` removes only your entry and restores the shadowed value. Remove-then-register is not a substitute for replace because the other owner's entry still occupies the name. Anything that must survive a refresh belongs in module source rather than a direct write.
 
-For code-only investigation, `reload-code!` takes a root-lib symbol from the
-basis and reloads that library's source-backed namespaces in dependency
-order:
+For code-only investigation, `reload-code!` takes a root-lib symbol from the basis and reloads that library's source-backed namespaces in dependency order:
 
 ```clojure
 (runtime/reload-code! (current/runtime) 'millstrand.spools/batteries)
 ```
 
-The result names the library and namespaces in reload order, and conforms to
-`:millstrand.api.runtime.alpha/reload-code-result`. It deliberately performs no
-publication or resource reconciliation; use a targeted refresh for the normal
-path.
+The result names the library and namespaces in reload order, and conforms to `:millstrand.api.runtime.alpha/reload-code-result`. It deliberately performs no publication or resource reconciliation; use a targeted refresh for the normal path.
 
 A dependency edit produces a candidate basis fingerprint. When it differs from the running fingerprint, refresh returns `:restart-required` and refuses activation in the current generation. Use the Mill-owned replacement when you are ready. If other users share this weaver, get their explicit sign-off before running it:
 
@@ -256,10 +244,7 @@ Keep repository-specific policy in workspace `:file` modules. They are loaded fr
 
 The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.millstrand` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
 
-Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Millstrand treats runtime extensions as trusted Clojure code, and the
-[reference spools](../../spools/README.md) — including the workflow engine and the external,
-git-distributed devflow lifecycle — double as worked examples of spool design. All of them load the
-same opt-in way yours will. A common layout:
+Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Millstrand treats runtime extensions as trusted Clojure code, and the [reference spools](../../spools/README.md) — including the workflow engine and the external, git-distributed devflow lifecycle — double as worked examples of spool design. All of them load the same opt-in way yours will. A common layout:
 
 ```text
 workspace/
@@ -321,8 +306,7 @@ Removing `catalogue/ready-mine` from that form removes it from this module at th
 
 Each piece has one job. `deps.edn` supplies source. `runtime/module!` declares the desired module; refresh collects declarations, replaces that owner's entries, and reconciles lifecycle effects. A dependency edit changes the basis and requires generation replacement. A direct `require` from `mill weaver repl` is useful for trusted experiments, but repeatable activation belongs in `runtime/module!` from startup config.
 
-Extension code runs with weaver authority, so only load trusted code. And there is no per-module isolation or
-unload guarantee: restart the weaver when you need a clean runtime.
+Extension code runs with weaver authority, so only load trusted code. And there is no per-module isolation or unload guarantee: restart the weaver when you need a clean runtime.
 
 ## Your own CLI command
 
@@ -374,12 +358,7 @@ strand echo value
 
 Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; ordinary local or Git coordinates in the workspace basis follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
 
-Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's
-verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language
-over it ([the vocabulary
-rule](./writing-shared-spools.md#the-rules-for-shared-spools)). Kanban earns its own vocabulary
-(cards, lanes, claim) because a board is a concept the engine has no word for; a command that
-starts, advances, or lists an existing primitive speaks that primitive's terms.
+Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language over it ([the vocabulary rule](./writing-shared-spools.md#the-rules-for-shared-spools)). Kanban earns its own vocabulary (cards, lanes, claim) because a board is a concept the engine has no word for; a command that starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 

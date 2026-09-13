@@ -21,16 +21,16 @@ This note freezes the minimal cross-language JSON contract between the Go `todo`
 
 ```json
 {
-  "protocol_version": 1,
-  "pid": 12345,
-  "database_path": "/absolute/canonical/todo.sqlite",
-  "daemon_id": "2f5fd2c8-4d1f-4bc4-8d6c-f7d8ac16a245",
-  "socket_path": "/tmp/todo-daemon/7d0f0a0f4b2d4e6c.sock",
-  "started_at": "2026-06-25T12:00:00Z",
-  "nrepl": {
-    "host": "127.0.0.1",
-    "port": 55555
-  }
+	"protocol_version": 1,
+	"pid": 12345,
+	"database_path": "/absolute/canonical/todo.sqlite",
+	"daemon_id": "2f5fd2c8-4d1f-4bc4-8d6c-f7d8ac16a245",
+	"socket_path": "/tmp/todo-daemon/7d0f0a0f4b2d4e6c.sock",
+	"started_at": "2026-06-25T12:00:00Z",
+	"nrepl": {
+		"host": "127.0.0.1",
+		"port": 55555
+	}
 }
 ```
 
@@ -54,17 +54,17 @@ This note freezes the minimal cross-language JSON contract between the Go `todo`
 
 ```json
 {
-  "protocol_version": 1,
-  "request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
-  "daemon_id": "2f5fd2c8-4d1f-4bc4-8d6c-f7d8ac16a245",
-  "database_path": "/absolute/canonical/todo.sqlite",
-  "operation": "show",
-  "arguments": {
-    "id": "task-1"
-  },
-  "options": {
-    "format": "json"
-  }
+	"protocol_version": 1,
+	"request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
+	"daemon_id": "2f5fd2c8-4d1f-4bc4-8d6c-f7d8ac16a245",
+	"database_path": "/absolute/canonical/todo.sqlite",
+	"operation": "show",
+	"arguments": {
+		"id": "task-1"
+	},
+	"options": {
+		"format": "json"
+	}
 }
 ```
 
@@ -83,16 +83,16 @@ This note freezes the minimal cross-language JSON contract between the Go `todo`
 
 ```json
 {
-  "protocol_version": 1,
-  "request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
-  "ok": true,
-  "result": {
-    "id": "task-1",
-    "title": "Write docs",
-    "status": "todo",
-    "attributes": {}
-  },
-  "error": null
+	"protocol_version": 1,
+	"request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
+	"ok": true,
+	"result": {
+		"id": "task-1",
+		"title": "Write docs",
+		"status": "todo",
+		"attributes": {}
+	},
+	"error": null
 }
 ```
 
@@ -105,18 +105,18 @@ This note freezes the minimal cross-language JSON contract between the Go `todo`
 
 ```json
 {
-  "protocol_version": 1,
-  "request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
-  "ok": false,
-  "result": null,
-  "error": {
-    "type": "domain",
-    "code": "task/not-found",
-    "message": "Task not found: missing-task",
-    "details": {
-      "id": "missing-task"
-    }
-  }
+	"protocol_version": 1,
+	"request_id": "018ff8a0-2f6b-7bb2-8b03-ea6f0ad6f4bb",
+	"ok": false,
+	"result": null,
+	"error": {
+		"type": "domain",
+		"code": "task/not-found",
+		"message": "Task not found: missing-task",
+		"details": {
+			"id": "missing-task"
+		}
+	}
 }
 ```
 

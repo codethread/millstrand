@@ -71,10 +71,10 @@ Outcome: the transitional window closes. Bump sibling pins, drop the remaining s
 
 - **PLAN-Dsp-001.TC1 (detailed tracker):** `w6z1g` is the live execution plan; it owns sequencing, per-file scope, and acceptance criteria. This plan stays at strategy level and does not mirror its checklists.
 - **PLAN-Dsp-001.TC2 (cold-resume IDs):**
-  - Kanban card `uwnzl`, kanban task `vwa06` (its notes hold the full record: proposal review run `fgjlu`/task `6ykzo`, TerraMed reviews `8rfx9`/`74h9n`, delegated-authority ruling `wnxuv`, and the three Opus archaeology notes `tmzb0`/`xkpij`/`niyif` from read-only run `1uorm`).
-  - Tracked Phase A plan `w6z1g` with children `5yfrq` (core), `c5c42` (lint), `vqwbt` (in-tree), `m47vr` (records/specs), `z12za` (accept).
-  - Integration branch `codex/uwnzl-def-spool-convention`; worktrees `codex/uwnzl-phase-a-{core,lint,specs,intree}`.
-  - Live tracked runs at last coordinator note `14ioi`: `hvg4g` (core), `s9xhz` (lint), `mo25j` (spec deltas). Core runs under story workflow `uwnzl-phase-a-core-story` at behavior step `u80vl` with a TerraMed reviewer.
+    - Kanban card `uwnzl`, kanban task `vwa06` (its notes hold the full record: proposal review run `fgjlu`/task `6ykzo`, TerraMed reviews `8rfx9`/`74h9n`, delegated-authority ruling `wnxuv`, and the three Opus archaeology notes `tmzb0`/`xkpij`/`niyif` from read-only run `1uorm`).
+    - Tracked Phase A plan `w6z1g` with children `5yfrq` (core), `c5c42` (lint), `vqwbt` (in-tree), `m47vr` (records/specs), `z12za` (accept).
+    - Integration branch `codex/uwnzl-def-spool-convention`; worktrees `codex/uwnzl-phase-a-{core,lint,specs,intree}`.
+    - Live tracked runs at last coordinator note `14ioi`: `hvg4g` (core), `s9xhz` (lint), `mo25j` (spec deltas). Core runs under story workflow `uwnzl-phase-a-core-story` at behavior step `u80vl` with a TerraMed reviewer.
 - **PLAN-Dsp-001.TC3 (authority and boundaries):** Coordinator authority is delegated for phased implementation, tracked runs, reviews, merges, releases, rebuilds, and refreshes; skein-src `v1` must not be stamped (ruling `wnxuv`). Tests exercise the real image path, not workaround-only spellings; `:load :image` stays unless a clearly test-only spelling is materially better without widening scope.
 - **PLAN-Dsp-001.TC4 (pre-v1 break authorized):** On 2026-07-24 the user removed card `b3v1r` as a dependency of kanban task `l5lwo` and authorized the coordinated sibling break under TEN-000@1. Phase B may prepare and publish the convention-dependent markers now. It must not add a false `:skein/min` floor or create the Skein v1 stamp. Exact reviewed marker SHAs and release-exception records bridge compatibility until Phase C pins them and a later Skein marker can express a floor.
 

@@ -17,7 +17,7 @@ Deliver database/application-owned task ids for normal task creation, so users c
 ## PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-001.AA1 | `src/todo/db.clj` | Generate ids and insert tasks without upsert overwrite semantics. |
 | PLAN-001.AA2 | `src/todo/specs.clj` | Update task and CLI add specs to remove caller-supplied ids from creation. |
 | PLAN-001.AA3 | `src/todo/cli.clj` | Change usage, add command parsing, output behavior, and repeated `--link` creation-time edge shorthand. |

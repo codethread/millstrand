@@ -18,9 +18,9 @@ References:
 
 - Read the implemented code and all feature-local spec deltas before editing root specs.
 - Merge shipped durable outcomes into:
-  - `devflow/specs/daemon-runtime.md`
-  - `devflow/specs/repl-api.md`
-  - `devflow/specs/cli.md`
+    - `devflow/specs/daemon-runtime.md`
+    - `devflow/specs/repl-api.md`
+    - `devflow/specs/cli.md`
 - Mark feature-local deltas as `Merged` after their durable content is promoted.
 - Do not promote behavior that was cut or not implemented; instead record cut/deferred scope in the plan Developer Notes.
 - Ensure `docs/library-authoring.md` and smoke/docs claims match the implemented behavior.

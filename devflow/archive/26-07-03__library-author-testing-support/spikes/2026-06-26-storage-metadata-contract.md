@@ -57,35 +57,35 @@ Write findings back into this file under `## Findings`, with a recommendation an
 ### Consumers traced
 
 - `src/todo/daemon/runtime.clj`
-  - `start!` canonicalizes `db-file` with `metadata/canonical-db-path`, opens `db/datasource` on that canonical path, and stores it as `:canonical-db-path` in runtime metadata.
-  - This is a hard filesystem assumption today; `:memory:` would be treated as a relative file path and canonicalized into the checkout.
+    - `start!` canonicalizes `db-file` with `metadata/canonical-db-path`, opens `db/datasource` on that canonical path, and stores it as `:canonical-db-path` in runtime metadata.
+    - This is a hard filesystem assumption today; `:memory:` would be treated as a relative file path and canonicalized into the checkout.
 - `src/todo/daemon/metadata.clj`
-  - `metadata-shape` publishes EDN `:canonical-db-path`.
-  - `json-metadata-shape` maps it to JSON `database_path`.
-  - `stale-or-missing?` currently requires string `:canonical-db-path`, so Clojure metadata discovery treats path presence as required daemon identity.
+    - `metadata-shape` publishes EDN `:canonical-db-path`.
+    - `json-metadata-shape` maps it to JSON `database_path`.
+    - `stale-or-missing?` currently requires string `:canonical-db-path`, so Clojure metadata discovery treats path presence as required daemon identity.
 - `src/todo/client.clj`
-  - Config-dir clients (`metadata-for-world`, `call-world`, `status-world`, `stop-world`) do not compare database path; they only require metadata to pass `stale-or-missing?` and verify config-dir/loopback/nonce.
-  - Legacy db-file clients (`metadata-for`, `call`, `status`, `stop`, task wrappers) canonicalize caller-provided `db-file` and compare it to `:canonical-db-path`. These are file-storage-only APIs and would not work for memory storage without a new world/storage-aware path.
+    - Config-dir clients (`metadata-for-world`, `call-world`, `status-world`, `stop-world`) do not compare database path; they only require metadata to pass `stale-or-missing?` and verify config-dir/loopback/nonce.
+    - Legacy db-file clients (`metadata-for`, `call`, `status`, `stop`, task wrappers) canonicalize caller-provided `db-file` and compare it to `:canonical-db-path`. These are file-storage-only APIs and would not work for memory storage without a new world/storage-aware path.
 - `src/todo/daemon/socket.clj`
-  - JSON socket `status-result` returns `database_path` from `:canonical-db-path`.
-  - Request identity does not include database path; it validates daemon id only.
+    - JSON socket `status-result` returns `database_path` from `:canonical-db-path`.
+    - Request identity does not include database path; it validates daemon id only.
 - `cli/internal/client/client.go`
-  - `Metadata.DatabasePath` is a required non-empty string when reading `daemon.json`.
-  - `validateLifecycleResult("status")` requires socket status `database_path` to equal metadata `database_path`.
-  - The Go client does not use `database_path` to find metadata, dial the socket, or identify requests.
+    - `Metadata.DatabasePath` is a required non-empty string when reading `daemon.json`.
+    - `validateLifecycleResult("status")` requires socket status `database_path` to equal metadata `database_path`.
+    - The Go client does not use `database_path` to find metadata, dial the socket, or identify requests.
 - `cli/internal/command/command.go`
-  - `todo daemon status` prints the daemon result as JSON even for human output; it has no special path formatting.
+    - `todo daemon status` prints the daemon result as JSON even for human output; it has no special path formatting.
 - `src/todo/cli.clj`
-  - Legacy Clojure CLI `daemon-status` returns kebab `:database-path` from `:canonical-db-path`.
+    - Legacy Clojure CLI `daemon-status` returns kebab `:database-path` from `:canonical-db-path`.
 - Tests/smoke consumers
-  - `test/todo/daemon_test.clj` asserts canonical path publication, JSON `database_path`, and stale metadata behavior.
-  - `test/todo/client_test.clj` constructs metadata with `:canonical-db-path` for Clojure client validation.
-  - `cli/internal/client/client_test.go` and `cli/integration_test.go` require non-empty `database_path` and status equality.
-  - Smoke/status expectations are file-backed today and should remain file-backed unless a dedicated memory-mode path is added.
+    - `test/todo/daemon_test.clj` asserts canonical path publication, JSON `database_path`, and stale metadata behavior.
+    - `test/todo/client_test.clj` constructs metadata with `:canonical-db-path` for Clojure client validation.
+    - `cli/internal/client/client_test.go` and `cli/integration_test.go` require non-empty `database_path` and status equality.
+    - Smoke/status expectations are file-backed today and should remain file-backed unless a dedicated memory-mode path is added.
 - Specs/docs
-  - `devflow/specs/daemon-runtime.md` C12 and C28 say metadata/status report the daemon-owned database path.
-  - `devflow/specs/cli.md` C20 says `daemon status` reports the daemon-owned database path.
-  - RFC-005 C9 already warns that memory mode must not pretend `:memory:` is a canonical filesystem path.
+    - `devflow/specs/daemon-runtime.md` C12 and C28 say metadata/status report the daemon-owned database path.
+    - `devflow/specs/cli.md` C20 says `daemon status` reports the daemon-owned database path.
+    - RFC-005 C9 already warns that memory mode must not pretend `:memory:` is a canonical filesystem path.
 
 ### Assumptions found
 
@@ -101,13 +101,13 @@ Choose option 3: add explicit storage metadata and make `database_path` file-onl
 Recommended shape:
 
 - EDN metadata:
-  - `:storage-kind :sqlite-file | :sqlite-memory`
-  - `:storage-label "..."` for diagnostics/status, e.g. canonical file path for file mode or `memory:<daemon-id>`/`sqlite-memory:<nonce>` for memory mode.
-  - `:canonical-db-path <string>` only for `:sqlite-file`; absent or nil for memory mode.
+    - `:storage-kind :sqlite-file | :sqlite-memory`
+    - `:storage-label "..."` for diagnostics/status, e.g. canonical file path for file mode or `memory:<daemon-id>`/`sqlite-memory:<nonce>` for memory mode.
+    - `:canonical-db-path <string>` only for `:sqlite-file`; absent or nil for memory mode.
 - JSON metadata/status:
-  - `"database_kind": "sqlite-file" | "sqlite-memory"`
-  - `"database_label": "..."`
-  - `"database_path": <canonical path string>` for file mode; `null` or omitted for memory mode.
+    - `"database_kind": "sqlite-file" | "sqlite-memory"`
+    - `"database_label": "..."`
+    - `"database_path": <canonical path string>` for file mode; `null` or omitted for memory mode.
 
 Prefer `null` over a sentinel if the JSON field is kept, because it forces clients/tests to acknowledge non-file storage instead of treating a diagnostic label as a path. Keep `database_path` always present only for `sqlite-file`; for memory mode it must not be a fake path.
 
@@ -123,11 +123,11 @@ Prefer `null` over a sentinel if the JSON field is kept, because it forces clien
 ### Spec deltas
 
 - `devflow/specs/daemon-runtime.md`
-  - Replace “daemon-owned database path” in C12/C28 with storage identity: storage kind, diagnostic label, and file database path when storage is file-backed.
-  - State that clients discover daemons by selected state world/socket metadata, not by storage path; non-file storage must not publish fake filesystem paths.
+    - Replace “daemon-owned database path” in C12/C28 with storage identity: storage kind, diagnostic label, and file database path when storage is file-backed.
+    - State that clients discover daemons by selected state world/socket metadata, not by storage path; non-file storage must not publish fake filesystem paths.
 - `devflow/specs/cli.md`
-  - Update C20 so `daemon status` reports storage kind/label and reports `database_path` only for file-backed storage.
-  - No new public CLI commands or storage selection flags are implied.
+    - Update C20 so `daemon status` reports storage kind/label and reports `database_path` only for file-backed storage.
+    - No new public CLI commands or storage selection flags are implied.
 
 ### Decision on `database_path`
 

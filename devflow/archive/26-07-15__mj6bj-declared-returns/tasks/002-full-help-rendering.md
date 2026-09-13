@@ -20,28 +20,22 @@ Owned files:
 
 ## TASK-Dcr-002.P2 Must implement exactly
 
-- **TASK-Dcr-002.MI1:** Add a JSON-safe `returns` field to `help <op>` detail when the registry entry declares
-  `:returns`, using `skein.api.return-shape.alpha/explain` for flat, subcommand, and stream declarations.
-- **TASK-Dcr-002.MI2:** Preserve compact no-argument help summaries, raw-envelope markers, and existing arg-spec
-  rendering. Keep the Go CLI as an opaque relay with no return-shape parser or renderer.
+- **TASK-Dcr-002.MI1:** Add a JSON-safe `returns` field to `help <op>` detail when the registry entry declares `:returns`, using `skein.api.return-shape.alpha/explain` for flat, subcommand, and stream declarations.
+- **TASK-Dcr-002.MI2:** Preserve compact no-argument help summaries, raw-envelope markers, and existing arg-spec rendering. Keep the Go CLI as an opaque relay with no return-shape parser or renderer.
 
 ## TASK-Dcr-002.P3 Done when
 
-- **TASK-Dcr-002.DW1:** Full-help tests prove the flat, subcommand, and streaming projections and prove summary
-  help and arg-spec data remain unchanged.
-- **TASK-Dcr-002.DW2:** Cold focused gate passes:
-  `clojure -M:test skein.weaver-test skein.api.return-shape.alpha-test`.
+- **TASK-Dcr-002.DW1:** Full-help tests prove the flat, subcommand, and streaming projections and prove summary help and arg-spec data remain unchanged.
+- **TASK-Dcr-002.DW2:** Cold focused gate passes: `clojure -M:test skein.weaver-test skein.api.return-shape.alpha-test`.
 - **TASK-Dcr-002.DW3:** `make fmt-check lint reflect-check` passes.
 
 ## TASK-Dcr-002.P4 Out of scope
 
-- **TASK-Dcr-002.OS1:** Go dispatcher changes, compact-list expansion, production op declarations, captured-value
-  checks, or invocation-time validation.
+- **TASK-Dcr-002.OS1:** Go dispatcher changes, compact-list expansion, production op declarations, captured-value checks, or invocation-time validation.
 
 ## TASK-Dcr-002.P5 Commit policy
 
-- One atomic conventional commit, authored with a HEREDOC message. Commit only owned files. Do not amend, push,
-  or land.
+- One atomic conventional commit, authored with a HEREDOC message. Commit only owned files. Do not amend, push, or land.
 
 ## TASK-Dcr-002.P6 References
 

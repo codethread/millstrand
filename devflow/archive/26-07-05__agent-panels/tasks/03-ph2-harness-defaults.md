@@ -3,6 +3,7 @@ Implement PLAN-Pnl-001.PH2: persistence-friendly harness defaults (A2, R1). FILE
 FIRST: apply the FINDINGS INPUT PROTOCOL below for tag [agent-panels/PH1 review].
 
 Work:
+
 - Shipped :claude def gains :resume ["--resume" :shuttle/session-id] — but FIRST verify with the installed CLI (claude --help / claude -p --help) that headless -p resume takes that form; adjust to reality.
 - Shipped :pi def becomes ["pi" "-p" "--mode" "json"] with :parse :pi-json (session capture by default) + its resume splice — verify pi --help for the resume flag.
 - Repo .skein/config.clj :codex: REMOVE --ephemeral (sessions persist; owner decision — disposability was a design mistake) and add :resume with flags verified via codex exec --help. If a tool has NO usable headless resume: leave it session-persisting but :resume-less and say so loudly in your final message (plan R1/NG4 permits this — persistence is never required).
@@ -11,6 +12,7 @@ Work:
 Tests: config_test asserts the :codex def has no --ephemeral and declares :resume (or the R1 fallback, matching what you shipped); shuttle_test asserts shipped defaults declare capture+resume as shipped. Update any existing assertions that pinned old argvs.
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

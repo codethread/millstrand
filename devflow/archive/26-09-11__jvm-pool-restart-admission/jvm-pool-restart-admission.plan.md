@@ -1,12 +1,19 @@
 # JVM pool restart admission plan
 
 **Document ID:** `PLAN-Jpra-001`
+
 **Feature:** `jvm-pool-restart-admission`
+
 **Proposal:** [proposal.md](./proposal.md)
+
 **RFC:** none
+
 **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
+
 **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
+
 **Status:** Shipped
+
 **Last Updated:** 2026-09-11
 
 ## PLAN-Jpra-001.P1 Goal and scope
@@ -88,8 +95,5 @@ No open question blocks task generation.
 
 ### PLAN-Jpra-001.DN2 Finish and archive — 2026-09-11
 
-- Shipped the host-scoped pooled restart record, undecorated pooled identity
-  admission, status projection boundary, peer classification, and process-level
-  isolated-to-pooled first-attempt regression.
-- No planned scope was cut or deferred. `DELTA-Jpra-001` was merged into the
-  Weaver Runtime root spec. No RFCs were linked or archived.
+- Shipped the host-scoped pooled restart record, undecorated pooled identity admission, status projection boundary, peer classification, and process-level isolated-to-pooled first-attempt regression.
+- No planned scope was cut or deferred. `DELTA-Jpra-001` was merged into the Weaver Runtime root spec. No RFCs were linked or archived.

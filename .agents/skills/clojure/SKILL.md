@@ -38,26 +38,13 @@ A good default rule:
 
 Runtime validation and function specs have different jobs:
 
-- At untrusted, dynamic, persistence, process, and extension boundaries, use
-  explicit runtime validation such as `require-valid!`. Boundary validation must
-  not depend on optional spec instrumentation being enabled.
-- Use `s/fdef` when a concrete consumer justifies it: useful instrumentation,
-  generative tests with realistic generators, an input/output relation, or API
-  tooling that reads function specs.
-- Do not add `s/fdef` merely because a function is public or already performs
-  runtime validation. That duplicates the contract and creates drift without
-  adding enforcement.
-- Pure transformations with meaningful properties are often better `s/fdef`
-  candidates than stateful public orchestration. They may live in an internal
-  namespace when they are not a supported public API.
-- `clojure.spec.test.alpha/instrument` is an opt-in development and test aid. It
-  checks arguments on calls through instrumented Vars; it is not production
-  validation and does not replace explicit return validation.
+- At untrusted, dynamic, persistence, process, and extension boundaries, use explicit runtime validation such as `require-valid!`. Boundary validation must not depend on optional spec instrumentation being enabled.
+- Use `s/fdef` when a concrete consumer justifies it: useful instrumentation, generative tests with realistic generators, an input/output relation, or API tooling that reads function specs.
+- Do not add `s/fdef` merely because a function is public or already performs runtime validation. That duplicates the contract and creates drift without adding enforcement.
+- Pure transformations with meaningful properties are often better `s/fdef` candidates than stateful public orchestration. They may live in an internal namespace when they are not a supported public API.
+- `clojure.spec.test.alpha/instrument` is an opt-in development and test aid. It checks arguments on calls through instrumented Vars; it is not production validation and does not replace explicit return validation.
 
-When an `s/fdef` is justified, place it immediately after the function it
-specifies. This keeps the callable contract attached to the implementation
-instead of collecting function specs in a detached block at the bottom of the
-namespace. Define prerequisite data specs before the specified functions.
+When an `s/fdef` is justified, place it immediately after the function it specifies. This keeps the callable contract attached to the implementation instead of collecting function specs in a detached block at the bottom of the namespace. Define prerequisite data specs before the specified functions.
 
 ### Property-based testing with spec
 

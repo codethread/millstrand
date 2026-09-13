@@ -14,35 +14,20 @@ Review corrections have independent focused verification. At `3a4a37aa`, both re
 
 ### Configuration and registration
 
-Target the `cli/internal/config` Go package in `cli/internal/config/config_test.go`.
-Extend the existing `Load` and overlay cases with these named regressions:
+Target the `cli/internal/config` Go package in `cli/internal/config/config_test.go`. Extend the existing `Load` and overlay cases with these named regressions:
 
-- `TestLoadAcceptsJVMPoolFromBaseConfig` accepts a non-blank string and exposes
-  the canonical pool key without changing `configFormat`, `name`, or
-  `autoStart` handling.
-- `TestLoadAcceptsJVMPoolFromLocalOverlay` proves that the personal
-  `config.local.json` value wins and that `mill init --jvm-pool backend` writes
-  only the local overlay. A plain `mill init` must honour an already configured
-  pool without moving it into the tracked base config.
-- `TestLoadRejectsInvalidJVMPool` covers `null` only where it is the explicit
-  opt-out, plus non-string, blank, and whitespace-only values. Invalid input
-  must fail before registration or launch.
-- `TestLoadRetainsUnknownConfigWarningsWithJVMPool` keeps the current
-  fail-loud/ignored-unknown-key boundary and verifies the pool key is not
-  reported as unknown.
+- `TestLoadAcceptsJVMPoolFromBaseConfig` accepts a non-blank string and exposes the canonical pool key without changing `configFormat`, `name`, or `autoStart` handling.
+- `TestLoadAcceptsJVMPoolFromLocalOverlay` proves that the personal `config.local.json` value wins and that `mill init --jvm-pool backend` writes only the local overlay. A plain `mill init` must honour an already configured pool without moving it into the tracked base config.
+- `TestLoadRejectsInvalidJVMPool` covers `null` only where it is the explicit opt-out, plus non-string, blank, and whitespace-only values. Invalid input must fail before registration or launch.
+- `TestLoadRetainsUnknownConfigWarningsWithJVMPool` keeps the current fail-loud/ignored-unknown-key boundary and verifies the pool key is not reported as unknown.
 
 Target the `cli/cmd/mill` package in a focused `pool_test.go` (or the existing `autostart_test.go` and `autostart_queue_test.go` where the implementation keeps those seams). Use `t.TempDir()` for two short workspace directories and set `XDG_STATE_HOME` to a third temporary state root. Prove:
 
-- init registers A and B durably, does not start a weaver, and leaves the
-  registration after a fresh Mill server starts with the same state root;
-- registration is independent of `autoStart`: `--auto-start` may compose with
-  pool registration, but it must not restart or replace an already-live pool;
-- an isolated workspace is not enrolled merely because another directory has
-  the same `JVMPool` string;
-- a selected workspace with no readable config is reported as an error rather
-  than silently dropped from the registered member set; and
-- a newcomer selected while the pool is live becomes `pending` and is named in
-  the response, with no new child PID and no interruption to existing members.
+- init registers A and B durably, does not start a weaver, and leaves the registration after a fresh Mill server starts with the same state root;
+- registration is independent of `autoStart`: `--auto-start` may compose with pool registration, but it must not restart or replace an already-live pool;
+- an isolated workspace is not enrolled merely because another directory has the same `JVMPool` string;
+- a selected workspace with no readable config is reported as an error rather than silently dropped from the registered member set; and
+- a newcomer selected while the pool is live becomes `pending` and is named in the response, with no new child PID and no interruption to existing members.
 
 Keep the pure registration assertions separate from process assertions. The existing `autostartPath`/atomic JSON write pattern is useful for durability, but pool membership must have its own record and must not be inferred from the automatic-start registry.
 
@@ -55,15 +40,9 @@ Create A, B, and C under short disposable `/tmp` paths. Give A and B the same `"
 The first start through A must show all of the following:
 
 - A and B are running and C is isolated;
-- A and B status rows have different `weaver_id`, `generation_id`,
-  `state_dir`, `data_dir`, Unix socket, database path, and nREPL port;
-- A and B status rows report the same positive host `pid`, while C reports a
-  different positive PID; and
-- `strand --workspace A <sentinel>` returns A's value and the same command
-  against B returns B's value. Attach `mill weaver repl --stdin` to each
-  workspace and evaluate a runtime identity form, then repeat the sentinel
-  call through each endpoint. The result must follow the selected endpoint,
-  not the last connected REPL or a namespace name.
+- A and B status rows have different `weaver_id`, `generation_id`, `state_dir`, `data_dir`, Unix socket, database path, and nREPL port;
+- A and B status rows report the same positive host `pid`, while C reports a different positive PID; and
+- `strand --workspace A <sentinel>` returns A's value and the same command against B returns B's value. Attach `mill weaver repl --stdin` to each workspace and evaluate a runtime identity form, then repeat the sentinel call through each endpoint. The result must follow the selected endpoint, not the last connected REPL or a namespace name.
 
 Read real process facts from the status metadata and verify them with `ps -o pid=,ppid=,command= -p <exact-pid>` (and, where useful, the exact children of that PID). Do not count Java processes by a command-line pattern; other agents and Mill processes may be present. Do not use `pkill`; teardown must signal the recorded Mill and host PIDs and wait for each to exit.
 
@@ -71,19 +50,11 @@ Read real process facts from the status metadata and verify them with `ps -o pid
 
 Keep this in the same tagged acceptance test so the lifecycle is observed through built public binaries. With A/B serving:
 
-1. Select a newly configured D with the same pool. Assert a non-success
-   pending/restart-required result, unchanged A/B host PID and generations,
-   and no D endpoint or database activity.
-2. Repeat start through A and through D. Both calls must describe the existing
-   live pool plus the pending member; neither may boot D implicitly.
-3. Restart through D. Assert one candidate/probe transition, one new host PID,
-   new generations for both live members, D now running, and all three member
-   endpoints usable. A and B must remain available until candidate admission.
-4. Stop through B, then start through A. Stop must close every member and the
-   host while retaining registration; the later start must restore A, B, and D
-   together from the durable records.
-5. Repeat start while the pool is already live. It must reuse the generation,
-   not create another host or duplicate member metadata.
+1. Select a newly configured D with the same pool. Assert a non-success pending/restart-required result, unchanged A/B host PID and generations, and no D endpoint or database activity.
+2. Repeat start through A and through D. Both calls must describe the existing live pool plus the pending member; neither may boot D implicitly.
+3. Restart through D. Assert one candidate/probe transition, one new host PID, new generations for both live members, D now running, and all three member endpoints usable. A and B must remain available until candidate admission.
+4. Stop through B, then start through A. Stop must close every member and the host while retaining registration; the later start must restore A, B, and D together from the durable records.
+5. Repeat start while the pool is already live. It must reuse the generation, not create another host or duplicate member metadata.
 
 Keep response-shape assertions separate by operation. The existing compact restart result may contain `operation`, `workspace`, `state`, `generation_id`, `transition_id`, and `diagnostics`, with the optional fields present only when the lifecycle state allows them. Pooled `status` and `list` projections carry the full pool fields: `jvm_pool`, canonical `registered_members`, `live_members`, `pending_members`, and `restart_required`, plus their running member and host identity fields. Assertions should compare exact sets of canonical workspace paths, not basenames or untrusted display names.
 
@@ -91,27 +62,20 @@ Keep response-shape assertions separate by operation. The existing compact resta
 
 Target `millstrand.core.weaver.modules-test` and `millstrand.core.weaver.startup-test` in the Clojure suite, with any new pool-specific fixture namespace registered in `test/clojure/millstrand/test_runner.clj`. Keep the pool namespace on the serial list if it touches shared process-local host maps, nREPL port registration, classloaders, or `with-redefs`; the runner rejects focused namespaces that are not registered.
 
-Use disposable generated worlds from `millstrand.test.alpha` for the runtime portion. The fixture should write its own `deps.edn`, optional `deps.local.edn`, `init.clj`, `init.local.clj`, and workspace-relative module files. Use `:publish? false`, explicit worlds, and `t/repl!`; do not use a direct classpath `require` as evidence of startup or dependency loading.
-Exercise two runtimes hosted by one test JVM with separate world maps and SQLite-memory or file storage as appropriate. Assert distinct runtime-owned registries, spool state, storage labels, metadata, and nREPL bindings. The fixture cleanup must stop both runtimes and remove only its generated root.
+Use disposable generated worlds from `millstrand.test.alpha` for the runtime portion. The fixture should write its own `deps.edn`, optional `deps.local.edn`, `init.clj`, `init.local.clj`, and workspace-relative module files. Use `:publish? false`, explicit worlds, and `t/repl!`; do not use a direct classpath `require` as evidence of startup or dependency loading. Exercise two runtimes hosted by one test JVM with separate world maps and SQLite-memory or file storage as appropriate. Assert distinct runtime-owned registries, spool state, storage labels, metadata, and nREPL bindings. The fixture cleanup must stop both runtimes and remove only its generated root.
 
 The minimum refresh cases are:
 
-- a workspace-relative source edit followed by full `runtime/refresh!` gives
-  per-member outcomes and updates both pooled registries under managed
-  coordination, without changing the pool host generation;
-- a dependency, selected-alias, membership, or pool-setting change returns
-  `:restart-required` before evaluating staged init/module source;
-- a targeted `:only` refresh is rejected for a pooled runtime if that is the
-  selected first-version policy; and
-- the same source, full-refresh, and targeted-refresh cases on C (an isolated
-  runtime) preserve today's behavior and do not affect A or B.
+- a workspace-relative source edit followed by full `runtime/refresh!` gives per-member outcomes and updates both pooled registries under managed coordination, without changing the pool host generation;
+- a dependency, selected-alias, membership, or pool-setting change returns `:restart-required` before evaluating staged init/module source;
+- a targeted `:only` refresh is rejected for a pooled runtime if that is the selected first-version policy; and
+- the same source, full-refresh, and targeted-refresh cases on C (an isolated runtime) preserve today's behavior and do not affect A or B.
 
 Use the existing `modules-test` file-module cases as the shape for live source edits and the existing `startup-test` probe cases as the shape for candidate basis failures. Do not claim that a raw REPL `require :reload` is private to a workspace: shared code definitions remain visible across one JVM. The test should only require the selected runtime's registry and state to stay separate.
 
 ### Custody and failed replacement probe
 
-Extend the `cli/cmd/mill` process-control unit tests for grouped admission. `TestPoolCustodyRequiresExactMemberIdentityAndToken` admits each member's identity under the one supervised host PID, rejects an unproven PID or inherited launch token, and keeps custody lookup scoped by canonical workspace/member.
-Keep the existing `cli/internal/process` tests as the owner-level regression for launch-key idempotence, terminal retention, cancellation, descendant termination, and uncertain stop evidence. Add only a group-specific case if the new host changes a public custody boundary.
+Extend the `cli/cmd/mill` process-control unit tests for grouped admission. `TestPoolCustodyRequiresExactMemberIdentityAndToken` admits each member's identity under the one supervised host PID, rejects an unproven PID or inherited launch token, and keeps custody lookup scoped by canonical workspace/member. Keep the existing `cli/internal/process` tests as the owner-level regression for launch-key idempotence, terminal retention, cancellation, descendant termination, and uncertain stop evidence. Add only a group-specific case if the new host changes a public custody boundary.
 
 In `TestJVMPoolLifecycleAcceptance`, launch one long-lived owned child from A and one from B through the real process-control path, then replace the Weaver within the same Mill. Verify the custody records remain addressable by their workspace owner and handle, and that replacement does not confuse the host PID with either child PID. Cancel and acknowledge both children before Mill shutdown; this does not claim child retention through Mill shutdown. On replacement, require exact-PID cleanup and an explicit wait for the old host before removing state or sockets.
 
@@ -121,13 +85,9 @@ In `TestJVMPoolLifecycleAcceptance`, launch one long-lived owned child from A an
 
 Every process acceptance run needs three disposable roots:
 
-- `ws_root=$(mktemp -d /tmp/millstrand-jvm-pool.XXXXXX)` for A/B/C/D
-  workspaces and module sources;
-- `state_root=$(mktemp -d /tmp/millstrand-jvm-pool-state.XXXXXX)` exported as
-  `XDG_STATE_HOME`, so Mill metadata, pool registration, and custody records
-  cannot touch the coordination world; and
-- a separate short fixture or repository root when the test needs a caller CWD
-  distinct from a selected workspace.
+- `ws_root=$(mktemp -d /tmp/millstrand-jvm-pool.XXXXXX)` for A/B/C/D workspaces and module sources;
+- `state_root=$(mktemp -d /tmp/millstrand-jvm-pool-state.XXXXXX)` exported as `XDG_STATE_HOME`, so Mill metadata, pool registration, and custody records cannot touch the coordination world; and
+- a separate short fixture or repository root when the test needs a caller CWD distinct from a selected workspace.
 
 Guard cleanup variables with `${ws_root:?}` and `${state_root:?}`. Record Mill's PID, each admitted host PID, and every child PID at the moment the test owns it. Stop through the public lifecycle first, wait for each exact PID, and assert it is gone before deleting metadata, sockets, databases, or roots. The test must fail if any owned process remains. It must not kill a process by name or pattern and must never start, stop, or inspect the shared `/Users/ct/dev/projects/skein-src/.millstrand` world.
 

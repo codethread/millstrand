@@ -1,9 +1,13 @@
 # JVM pool restart admission proposal
 
 **Document ID:** `PROP-Jpra-001`
+
 **Status:** Approved
+
 **Approved:** 2026-09-11
+
 **Related RFCs:** None
+
 **Related root specs:** [`SPEC-004`](../../specs/daemon-runtime.md)
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.

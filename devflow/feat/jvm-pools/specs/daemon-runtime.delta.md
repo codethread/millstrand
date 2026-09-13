@@ -1,9 +1,13 @@
 # Weaver runtime delta for JVM pools
 
 **Document ID:** `DELTA-Jvp-002`
+
 **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
 **Feature:** [../proposal.md](../proposal.md)
+
 **Status:** Implemented and promoted to [Weaver runtime root spec](../../../specs/daemon-runtime.md#spec-004p10f-jvm-pool-host)
+
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jvp-002.P1 Summary

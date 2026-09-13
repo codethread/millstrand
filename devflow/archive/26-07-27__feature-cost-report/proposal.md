@@ -1,8 +1,11 @@
 # Feature cost report proposal
 
 **Document ID:** `PROP-Fcr-001`
+
 **Last Updated:** 2026-07-27
+
 **Related RFCs:** None
+
 **Related root specs:** None
 
 ## PROP-Fcr-001.P1 Problem

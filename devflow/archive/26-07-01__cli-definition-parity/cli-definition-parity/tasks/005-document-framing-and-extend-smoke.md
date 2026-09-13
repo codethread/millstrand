@@ -17,8 +17,8 @@ References:
 ## CDP-TASK-005.P2 Implementation notes
 
 - Update `docs/skein.md` and `docs/getting-started.md` where named queries, patterns, `weave`, or batch mutation are described:
-  - Show `query list` / `query explain <name>` beside `pattern list` / `pattern explain <name>` as the named-definition discovery pair, with application staying `list --query` / `ready --query` and `weave --pattern`.
-  - Add the framing: `weave --pattern` is the CLI-safe, named, spec-checked, create-only front door over the same transactional batch engine as REPL-only `skein.batch.alpha/apply!`, which can also update, burn, and upsert edges at the trusted tier.
+    - Show `query list` / `query explain <name>` beside `pattern list` / `pattern explain <name>` as the named-definition discovery pair, with application staying `list --query` / `ready --query` and `weave --pattern`.
+    - Add the framing: `weave --pattern` is the CLI-safe, named, spec-checked, create-only front door over the same transactional batch engine as REPL-only `skein.batch.alpha/apply!`, which can also update, burn, and upsert edges at the trusted tier.
 - Extend `dev/skein/smoke.clj`: in the existing disposable-world CLI section, register a parameterized named query (via the existing trusted config or `weaver repl --stdin` path the smoke already uses), then run `strand query list` and `strand query explain <name>` as CLI subprocess commands and assert on the returned JSON fields (`name`, `params`, `referenced-params`, `summary`).
 - Check `CLAUDE.md` and root `README.md` after the docs change for any stale command-surface statements and sync them if needed.
 

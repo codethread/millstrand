@@ -143,7 +143,7 @@ Batch hooks should receive aggregate context, not only fanout strand events:
 ## RFC-008.P10 Options
 
 | ID | Summary | Pros | Cons |
-| -- | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-008.OPT1 | Keep events only. | No new runtime surface. | Cannot block invalid mutations; violates the need for schema and transition enforcement. |
 | RFC-008.OPT2 | Make event handlers synchronous and rollback-capable. | Reuses existing registry names. | Breaks the event contract; conflates notification and policy; makes async observers dangerous. |
 | RFC-008.OPT3 | Add only pre-commit mutation hooks. | Smallest policy mechanism; solves transition validation. | Does not address received CLI payload handling or explicit coercion before candidate construction. |

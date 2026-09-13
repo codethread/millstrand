@@ -16,10 +16,10 @@ References:
 ## CDP-TASK-002.P2 Implementation notes
 
 - In `src/skein/weaver/socket.clj`:
-  - Add `"query-list"` and `"query-explain"` to `allowed-operations`.
-  - Add `argument-error` cases: `query-list` requires `{}` arguments; `query-explain` requires exactly `{"query" <string>}` (match the `pattern-explain` case shape).
-  - Add `dispatch` cases: `"query-list"` calls the `query-metadata` API helper; `"query-explain"` calls the `query-explain` API helper with the existing `query-name` normalization used by `list-query` (trims, strips a leading `:`, rejects blank).
-  - Do not add either operation to `payload-hook-operations`.
+    - Add `"query-list"` and `"query-explain"` to `allowed-operations`.
+    - Add `argument-error` cases: `query-list` requires `{}` arguments; `query-explain` requires exactly `{"query" <string>}` (match the `pattern-explain` case shape).
+    - Add `dispatch` cases: `"query-list"` calls the `query-metadata` API helper; `"query-explain"` calls the `query-explain` API helper with the existing `query-name` normalization used by `list-query` (trims, strips a leading `:`, rejects blank).
+    - Do not add either operation to `payload-hook-operations`.
 - Result maps flow through the existing `json-safe-value` conversion; keyword params become strings and `where`/`definition` become the JSON guidance projections while `where-form`/`definition-form` stay exact EDN strings. No socket-local registry reads or reshaping beyond that conversion.
 
 ## CDP-TASK-002.P3 Done when

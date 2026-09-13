@@ -6,7 +6,7 @@ Always study [TENETS](./TENETS.md) and [PHILOSOPHY](./PHILOSOPHY.md). No code, s
 
 [UBIQUITOUS-LANGUAGE](./UBIQUITOUS-LANGUAGE.md) is the repo's dictionary and the definitional source for every term below. Documents here use those words without re-explaining them; where a definition disagrees with the code, the code wins and the dictionary is the bug.
 
-[RFCs](./rfcs/) propose work that then ships; [ADRs](./adrs/) record a decision reached, including a decision to keep a tenet and *not* build something.
+[RFCs](./rfcs/) propose work that then ships; [ADRs](./adrs/) record a decision reached, including a decision to keep a tenet and _not_ build something.
 
 ## Root specs
 

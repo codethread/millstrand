@@ -10,10 +10,10 @@ The public CLI gains a read-only `query` command group (`query list`, `query exp
 
 - **CDP-DELTA-001.CC1:** The SPEC-002.P2 command tree gains two subcommands:
 
-  ```text
-  query list
-  query explain <name>
-  ```
+    ```text
+    query list
+    query explain <name>
+    ```
 
 - **CDP-DELTA-001.CC2:** `query list` sends no arguments to the weaver and returns a JSON array of registered query metadata entries ordered by canonical name. Each entry contains `name`, `params` (declared parameter allowlist from map query definitions; empty for vector definitions), and `referenced-params` (the `[:param ...]` references discovered in the effective `:where` expression — the params callers must provide for successful invocation). Entries do not include full query definitions.
 - **CDP-DELTA-001.CC3:** `query explain <name>` sends only the query name to the weaver and returns JSON caller guidance for one registered query: `name`, `params`, `referenced-params`, `where`, `definition`, `where-form`, `definition-form`, and a short `summary` explaining that invocation happens through `list --query` / `ready --query` with repeated `--param key=value`. Structured `where` / `definition` are JSON guidance projections of the EDN query definition, not a CLI authoring format; exact round-trippable EDN lives in the `where-form` / `definition-form` strings. Missing or blank names are CLI usage errors rejected before transport, matching `pattern explain`; unknown query names fail non-zero with the existing `query/not-found` domain error including available names.

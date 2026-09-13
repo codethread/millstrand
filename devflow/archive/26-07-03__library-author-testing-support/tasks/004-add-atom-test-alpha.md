@@ -17,16 +17,16 @@ References:
 
 - Add `src/skein/test/alpha.clj` so external library test JVMs can require it through a Skein `:local/root` dependency.
 - Implement a small API with names from the delta unless implementation proves a better minimal naming:
-  - `with-weaver-world`
-  - `weaver-world-fixture`
-  - `repl!`
+    - `with-weaver-world`
+    - `weaver-world-fixture`
+    - `repl!`
 - The helper should:
-  - create short-path isolated config dirs by default
-  - write `config.json`, `spools.edn`, `init.clj`, and config-dir-relative fixture files from options
-  - start an in-process weaver runtime (unpublished, `:publish? false`, per RFC-016, so weaver worlds nest and parallelize)
-  - expose a context map with config/state/data dirs, source checkout, storage kind, metadata, and runtime handle
-  - stop the weaver and clean up in `finally`
-  - fail loudly on startup, init, eval, stop, or cleanup errors
+    - create short-path isolated config dirs by default
+    - write `config.json`, `spools.edn`, `init.clj`, and config-dir-relative fixture files from options
+    - start an in-process weaver runtime (unpublished, `:publish? false`, per RFC-016, so weaver worlds nest and parallelize)
+    - expose a context map with config/state/data dirs, source checkout, storage kind, metadata, and runtime handle
+    - stop the weaver and clean up in `finally`
+    - fail loudly on startup, init, eval, stop, or cleanup errors
 - `repl!` should evaluate weaver-routed forms and return Clojure data or throw with useful context.
 - Support at least `:storage :sqlite-file` and `:storage :sqlite-memory`.
 - Do not add strand wrappers, query wrappers, assertion DSLs, package install helpers, Go CLI subprocess helpers, or CLI binary discovery.

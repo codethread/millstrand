@@ -35,21 +35,21 @@ Separately, the relationship between `weave` (named, spec-checked, CLI-safe, cre
 ## CDP-PROP-001.P4 Proposed scope
 
 - **CDP-PROP-001.S1:** Add a `query` command group with:
-  - `query list` — returns registered query metadata ordered by canonical name.
-  - `query explain <name>` — returns one query's caller guidance: canonical name, declared params, referenced params, normalized definition, and exact EDN form string.
+    - `query list` — returns registered query metadata ordered by canonical name.
+    - `query explain <name>` — returns one query's caller guidance: canonical name, declared params, referenced params, normalized definition, and exact EDN form string.
 - **CDP-PROP-001.S2:** Use explicit read-only JSON socket operation names `query-list` and `query-explain`, matching `pattern-list` / `pattern-explain`. Do not reuse the existing trusted nREPL/API `queries` helper as the public socket operation shape, because `queries` returns the raw registry map while CLI callers need an ordered, metadata-oriented vector.
 - **CDP-PROP-001.S3:** Add weaver API query introspection helpers used by both socket dispatch and REPL helpers. Keep `queries` as the raw trusted registry listing, and add distinct metadata/explain helpers rather than changing existing REPL return shapes. Preferred helper names: `(query-explain name)` and a lower-level API `query-explain` / `query-metadata` pair.
 - **CDP-PROP-001.S4:** Define the query introspection result shape before implementation:
-  - `query list` returns a JSON array of entries such as `{"name":"mine","params":[...],"referenced-params":[...]}`; entries are ordered by canonical name and avoid dumping full definitions by default.
-  - `query explain <name>` returns the same core fields for one query plus `where`, `definition`, `where-form`, `definition-form`, and a short `summary` explaining that invocation happens through `list --query` / `ready --query` with repeated `--param key=value`.
-  - Structured `where` / `definition` are JSON guidance projections of the EDN query definition, not a CLI authoring format. Exact round-trippable EDN remains available in `where-form` / `definition-form` strings for trusted users and docs.
-  - `params` are the declared allowlist from map query definitions. `referenced-params` are `[:param ...]` references discovered in the effective `:where` expression and are the params callers must provide for successful invocation. Valid vector query definitions have no runtime params; parameterized public queries should use the existing map form with `:params`.
+    - `query list` returns a JSON array of entries such as `{"name":"mine","params":[...],"referenced-params":[...]}`; entries are ordered by canonical name and avoid dumping full definitions by default.
+    - `query explain <name>` returns the same core fields for one query plus `where`, `definition`, `where-form`, `definition-form`, and a short `summary` explaining that invocation happens through `list --query` / `ready --query` with repeated `--param key=value`.
+    - Structured `where` / `definition` are JSON guidance projections of the EDN query definition, not a CLI authoring format. Exact round-trippable EDN remains available in `where-form` / `definition-form` strings for trusted users and docs.
+    - `params` are the declared allowlist from map query definitions. `referenced-params` are `[:param ...]` references discovered in the effective `:where` expression and are the params callers must provide for successful invocation. Valid vector query definitions have no runtime params; parameterized public queries should use the existing map form with `:params`.
 - **CDP-PROP-001.S5:** Make the named-definition command family symmetric and self-describing in help text: `query`/`pattern` both offer `list`/`explain`, and the read/write application split is explicit.
 - **CDP-PROP-001.S6:** Add spec/README language framing `weave` as the CLI-safe front door over the same transactional batch engine as REPL-only `skein.batch.alpha/apply!`. Patterns expose controlled create-only graph construction; raw batch remains trusted Clojure because it can create, update, burn, and upsert edges.
 - **CDP-PROP-001.S7:** Update feature-local deltas at plan time:
-  - SPEC-002 CLI Surface: add `query list` / `query explain <name>` to the command tree; adjust SPEC-002.C13 to exclude query mutation but allow read-only query introspection; update SPEC-002.C24 so query introspection is read-only and not gated by received-payload hooks; keep the deferred raw batch/query authoring exclusions.
-  - SPEC-003 REPL API: add `(query-explain name)` beside `queries` for parity with `pattern-explain`. The trusted REPL already has raw `queries`; this feature adds the caller-guidance shape used by the CLI rather than replacing raw registry access.
-  - SPEC-004 Weaver Runtime: add `query-list` and `query-explain` to the JSON socket allowlist and narrow the registry exclusion to mutation/authoring; document the API operation(s) and read-only hook behavior.
+    - SPEC-002 CLI Surface: add `query list` / `query explain <name>` to the command tree; adjust SPEC-002.C13 to exclude query mutation but allow read-only query introspection; update SPEC-002.C24 so query introspection is read-only and not gated by received-payload hooks; keep the deferred raw batch/query authoring exclusions.
+    - SPEC-003 REPL API: add `(query-explain name)` beside `queries` for parity with `pattern-explain`. The trusted REPL already has raw `queries`; this feature adds the caller-guidance shape used by the CLI rather than replacing raw registry access.
+    - SPEC-004 Weaver Runtime: add `query-list` and `query-explain` to the JSON socket allowlist and narrow the registry exclusion to mutation/authoring; document the API operation(s) and read-only hook behavior.
 
 ## CDP-PROP-001.P5 Decisions and open questions
 

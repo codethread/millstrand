@@ -19,7 +19,7 @@ Make the REPL match the product philosophy by attaching users directly to the li
 ## LWRL-PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | LWRL-PLAN-001.AA1 | `cli/internal/command` | Replace helper JVM `replArgs` launch path with thin nREPL attach/eval behavior for `weaver repl` and `--stdin`; keep any API-client mode explicit if retained. |
 | LWRL-PLAN-001.AA2 | `cli/cmd/mill` | Ensure `weaver-repl-context` returns selected-world running status, nREPL metadata, and source only when needed to launch the thin attach client. |
 | LWRL-PLAN-001.AA3 | `src/skein/repl.clj` | Make helpers work in-process against `current-runtime`; keep connected-client support for explicit client/test use. |
