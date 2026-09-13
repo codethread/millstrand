@@ -10,6 +10,7 @@ jobs:
     outputs:
       clojure: ${{ steps.filter.outputs.clojure }}
       go: ${{ steps.filter.outputs.go }}
+      markdown: ${{ steps.filter.outputs.markdown }}
       shared: ${{ steps.filter.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +36,12 @@ jobs:
               - 'tools/**'
               - 'go.work'
               - '.golangci.yml'
+            markdown:
+              - '**/*.md'
+              - 'package.json'
+              - 'bun.lock'
+              - '.oxfmtrc.json'
+              - 'scripts/format-markdown'
             shared:
               - '.github/workflows/**'
               - 'Makefile'
@@ -139,15 +146,26 @@ jobs:
           cache-dependency-path: cli/go.sum
       - run: make fmt-check-go
 
+  markdown-format:
+    name: Markdown format check
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.markdown == 'true' || needs.changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: make fmt-check-markdown
+
   format-check:
     name: Format check
-    needs: [clojure-format, go-format]
+    needs: [clojure-format, go-format, markdown-format]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - run: |
           test "${{ needs.clojure-format.result }}" != failure
           test "${{ needs.go-format.result }}" != failure
+          test "${{ needs.markdown-format.result }}" != failure
 
   clj-kondo:
     name: clj-kondo

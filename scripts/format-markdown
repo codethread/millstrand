@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+files=()
+while IFS= read -r -d '' file; do
+  files+=("$file")
+done < <(git ls-files -z -- '*.md')
+
+if ((${#files[@]} == 0)); then
+  echo "format-markdown: no tracked Markdown files" >&2
+  exit 1
+fi
+
+oxfmt_version=$(bun -p 'require("./package.json").devDependencies.oxfmt')
+if [[ ! $oxfmt_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "format-markdown: expected an exact oxfmt version, found '$oxfmt_version'" >&2
+  exit 1
+fi
+
+exec bun x "oxfmt@$oxfmt_version" "$@" -- "${files[@]}"
