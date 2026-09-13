@@ -76,6 +76,7 @@
    'millstrand.core.weaver.graph-query-test
    'millstrand.core.weaver.hooks-events-test
    'millstrand.core.weaver.ops-help-test
+   'millstrand.core.weaver.prime-advice-test
    'millstrand.core.weaver.patterns-test
    'millstrand.core.weaver.socket-test
    ;; Uses a disposable Unix socket and no shared runtime state.

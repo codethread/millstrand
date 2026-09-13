@@ -100,6 +100,33 @@
          #(or (not (contains? % :source/file))
               (non-blank-string? (:source/file %)))))
 
+(s/def ::prime-advice-declaration
+  (s/and map?
+         #(= #{:target :text} (set (keys %)))
+         #(non-blank-string? (:target %))
+         #(non-blank-string? (:text %))))
+
+(defn prime-advice-target
+  "Return the canonical op name for a prime-advice target symbol.
+
+  Targets are simple symbols because prime advice names an op declaration, not
+  an arbitrary runtime expression or verb path."
+  [target]
+  (when-not (and (simple-symbol? target) (not (str/blank? (str target))))
+    (throw (ex-info "defprime-advice target must be a non-blank simple symbol"
+                    {:reason :prime-advice/invalid-target
+                     :target target
+                     :expected :simple-symbol})))
+  (name target))
+
+(defn prime-advice-declaration
+  "Return a validated prime-advice declaration for `target` and `text`."
+  [target text]
+  (require-valid! ::prime-advice-declaration
+                  {:target (prime-advice-target target)
+                   :text text}
+                  "defprime-advice declaration is invalid"))
+
 (defn op-declaration
   "Return a validated `:ops` entry.
 

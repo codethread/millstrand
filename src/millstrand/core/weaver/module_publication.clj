@@ -10,7 +10,8 @@
   cross-owner references, deletion by omission, symbol resolvability — belong to
   a kind's optional `:candidate-validator`, which `validate-kind-candidates!`
   runs over the complete staged candidate before any snapshot is swapped."
-  (:require [millstrand.api.registry.alpha :as registry]
+  (:require [clojure.string :as str]
+            [millstrand.api.registry.alpha :as registry]
             [millstrand.core.weaver.access :as access]
             [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.owner-registry :as owner-registry]))
@@ -27,6 +28,7 @@
    :patterns (core-backend :patterns (:pattern-store runtime))
    :hooks (core-backend :hooks (:hook-store runtime))
    :bins (core-backend :bins (:bin-store runtime))
+   :prime-advice (core-backend :prime-advice (:prime-advice-store runtime))
    :events {:kind :events
             :type :core
             :store (get-in runtime [:event-system :handler-store])
@@ -57,7 +59,7 @@
 (defn backends
   "Return the runtime's unique kind-id to publication-backend map.
 
-  The six core stores are always present. Each runtime-owned registry handle
+  The seven core stores are always present. Each runtime-owned registry handle
   found directly in `:spool-state` contributes its declared open kinds. A kind
   declared by two stores fails loudly before contribution evaluation."
   [runtime]
@@ -198,6 +200,44 @@
   (let [validate! (requiring-resolve 'millstrand.api.weaver.alpha/validate-op-entry!)]
     (run! validate! (candidate-ops backends candidate-map)))
   candidate-map)
+
+(defn validate-prime-advice-candidates!
+  "Validate every prime-advice target against the complete candidate op set.
+
+  Advice may target an op contributed by any module in the same refresh. The
+  target must exist and own non-blank base prime prose. Stored module provenance
+  must agree with the owner partition that publication derived."
+  [backends candidate-map]
+  (let [op-storage (get-in backends [:ops :storage])
+        advice-storage (get-in backends [:prime-advice :storage])
+        ops (owner-registry/effective-values
+             (get candidate-map op-storage) :ops)
+        advice-candidate (get candidate-map advice-storage)
+        advice (owner-registry/effective-values advice-candidate :prime-advice)]
+    (doseq [[entry-key {:keys [target module/key] :as entry}] advice]
+      (let [owner (get-in advice-candidate
+                          [:effective :prime-advice entry-key :owner])
+            op (get ops target)]
+        (when-not (= key owner)
+          (throw (ex-info "Prime advice provenance does not match its module owner"
+                          {:reason :prime-advice/owner-mismatch
+                           :key entry-key
+                           :module/key key
+                           :owner owner})))
+        (when-not op
+          (throw (ex-info "Prime advice target operation is not registered"
+                          {:reason :prime-advice/target-not-found
+                           :target target
+                           :module/key key
+                           :available (vec (keys ops))})))
+        (when-not (and (string? (:prime op))
+                       (not (str/blank? (:prime op))))
+          (throw (ex-info "Prime advice target operation declares no base prime"
+                          {:reason :prime-advice/base-prime-missing
+                           :target target
+                           :module/key key
+                           :provenance (:provenance entry)})))))
+    candidate-map))
 
 (defn- candidate-owners
   "Return `kind-id`'s entry-key to winning-owner map inside one candidate."

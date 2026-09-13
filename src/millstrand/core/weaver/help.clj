@@ -49,16 +49,18 @@
   `about`/`prime` output is never transformed.
 
   Besides the `help` catalog/detail projection, this namespace owns the two
-  builtin arity-1 meta-verbs `about` and `prime` (DELTA-Dtf-002.CC6): each
-  resolves one op and returns its declared `:about`/`:prime` prose beside the same
-  op-wide `source`, failing loudly on missing prose or a verb path."
+  builtin arity-1 meta-verbs `about` and `prime` (DELTA-Dtf-002.CC6). Both
+  resolve one op and return its declared prose beside the same op-wide `source`;
+  `prime` also composes ordered module advice and returns appendix provenance.
+  Both fail loudly on missing base prose or a verb path."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [millstrand.api.cli.alpha :as cli]
             [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.return-shape.alpha :as return-shape]
             [millstrand.api.spec.alpha :as spec-alpha]
-            [millstrand.core.weaver.core-registry :as core-registry]))
+            [millstrand.core.weaver.core-registry :as core-registry]
+            [millstrand.core.weaver.module-graph :as module-graph]))
 
 (def ^:private schema-version
   "Positive integer versioning the help-schema contract itself.
@@ -666,6 +668,28 @@
                                        :source :json
                                        :node node-return-shape}}}}})
 
+(defn- prime-appendices
+  "Return `op-name`'s active advice in module and source declaration order."
+  [runtime op-name]
+  (let [module-order (module-graph/dependency-order
+                      (:graph @(:module-state runtime)))
+        module-ranks (zipmap module-order (range))
+        entries (->> (core-registry/effective (:prime-advice-store runtime))
+                     vals
+                     (filter #(= op-name (:target %))))]
+    (mapv
+     (fn [{:keys [text provenance ordinal source module/key]}]
+       (when-not (contains? module-ranks key)
+         (throw (ex-info "Prime advice owner is absent from the active module graph"
+                         {:reason :prime-advice/owner-not-active
+                          :operation op-name
+                          :module/key key})))
+       {:text text
+        :provenance {:module (subs (str key) 1) :namespace (str provenance)}
+        :order {:module (get module-ranks key) :declaration ordinal}
+        :source source})
+     (sort-by (juxt #(get module-ranks (:module/key %)) :ordinal) entries))))
+
 (defn- meta-verb-result
   "Project one op's declared `field` prose beside the op-wide `source`.
 
@@ -673,9 +697,9 @@
   A verb path (extra positionals past the op name) fails loudly and redirects to
   `help` (DELTA-Dtf-003.CC4); missing or blank declared prose fails loudly with
   the `discovery/unavailable` outcome (DELTA-Dtf-001.CC7, TEN-003), never empty
-  success. Returns `{field prose, source}` — a JSON object, never a bare string,
-  so keys may be added later without a breaking conversion. `source` resolves as
-  in the help envelope (DELTA-Dtf-002.CC2); the prose is never transformed."
+  success. Prime output appends active module-owned advice to the base prose and
+  includes ordered appendix provenance. `source` remains the base op's source
+  pointer. The prose is never transformed."
   [ctx field]
   (let [runtime (:op/runtime ctx)
         {:keys [op verbs]} (:op/args ctx)]
@@ -692,8 +716,14 @@
                         {:code "discovery/unavailable"
                          :operation op
                          :field field})))
-      {field prose
-       :source (resolve-op-source runtime entry)})))
+      (let [appendices (if (= :prime field)
+                         (prime-appendices runtime op)
+                         [])]
+        (cond-> {field (if (seq appendices)
+                         (str/join "\n\n" (into [prose] (map :text appendices)))
+                         prose)
+                 :source (resolve-op-source runtime entry)}
+          (= :prime field) (assoc :appendices appendices))))))
 
 (defn op-about-handler
   "Return one op's declared `:about` prose beside its op-wide `source`."
@@ -701,7 +731,7 @@
   (meta-verb-result ctx :about))
 
 (defn op-prime-handler
-  "Return one op's declared `:prime` prose beside its op-wide `source`."
+  "Return an op's composed prime, base source, and ordered advice appendices."
   [ctx]
   (meta-verb-result ctx :prime))
 
@@ -730,14 +760,26 @@
 (def ^:private about-arg-spec (meta-verb-arg-spec "about" "about"))
 (def ^:private prime-arg-spec (meta-verb-arg-spec "prime" "prime"))
 
+(def ^:private prime-appendices-return-shape
+  {:type :collection
+   :items {:type :map
+           :required {:text :string
+                      :provenance {:type :map
+                                   :required {:module :string
+                                              :namespace :string}}
+                      :order {:type :map
+                              :required {:module :integer
+                                         :declaration :integer}}
+                      :source :json}}})
+
 (defn- meta-verb-return-shape
-  "Declared return shape for a meta-verb: `{<field> string, source json}`
-  (DELTA-Dtf-001.CC7). `source` is `:json` so it accepts both `null` and a
-  `{file, line}` map."
+  "Return the declared shape for an `about` or `prime` meta-verb."
   [field]
   {:type :map
-   :required {field :string
-              :source :json}})
+   :required (cond-> {field :string
+                      :source :json}
+               (= :prime field)
+               (assoc :appendices prime-appendices-return-shape))})
 
 (defn register-built-in-ops!
   "Install Millstrand-provided CLI operations into the runtime op registry.

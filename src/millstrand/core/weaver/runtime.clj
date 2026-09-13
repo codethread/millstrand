@@ -673,6 +673,7 @@
             pattern-store (core-registry/backed-registry :patterns)
             hook-store (core-registry/backed-registry :hooks)
             bin-store (core-registry/backed-registry :bins)
+            prime-advice-store (core-registry/backed-registry :prime-advice)
             runtime-base {:storage storage
                           :datasource ds
                           :clock (atom (clock/system-clock))
@@ -682,6 +683,7 @@
                           :op-store op-store
                           :hook-store hook-store
                           :bin-store bin-store
+                          :prime-advice-store prime-advice-store
                           :glossary-registry (atom {})
                           :help-transform-slot (atom nil)
                           :generation-id generation-id

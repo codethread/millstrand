@@ -11,6 +11,7 @@
             [clojure.string :as str]
             [millstrand.api.registry.alpha :as registry]
             [millstrand.core.format :as format]
+            [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.lifecycle-effects :as lifecycle-effects]))
 
 (def ^:private declaration-keys
@@ -39,6 +40,10 @@
 
 (def ^:dynamic ^:private *kind-collector*
   "Dynamically bound open-kind declaration collector, or nil."
+  nil)
+
+(def ^:dynamic ^:private *prime-advice-ordinal*
+  "Dynamically bound source-order counter for prime advice, or nil."
   nil)
 
 (def ^:dynamic ^:private *contribution-context*
@@ -331,6 +336,39 @@
                   (update-in [kind-id :overrides] (fnil disj #{}) entry-key))))))
    value))
 
+(defn collect-prime-advice!
+  "Collect one ordered prime-advice declaration from the current module source.
+
+  Unlike reusable Var-backed authoring families, prime advice is bounded to the
+  source evaluation that owns it. Calls outside module collection fail loudly.
+  The stored entry records its module, namespace, source pointer, and explicit
+  zero-based declaration ordinal."
+  [declaration source-line]
+  (when-not *contribution-collector*
+    (fail! "defprime-advice requires an active module source collection"
+           {:reason :prime-advice/outside-module-source
+            :declaration declaration}))
+  (require-collection-source!)
+  (let [ordinal (swap! *prime-advice-ordinal* inc)
+        module-key (:module/key *contribution-context*)
+        source-file (:source/file *contribution-context*)
+        entry (assoc declaration
+                     :module/key module-key
+                     :provenance (:source/namespace (current-source-context))
+                     :ordinal ordinal
+                     :source (when (and (string? source-file)
+                                        (not (str/blank? source-file))
+                                        (pos-int? source-line))
+                               {:file source-file :line source-line}))]
+    (when-not (s/valid? ::core-registry/prime-advice-entry entry)
+      (fail! "Collected prime advice has an invalid shape"
+             {:reason :prime-advice/invalid-entry
+              :entry entry
+              :explain (s/explain-data ::core-registry/prime-advice-entry entry)}))
+    (swap! *contribution-collector*
+           assoc-in [:prime-advice :entries [module-key ordinal]] entry)
+    entry))
+
 (defn collect-lifecycle!
   "Record one lifecycle declaration in the active module source evaluation.
 
@@ -400,9 +438,11 @@
   (let [collector (atom {})
         lifecycle-collector (atom {})
         kind-collector (atom {})
+        prime-advice-ordinal (atom -1)
         return (binding [*contribution-collector* collector
                          *lifecycle-collector* lifecycle-collector
                          *kind-collector* kind-collector
+                         *prime-advice-ordinal* prime-advice-ordinal
                          *contribution-context* context]
                  (f))
         contribution (update-vals @collector

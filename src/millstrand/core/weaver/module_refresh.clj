@@ -1114,6 +1114,8 @@
                                             candidate-projection)
                              :baseline-status (:status old-generation)))})
                 _ (publication/validate-op-candidates! backends (:candidates staged))
+                _ (publication/validate-prime-advice-candidates!
+                   backends (:candidates staged))
                 _ (publication/validate-kind-candidates!
                    runtime backends (:candidates staged))
                 _ (diagnostic! opts :candidate/validate :completed

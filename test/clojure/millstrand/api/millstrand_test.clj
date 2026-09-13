@@ -5,6 +5,6 @@
 
 (deftest public-namespace-exposes-only-core-authoring-forms
   (is (= '#{defbin defbin! defhandler defhandler! defhook defhook!
-            defop defop! defpattern defpattern! defquery defquery!
+            defop defop! defpattern defpattern! defprime-advice defquery defquery!
             use-bin! use-handler! use-hook! use-op! use-pattern! use-query!}
          (set (keys (ns-publics 'millstrand.api.millstrand.alpha))))))

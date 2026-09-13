@@ -1,13 +1,16 @@
 (ns millstrand.api.millstrand.alpha
   "Authoring forms for Millstrand's owner-complete core kinds.
 
-  Every family has an inert definition, a typed use form, and a bang shorthand
-  that defines and selects. Definitions attach a reusable descriptor to the
-  exact authored Var; only selection contributes to a module collector. The
+  Six Var-backed families have an inert definition, a typed use form, and a
+  bang shorthand that defines and selects. Definitions attach a reusable
+  descriptor to the exact authored Var; only selection contributes to a module
+  collector. The
   imperative runtime registration functions and `collect-kind!` remain the
-  direct low-level surface."
+  direct low-level surface. `defprime-advice` is the current-source-only form
+  for ordered additions to an existing op prime."
   (:require [millstrand.api.authoring.alpha :as authoring]
-            [millstrand.core.contribution :as contribution]))
+            [millstrand.core.contribution :as contribution]
+            [millstrand.core.weaver.module-graph :as module-graph]))
 
 (doseq [[kind entry-spec] [[:ops ::contribution/op-entry]
                            [:queries ::contribution/query-entry]
@@ -16,6 +19,20 @@
                            [:events ::contribution/event-entry]
                            [:bins ::contribution/bin-entry]]]
   (authoring/register-registry-kind! kind entry-spec))
+
+(defmacro defprime-advice
+  "Append ordered module-owned guidance to an op's authoritative prime.
+
+  `(defprime-advice op-name text)` accepts a simple op-name symbol and an
+  expression yielding non-blank text. It is valid only while the current module
+  source is being collected. The declaration records source order and
+  provenance; it cannot create, prepend, replace, or override the target op's
+  base `:prime`."
+  [target text]
+  (let [target (symbol (contribution/prime-advice-target target))]
+    `(module-graph/collect-prime-advice!
+      (contribution/prime-advice-declaration '~target ~text)
+      ~(-> &form meta :line))))
 
 (authoring/defauthoring op [mode form-name doc opts argv & body]
   (let [fn-sym (symbol (str (ns-name *ns*)) (str form-name))
