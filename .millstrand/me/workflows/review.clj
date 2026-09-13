@@ -3,6 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [ct.spools.harnesses.reviewers :as reviewers]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.graph.alpha :as graph]
@@ -43,24 +44,44 @@
 (s/def ::reviewers (s/coll-of ::reviewer :kind vector?))
 (s/def ::verdict #{"findings" "no-findings"})
 (s/def ::reason ::non-blank-string)
-(s/def ::skips (s/coll-of map? :kind vector? :min-count 1))
+(s/def ::repo-root ::non-blank-string)
+(s/def ::source #{"branch"})
+(s/def ::base-sha ::sha)
+(s/def ::merge-base ::sha)
+(s/def ::tip ::sha)
+(s/def ::tip-sha ::sha)
+(s/def ::paths (s/coll-of ::non-blank-string :kind vector? :min-count 1))
+(s/def ::change
+  (s/and (s/keys :req-un [::source ::repo-root ::base ::base-sha
+                          ::merge-base ::tip ::tip-sha ::paths])
+         #(= #{:source :repo-root :base :base-sha :merge-base
+               :tip :tip-sha :paths}
+             (set (keys %)))
+         #(= (:base %) (:base-sha %) (:merge-base %))
+         #(= (:tip %) (:tip-sha %))))
+(s/def ::runs (s/coll-of map? :kind vector?))
+(s/def ::skip
+  (s/and map?
+         #(= #{:reviewer :reason} (set (keys %)))
+         #(support/non-blank-string? (:reviewer %))
+         #(= "glob-mismatch" (:reason %))))
+(s/def ::skips (s/coll-of ::skip :kind vector? :min-count 1))
+(s/def ::selection
+  (s/and (s/keys :req-un [::status ::reason ::change ::runs ::skips])
+         #(= #{:status :reason :change :runs :skips} (set (keys %)))
+         #(= "skipped" (:status %))
+         #(= "no-matching-reviewers" (:reason %))
+         #(empty? (:runs %))))
 (s/def ::success-evidence
   (s/and (s/keys :req-un [::status ::base ::head ::reviewers ::verdict])
          #(= "success" (:status %))
          #(seq (:reviewers %))))
 (s/def ::no-applicable-reviewer-evidence
-  (s/and (s/keys :req-un [::status ::reason ::base ::head
-                          ::reviewers ::skips])
-         #(= #{:status :reason :base :head :reviewers :skips}
-             (set (keys %)))
-         #(= "skipped" (:status %))
-         #(= "no-matching-reviewers" (:reason %))
-         #(empty? (:reviewers %))
-         #(every? (fn [skip]
-                    (and (= #{:reviewer :reason} (set (keys skip)))
-                         (support/non-blank-string? (:reviewer skip))
-                         (= "glob-mismatch" (:reason skip))))
-                  (:skips %))))
+  (s/and (s/keys :req-un [::base ::head ::selection])
+         #(= #{:base :head :selection} (set (keys %)))
+         #(let [change (get-in % [:selection :change])]
+            (and (= (:base %) (:base change))
+                 (= (:head %) (:tip change))))))
 
 (def ^:private success-prefix "AUTOMATIC_REVIEW_SUCCESS ")
 (def ^:private no-applicable-prefix
@@ -112,6 +133,19 @@
       (fail! "Automatic review result is missing a valid completion sentinel"
              {:gate (:id gate)}))))
 
+(defn- require-complete-no-applicable-selection!
+  [runtime evidence]
+  (let [active-reviewers (mapv :name (reviewers/reviewers runtime))
+        skipped-reviewers (mapv :reviewer (get-in evidence
+                                                  [:selection :skips]))]
+    (when-not (and (= (count skipped-reviewers)
+                      (count (distinct skipped-reviewers)))
+                   (= (set active-reviewers) (set skipped-reviewers)))
+      (fail! "No-applicable review selection does not match the active roster"
+             {:active-reviewers active-reviewers
+              :skipped-reviewers skipped-reviewers}))
+    evidence))
+
 (defn verify-automatic-review!
   "Verify positive structured evidence from this run's automatic review gate.
 
@@ -145,16 +179,21 @@
               vec)
          "Automatic review dependency is not unique"
          {:verification-gate (:id verification-gate)})
-        evidence (completion-evidence review-gate)]
+        evidence (completion-evidence review-gate)
+        evidence (if (= "no-applicable-reviewer" (:outcome evidence))
+                   (require-complete-no-applicable-selection! runtime evidence)
+                   evidence)
+        selection (:selection evidence)]
     (cond-> {"status" (:outcome evidence)
              "review-gate" (:id review-gate)
              "base" (:base evidence)
              "head" (:head evidence)
              "reviewers" (count (:reviewers evidence))}
       (:verdict evidence) (assoc "verdict" (:verdict evidence))
-      (:reason evidence) (assoc "reason" (:reason evidence))
-      (:skips evidence) (assoc "skipped-reviewers"
-                               (mapv :reviewer (:skips evidence))))))
+      selection (assoc "selection" selection
+                       "reason" (:reason selection)
+                       "skipped-reviewers" (mapv :reviewer
+                                                 (:skips selection))))))
 
 (defn handoff-instruction
   "Describe the full Millstrand review handoff with known work identity."
@@ -225,17 +264,19 @@
      ```sh
      review_head=$(git rev-parse --verify \"{head-ref}\")
      review_base=$(git merge-base origin/main \"$review_head\")
-     strand --workspace \"$MILLSTRAND_WORKSPACE\" agent review --cwd \"{worktree}\" --base \"$review_base\" --branch \"$review_head\" --label PR
+     strand --timeout 60s --workspace \"$MILLSTRAND_WORKSPACE\" agent review --cwd \"{worktree}\" --base \"$review_base\" --branch \"$review_head\" --label PR
      ```
 
-     Do not substitute a mutable branch name for either SHA. Classify the
-     review command result before awaiting anything:
+     Capture and retain the command's complete structured JSON response. Do not
+     substitute a mutable branch name for either SHA. Classify that response
+     before awaiting anything:
 
      - `status=scheduled` requires at least one run. Await each returned run.
-     - `status=skipped`, `reason=no-matching-reviewers`, no runs, at least one
-       skip, and only `reason=glob-mismatch` skips is a valid
-       no-applicable-reviewer outcome. Emit the separate sentinel below and do
-       not claim that a review succeeded.
+     - `status=skipped`, `reason=no-matching-reviewers`, zero runs, and one
+       `reason=glob-mismatch` skip for every reviewer in the active roster is a
+       valid no-applicable-reviewer outcome. Every active reviewer must appear
+       exactly once. Emit the separate sentinel below and do not claim that a
+       review succeeded.
      - `reason=no-changes` is invalid empty review input and fails this gate.
      - `seat-unavailable`, any other skip reason, a command error, an unknown or
        invalid selector, or any malformed result fails this gate. Never turn an
@@ -278,14 +319,18 @@
      gate.
 
      For the valid no-applicable-reviewer result only, the final response must
-     instead begin with this line, preserving every returned glob-mismatch skip:
+     instead begin with this line. Embed the complete `agent review` response
+     unchanged as `selection`; do not reconstruct it from individual skips or
+     omit its change provenance:
 
      ```text
      AUTOMATIC_REVIEW_NO_APPLICABLE_REVIEWER {no-applicable-example}
      ```
 
-     Follow that line by stating that no reviewer ran. This is a selection
-     outcome, not a successful review or a no-findings verdict.
+     The verifier requires zero runs, a nonempty frozen change, matching base
+     and head SHAs, and exactly one glob-mismatch skip for every reviewer in the
+     active roster. Follow that line by stating that no reviewer ran. This is a
+     selection outcome, not a successful review or a no-findings verdict.
    " {:branch branch
       :worktree worktree
       :review-target review-target
@@ -302,13 +347,24 @@
                   "verdict" "findings|no-findings"))
       :no-applicable-example
       (json/write-str
-       (array-map "status" "skipped"
-                  "reason" "no-matching-reviewers"
-                  "base" "FULL_SHA"
-                  "head" "FULL_SHA"
-                  "reviewers" []
-                  "skips" [(array-map "reviewer" "REVIEWER"
-                                      "reason" "glob-mismatch")]))}))
+       (array-map
+        "base" "FULL_BASE_SHA"
+        "head" "FULL_HEAD_SHA"
+        "selection"
+        (array-map
+         "status" "skipped"
+         "reason" "no-matching-reviewers"
+         "change" (array-map "source" "branch"
+                             "repo-root" worktree
+                             "base" "FULL_BASE_SHA"
+                             "base-sha" "FULL_BASE_SHA"
+                             "merge-base" "FULL_BASE_SHA"
+                             "tip" "FULL_HEAD_SHA"
+                             "tip-sha" "FULL_HEAD_SHA"
+                             "paths" ["CHANGED_PATH"])
+         "runs" []
+         "skips" [(array-map "reviewer" "EVERY_ACTIVE_REVIEWER"
+                             "reason" "glob-mismatch")])))}))
 
 (workflow/defworkflow millstrand-review
   "Run Millstrand's full review roster and validate the resulting branch."
@@ -387,26 +443,33 @@
                      push repairs. Obtain focused follow-up review for material code
                      changes.
 
-                     For `status=no-applicable-reviewer`, record that exact selection
-                     outcome and its skipped reviewer names. Do not record a review
+                     For `status=no-applicable-reviewer`, record that status and the
+                     complete structured `selection` object. Do not record a review
                      pass, a no-findings verdict, or a successful reviewer.
                    " {}))
-   (land-support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
+   (land-support/shell-gate :final-ci-green "Validate the resulting branch HEAD" [:resolve-review]
                             (fn [{:keys [branch]}]
                               (land-support/sh-gate
                                land-support/land-quality-gate-script
                                "land-quality" branch))
                             5400
-                            "Validate the actual pushed HEAD after review repairs. Fix failures and clear gate/error to retry.")
-   (workflow/step :handoff-land "Hand the reviewed work to landing" :self
+                            "Validate the actual pushed HEAD after outcome resolution. Fix failures and clear gate/error to retry.")
+   (workflow/step :handoff-land "Hand the validated work to landing" :self
                   :depends-on [:final-ci-green]
                   (fn [params]
                     (format-alpha/prose
                      "
-                       Record review and validation evidence on the work task.
-                       If the user authorized landing, read `strand workflow show land`
-                       and start `strand workflow start <run-id> --workflow land
-                       --params <json>`. Otherwise report the reviewed work.
+                       Record selection, review, and validation evidence on the work
+                       task. When verification reports
+                       `status=no-applicable-reviewer`, carry that status and its
+                       complete `selection` object into the landing handoff. State
+                       that no local roster reviewer ran; do not describe the work as
+                       reviewed or as having a no-findings verdict.
+
+                       If the user authorized landing, read
+                       `strand workflow show land` and start `strand workflow start
+                       <run-id> --workflow land --params <json>`. Otherwise report
+                       the validated work.
 
                        Carry forward this work identity:
 
