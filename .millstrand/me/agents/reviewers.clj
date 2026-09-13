@@ -23,3 +23,26 @@
      line numbers, plus the smallest practical fix. Say `No findings` when the
      workspace behavior is sound. Do not edit files or repository state.
    " {}))
+
+(reviewers/defreviewer!
+  test-sleeps
+  "Check changed tests for sleeps and arbitrary timing waits."
+  {:seat ['luna 'reviewer]
+   :labels ["PR" "Tests" "Concurrency"]
+   :glob ["test/clojure/**"
+          "cli/*_test.go"
+          "cli/**/*_test.go"
+          "tools/*_test.go"
+          "tools/**/*_test.go"
+          "spools/*/test/**"]}
+  (format-alpha/prose
+   "
+     Review changed tests for sleeps, arbitrary delays, wall-clock polling, and
+     race-sensitive timeouts. Prefer deterministic coordination, virtual time,
+     or the repository's established bounded await helpers.
+
+     Report only actionable P1/P2 timing defects with repository-relative paths
+     and line numbers, plus the smallest deterministic fix. Say `No findings`
+     when the changed tests do not rely on arbitrary timing. Do not edit files
+     or repository state.
+   " {}))
