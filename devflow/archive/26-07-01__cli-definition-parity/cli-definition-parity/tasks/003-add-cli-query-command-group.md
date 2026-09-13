@@ -16,8 +16,8 @@ References:
 ## CDP-TASK-003.P2 Implementation notes
 
 - In `cli/internal/command/command.go`, clone the `pattern` group shape:
-  - `query list` — `Args: cobra.NoArgs`, calls socket operation `query-list` with `map[string]any{}`.
-  - `query explain <name>` — `Args: cobra.ExactArgs(1)`, rejects blank names before transport as a usage error (matching `pattern explain`, CDP-DELTA-001.CC3), calls `query-explain` with `map[string]any{"query": args[0]}`.
+    - `query list` — `Args: cobra.NoArgs`, calls socket operation `query-list` with `map[string]any{}`.
+    - `query explain <name>` — `Args: cobra.ExactArgs(1)`, rejects blank names before transport as a usage error (matching `pattern explain`, CDP-DELTA-001.CC3), calls `query-explain` with `map[string]any{"query": args[0]}`.
 - Help text (CDP-DELTA-001.CC6): the `query` group short/long help states queries are discovered here and applied with `list --query` / `ready --query` plus repeated `--param key=value`; the `pattern` group help states patterns are applied with `weave --pattern`. Keep wording short and parallel.
 - Update the root help expectation list in `cli/internal/command/command_test.go` (the `"Available Commands:"` assertion) to include `query`.
 - No changes to `list` / `ready` / `weave` invocation behavior or flags.

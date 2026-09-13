@@ -8,42 +8,11 @@ Ship local weaver peering per the proposal: portable config-declared weaver name
 
 ## PLAN-Guild-001.P2 Approach
 
-- **PLAN-Guild-001.A1:** Go side first: extend the alpha config schema with
-  `"name"` plus a `config.local.json` shallow overlay, and teach mill's
-  launch-time `friendlyName` resolution the precedence explicit `--name` >
-  local overlay > `config.json` > basename. The name then flows through the
-  existing `--name` launch path into published metadata untouched
-  (DELTA-Cli-002, DELTA-DaemonRuntime-002.CC5/CC6).
-- **PLAN-Guild-001.A2:** Bootstrap housekeeping in the same Go area:
-  generated `.skein/.gitignore` stops ignoring `config.json` and ignores
-  `config.local.json` instead; this repo's own stale `.skein/.gitignore` gets
-  the same fix by hand (DELTA-Cli-002.CC3).
-- **PLAN-Guild-001.A3:** `skein.api.peers.alpha` is a new blessed
-  source-visible namespace with two layers: discovery (`peers`, `peer`)
-  reading `weaver.edn` metadata (the Clojure-client artifact, SPEC-004.C11)
-  under the mill state root (`<XDG_STATE_HOME>/skein/weavers/<hash>/`),
-  reusing `skein.core.weaver.metadata` read/staleness helpers and failing
-  loudly per SPEC-004.C14; and invocation (`call!`), a Clojure client for the existing
-  JSON Unix socket protocol (SPEC-004.C22–C26) using
-  `java.net.UnixDomainSocketAddress`, restricted to the allowlisted public
-  operations with protocol/identity verification before dispatch. Both
-  layers are client-side and weaver-JVM-agnostic (DELTA-ReplApi-002.CC2).
-- **PLAN-Guild-001.A4:** `skein.spools.guild` ships on the classpath beside
-  workflow/devflow/ephemeral (`spools/src/skein/spools/guild.clj`). It wraps
-  the existing CLI operation registry: `defop!` registers a
-  version-suffixed dotted op name (`gate.close.v1` — registry names are
-  simple unqualified handles, SPEC-004.C63a) with an optional input spec
-  (validated before the
-  handler runs, mirroring the pattern-registry approach), feeds a built-in
-  `guild.describe` op listing active and deprecated ops, and `deprecate!`
-  swaps a handler for a stub that throws a structured
-  `{:code :op/deprecated :replacement ...}` domain error — never a noop
-  (DELTA-DaemonRuntime-002.D1/D4).
-- **PLAN-Guild-001.A5:** Tests isolate everything with temp `--workspace`
-  dirs and a temp `XDG_STATE_HOME` per the repo's agent quick-reference
-  rules; peering tests run two weavers under one temp state root. Discovery
-  unit tests may use fixture metadata files (current-pid for "running",
-  dead-pid for "stale") without live weavers.
+- **PLAN-Guild-001.A1:** Go side first: extend the alpha config schema with `"name"` plus a `config.local.json` shallow overlay, and teach mill's launch-time `friendlyName` resolution the precedence explicit `--name` > local overlay > `config.json` > basename. The name then flows through the existing `--name` launch path into published metadata untouched (DELTA-Cli-002, DELTA-DaemonRuntime-002.CC5/CC6).
+- **PLAN-Guild-001.A2:** Bootstrap housekeeping in the same Go area: generated `.skein/.gitignore` stops ignoring `config.json` and ignores `config.local.json` instead; this repo's own stale `.skein/.gitignore` gets the same fix by hand (DELTA-Cli-002.CC3).
+- **PLAN-Guild-001.A3:** `skein.api.peers.alpha` is a new blessed source-visible namespace with two layers: discovery (`peers`, `peer`) reading `weaver.edn` metadata (the Clojure-client artifact, SPEC-004.C11) under the mill state root (`<XDG_STATE_HOME>/skein/weavers/<hash>/`), reusing `skein.core.weaver.metadata` read/staleness helpers and failing loudly per SPEC-004.C14; and invocation (`call!`), a Clojure client for the existing JSON Unix socket protocol (SPEC-004.C22–C26) using `java.net.UnixDomainSocketAddress`, restricted to the allowlisted public operations with protocol/identity verification before dispatch. Both layers are client-side and weaver-JVM-agnostic (DELTA-ReplApi-002.CC2).
+- **PLAN-Guild-001.A4:** `skein.spools.guild` ships on the classpath beside workflow/devflow/ephemeral (`spools/src/skein/spools/guild.clj`). It wraps the existing CLI operation registry: `defop!` registers a version-suffixed dotted op name (`gate.close.v1` — registry names are simple unqualified handles, SPEC-004.C63a) with an optional input spec (validated before the handler runs, mirroring the pattern-registry approach), feeds a built-in `guild.describe` op listing active and deprecated ops, and `deprecate!` swaps a handler for a stub that throws a structured `{:code :op/deprecated :replacement ...}` domain error — never a noop (DELTA-DaemonRuntime-002.D1/D4).
+- **PLAN-Guild-001.A5:** Tests isolate everything with temp `--workspace` dirs and a temp `XDG_STATE_HOME` per the repo's agent quick-reference rules; peering tests run two weavers under one temp state root. Discovery unit tests may use fixture metadata files (current-pid for "running", dead-pid for "stale") without live weavers.
 
 ## PLAN-Guild-001.P3 Affected areas
 
@@ -58,10 +27,7 @@ Ship local weaver peering per the proposal: portable config-declared weaver name
 
 ## PLAN-Guild-001.P4 Contract and migration impact
 
-- **PLAN-Guild-001.CM1:** All durable contract changes are staged in the
-  three feature deltas; root specs merge at finish. No storage/schema
-  changes, no migration: existing repos' generated `.gitignore` files are
-  user-owned and stay as-is (TEN-000@1).
+- **PLAN-Guild-001.CM1:** All durable contract changes are staged in the three feature deltas; root specs merge at finish. No storage/schema changes, no migration: existing repos' generated `.gitignore` files are user-owned and stay as-is (TEN-000@1).
 
 ## PLAN-Guild-001.P5 Implementation phases
 
@@ -87,46 +53,19 @@ Outcome: `spools/guild.md` contract doc, spools README index row, CLAUDE.md spoo
 
 ## PLAN-Guild-001.P6 Validation strategy
 
-- **PLAN-Guild-001.V1:** `(cd cli && go test ./...)` covers config parsing,
-  overlay precedence, friendlyName resolution, and bootstrap file contents.
-- **PLAN-Guild-001.V2:** `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`
-  covers discovery (fixture metadata), invocation (live temp weavers), and
-  guild spool behavior; all weaver state isolated in temp
-  workspaces/XDG dirs, `git status --short` clean of runtime artifacts after.
-- **PLAN-Guild-001.V3:** `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`
-  stays green (no smoke additions required this feature).
+- **PLAN-Guild-001.V1:** `(cd cli && go test ./...)` covers config parsing, overlay precedence, friendlyName resolution, and bootstrap file contents.
+- **PLAN-Guild-001.V2:** `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test` covers discovery (fixture metadata), invocation (live temp weavers), and guild spool behavior; all weaver state isolated in temp workspaces/XDG dirs, `git status --short` clean of runtime artifacts after.
+- **PLAN-Guild-001.V3:** `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke` stays green (no smoke additions required this feature).
 
 ## PLAN-Guild-001.P7 Risks and open questions
 
-- **PLAN-Guild-001.R1:** Two-weaver tests are the heaviest in the suite
-  (two JVM runtimes). Mitigation: only PH3's invocation tests need two live
-  runtimes (in-process runtime fixtures like existing weaver tests, not
-  subprocess JVMs); discovery tests use fixture metadata files.
-- **PLAN-Guild-001.R2:** The Clojure Unix-socket JSON client duplicates
-  protocol knowledge the Go client owns. Mitigation: keep it minimal (one
-  request per connection, envelope fields from SPEC-004.C23/C24) and
-  covered by a test that round-trips against a real weaver socket.
+- **PLAN-Guild-001.R1:** Two-weaver tests are the heaviest in the suite (two JVM runtimes). Mitigation: only PH3's invocation tests need two live runtimes (in-process runtime fixtures like existing weaver tests, not subprocess JVMs); discovery tests use fixture metadata files.
+- **PLAN-Guild-001.R2:** The Clojure Unix-socket JSON client duplicates protocol knowledge the Go client owns. Mitigation: keep it minimal (one request per connection, envelope fields from SPEC-004.C23/C24) and covered by a test that round-trips against a real weaver socket.
 
 ## PLAN-Guild-001.P8 Task context
 
-- **PLAN-Guild-001.TC1:** Read the three feature deltas plus
-  `devflow/TENETS.md` before implementing; TEN-003 (fail loudly) and
-  TEN-004 (minimal surface) drove every design decision here. Key existing
-  code: `cli/internal/config/config.go` (`allowedKeys`, `Load`),
-  `cli/cmd/mill/lifecycle.go` (`friendlyName`, `weaverArgs`),
-  `cli/internal/config/bootstrap.go` (generated workspace files),
-  `src/skein/core/weaver/metadata.clj` (publish/read/staleness),
-  `src/skein/core/weaver/socket.clj` (server-side protocol envelope,
-  allowlist), `src/skein/api/weaver/alpha.clj` (op registry API),
-  `spools/src/skein/spools/workflow.clj` and
-  `src/skein/api/patterns/alpha.clj` (spec
-  validation precedent), `test/skein/weaver_test.clj` and
-  `test/skein/shuttle_test.clj` (temp-workspace test fixtures). New test
-  namespaces must be wired into `test/skein/test_runner.clj` (explicit
-  require + `run-tests` list; keep `skein.shuttle-test` ordering note).
-- **PLAN-Guild-001.TC2:** Never touch user-owned default workspaces in
-  tests; always temp `--workspace` + temp `XDG_STATE_HOME` (see CLAUDE.md
-  agent quick reference).
+- **PLAN-Guild-001.TC1:** Read the three feature deltas plus `devflow/TENETS.md` before implementing; TEN-003 (fail loudly) and TEN-004 (minimal surface) drove every design decision here. Key existing code: `cli/internal/config/config.go` (`allowedKeys`, `Load`), `cli/cmd/mill/lifecycle.go` (`friendlyName`, `weaverArgs`), `cli/internal/config/bootstrap.go` (generated workspace files), `src/skein/core/weaver/metadata.clj` (publish/read/staleness), `src/skein/core/weaver/socket.clj` (server-side protocol envelope, allowlist), `src/skein/api/weaver/alpha.clj` (op registry API), `spools/src/skein/spools/workflow.clj` and `src/skein/api/patterns/alpha.clj` (spec validation precedent), `test/skein/weaver_test.clj` and `test/skein/shuttle_test.clj` (temp-workspace test fixtures). New test namespaces must be wired into `test/skein/test_runner.clj` (explicit require + `run-tests` list; keep `skein.shuttle-test` ordering note).
+- **PLAN-Guild-001.TC2:** Never touch user-owned default workspaces in tests; always temp `--workspace` + temp `XDG_STATE_HOME` (see CLAUDE.md agent quick reference).
 
 ## PLAN-Guild-001.P9 Developer Notes
 
@@ -151,18 +90,8 @@ Append notes here. Do not rewrite earlier notes.
 
 ### PLAN-Guild-001.DN1 Pre-task review amendments — 2026-07-02
 
-- Deep review before task generation surfaced four issues, all fixed in the
-  docs: new test namespaces must be wired into the explicit
-  `test/skein/test_runner.clj` (tasks 3/5 MI added); op registry names are
-  simple unqualified handles, so guild versioning uses dotted suffixes
-  (`gate.close.v1`) and the describe op is `guild.describe`; all code
-  references updated to the namespace-tier layout (`skein.core.*`,
-  `skein.api.<area>.alpha`); peer discovery reads `weaver.edn` (Clojure
-  artifact, SPEC-004.C11), while `weaver.json` stays the Go/mill path.
-- This feature was planned against the in-flight namespace-tier refactor
-  (`skein.*` → `skein.core.*` / `skein.api.*.alpha`), which was uncommitted
-  in the main working tree at planning time. Task references assume that
-  layout; the feature branch must include it.
+- Deep review before task generation surfaced four issues, all fixed in the docs: new test namespaces must be wired into the explicit `test/skein/test_runner.clj` (tasks 3/5 MI added); op registry names are simple unqualified handles, so guild versioning uses dotted suffixes (`gate.close.v1`) and the describe op is `guild.describe`; all code references updated to the namespace-tier layout (`skein.core.*`, `skein.api.<area>.alpha`); peer discovery reads `weaver.edn` (Clojure artifact, SPEC-004.C11), while `weaver.json` stays the Go/mill path.
+- This feature was planned against the in-flight namespace-tier refactor (`skein.*` → `skein.core.*` / `skein.api.*.alpha`), which was uncommitted in the main working tree at planning time. Task references assume that layout; the feature branch must include it.
 
 ### PLAN-Guild-001.DN2 Task 1 implementation — 2026-07-02
 
@@ -190,17 +119,6 @@ Append notes here. Do not rewrite earlier notes.
 
 ### PLAN-Guild-001.DN2 Feature shipped — 2026-07-02
 
-- All six queue tasks completed by the AFK loop; full validation green
-  (Go, Clojure, smoke). Shipped: `"name"` config key + `config.local.json`
-  overlay + mill name resolution, bootstrap/.skein gitignore fix,
-  `skein.api.peers.alpha` (`peers`/`peer`/`call!`), `skein.spools.guild`
-  (`defop!`/`deprecate!`/`install!`/`guild.describe`), `spools/guild.md`,
-  index/CLAUDE.md cross-refs.
-- Post-queue owner review fixes: `peer` bare tokens now always resolve as
-  logical names (explicitly path-like input only for workspaces), and the
-  three spec deltas were merged into root specs (cli C2/C2a/C14a/C16,
-  daemon-runtime C12 + new P10c C85–C90, repl-api helper listing).
-- Cut/deferred scope: workflow gate-adapter spool for peer waiters
-  (PROP-Guild-001.S5, deferred by Q3 to a follow-up feature). Related but
-  not implemented here: RFC-014 (feature tracking registry) stays Open in
-  devflow/rfcs/.
+- All six queue tasks completed by the AFK loop; full validation green (Go, Clojure, smoke). Shipped: `"name"` config key + `config.local.json` overlay + mill name resolution, bootstrap/.skein gitignore fix, `skein.api.peers.alpha` (`peers`/`peer`/`call!`), `skein.spools.guild` (`defop!`/`deprecate!`/`install!`/`guild.describe`), `spools/guild.md`, index/CLAUDE.md cross-refs.
+- Post-queue owner review fixes: `peer` bare tokens now always resolve as logical names (explicitly path-like input only for workspaces), and the three spec deltas were merged into root specs (cli C2/C2a/C14a/C16, daemon-runtime C12 + new P10c C85–C90, repl-api helper listing).
+- Cut/deferred scope: workflow gate-adapter spool for peer waiters (PROP-Guild-001.S5, deferred by Q3 to a follow-up feature). Related but not implemented here: RFC-014 (feature tracking registry) stays Open in devflow/rfcs/.

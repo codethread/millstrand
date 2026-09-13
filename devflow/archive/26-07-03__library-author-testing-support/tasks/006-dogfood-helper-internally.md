@@ -15,8 +15,8 @@ References:
 ## TASK-006.P2 Implementation notes
 
 - Migrate the selected dogfood targets from `test/skein/spools_test.clj` to use `skein.test.alpha`:
-  - `daemon-init-runs-with-spool-classloader-after-sync`
-  - `connected-client-use-executes-in-daemon-runtime`
+    - `daemon-init-runs-with-spool-classloader-after-sync`
+    - `connected-client-use-executes-in-daemon-runtime`
 - Keep tests that need direct runtime/storage manipulation on lower-level helpers.
 - Add or confirm focused in-repo coverage for both `:storage :sqlite-file` and `:storage :sqlite-memory` through the public helper.
 - Keep canonical `clojure -M:smoke` file-backed. Do not replace smoke with in-memory storage.

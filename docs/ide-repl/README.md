@@ -8,15 +8,15 @@ This guide covers VS Code with [Calva](https://calva.io/), a popular Clojure ext
 
 1. Install the Millstrand CLIs. On macOS with Homebrew:
 
-   ```sh
-   brew install codethread/millstrand/millstrand
-   ```
+    ```sh
+    brew install codethread/millstrand/millstrand
+    ```
 
-   Or, from a Millstrand checkout with Go, the Clojure CLI, and a JVM installed:
+    Or, from a Millstrand checkout with Go, the Clojure CLI, and a JVM installed:
 
-   ```sh
-   make install
-   ```
+    ```sh
+    make install
+    ```
 
 2. Install VS Code and the Calva extension.
 3. Ensure `mill` and `strand` are on your shell `$PATH`.
@@ -61,12 +61,12 @@ The output is JSON. Find the row for your workspace and use its `nrepl.host` and
 
 ```json
 [
-  {
-    "name": "my-repo",
-    "config_dir": "/path/to/my-repo/.millstrand",
-    "state": "running",
-    "nrepl": {"host": "127.0.0.1", "port": 51234}
-  }
+	{
+		"name": "my-repo",
+		"config_dir": "/path/to/my-repo/.millstrand",
+		"state": "running",
+		"nrepl": { "host": "127.0.0.1", "port": 51234 }
+	}
 ]
 ```
 

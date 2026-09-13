@@ -22,9 +22,9 @@ Promote shipped runtime transformation primitive contracts into root specs, reco
 - **TASK-006.I3:** Update `devflow/prd/runtime-transformations.md` only if implementation choices changed the PRD examples or first-slice assumptions.
 - **TASK-006.I4:** Update `devflow/README.md` active/archive notes only if finishing/archive is part of the current workflow; otherwise leave final archive movement to devflow finish.
 - **TASK-006.I5:** Run full validation:
-  - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`
-  - `(cd cli && go test ./...)`
-  - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`
+    - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`
+    - `(cd cli && go test ./...)`
+    - `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`
 - **TASK-006.I6:** Confirm `git status --short` does not show generated SQLite, socket, runtime metadata, or temp config artifacts.
 
 ## TASK-006.P4 Done when

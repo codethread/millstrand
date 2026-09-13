@@ -16,13 +16,13 @@ Cut every consuming workspace over to the released install!-free siblings (devfl
 
 ## PLAN-Cut-001.P3 Affected areas
 
-| ID               | Area                                                            | Expected change                          |
-| ---------------- | --------------------------------------------------------------- | ---------------------------------------- |
-| PLAN-Cut-001.AA1 | skein-src `.millstrand/spools.edn`                                   | Three pin bumps (tag+sha)                |
-| PLAN-Cut-001.AA2 | devflow.spool / kanban.spool / dresser.spool `.millstrand/spools.edn` | kanban v7→v9 (tracked config commits)    |
-| PLAN-Cut-001.AA3 | notes `.millstrand/spools.edn`                                       | agent-run v12→v13 (tracked config commit; unrelated local modifications untouched) |
-| PLAN-Cut-001.AA4 | agent-harness.spool `.millstrand/spools.edn`                         | kanban v7→v9 (local-only, untracked)     |
-| PLAN-Cut-001.AA5 | Cards rtnfv/waq0l                                               | Evidence notes, finish records           |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-Cut-001.AA1 | skein-src `.millstrand/spools.edn` | Three pin bumps (tag+sha) |
+| PLAN-Cut-001.AA2 | devflow.spool / kanban.spool / dresser.spool `.millstrand/spools.edn` | kanban v7→v9 (tracked config commits) |
+| PLAN-Cut-001.AA3 | notes `.millstrand/spools.edn` | agent-run v12→v13 (tracked config commit; unrelated local modifications untouched) |
+| PLAN-Cut-001.AA4 | agent-harness.spool `.millstrand/spools.edn` | kanban v7→v9 (local-only, untracked) |
+| PLAN-Cut-001.AA5 | Cards rtnfv/waq0l | Evidence notes, finish records |
 
 ## PLAN-Cut-001.P4 Contract and migration impact
 

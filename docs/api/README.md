@@ -39,8 +39,8 @@ Native work that must continue while Mill replaces a Weaver uses the trusted `mi
 
 | Namespace | Reach for it when |
 | --- | --- |
-| [`events`](./events.api.md) | Running code *after* a mutation commits: async handler registration, submission, and failure inspection. |
-| [`hooks`](./hooks.api.md) | Running code *before* a mutation commits: synchronous lifecycle hooks that can normalize or veto. |
+| [`events`](./events.api.md) | Running code _after_ a mutation commits: async handler registration, submission, and failure inspection. |
+| [`hooks`](./hooks.api.md) | Running code _before_ a mutation commits: synchronous lifecycle hooks that can normalize or veto. |
 | [`scheduler`](./scheduler.api.md) | Something must happen at instant `T` with no client polling — durable, at-least-once wakes. Prefer a `wake-at` attribute plus a query when a poller already exists. |
 
 ### Publishing a surface
@@ -61,7 +61,7 @@ Native work that must continue while Mill replaces a Weaver uses the trusted `mi
 | Namespace | Reach for it when |
 | --- | --- |
 | [`relations`](./relations.api.md) | Looking up the shipped relation catalog — advisory data, not a storage allowlist. |
-| [`format`](./format.api.md) | Authoring long prose as `|`-margin blocks (`fill`, `reflow`) instead of unreadable string literals. |
+| [`format`](./format.api.md) | Authoring long prose as ` | `-margin blocks (`fill`, `reflow`) instead of unreadable string literals. |
 | [`spool`](./spool.api.md) | Writing a spool and needing the shared authoring helpers: `fail!`, `reject-unknown-keys!`, `require-valid!`, attribute key/get coercion, and Clock-based polling. |
 
 ### Talking to other weavers

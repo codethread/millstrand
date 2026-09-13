@@ -14,13 +14,13 @@
 
 - Reviewed the segment C spec/doc changes against `devflow/feat/ns-tiers/proposal.md`, especially the mapping table, root spec requirements, and tier narrative requirements.
 - Confirmed the root specs now describe the tier contract without restating implementation code in detail:
-  - `devflow/specs/repl-api.md` documents `skein.api.*.alpha`, `skein.core.*`, `skein.spools.*`, and `skein.repl` in C19/P5.
-  - `devflow/specs/daemon-runtime.md` uses `skein.api.weaver.alpha`, `skein.api.runtime.alpha`, and `skein.api.*.alpha` consistently in the runtime contracts.
-  - `devflow/specs/cli.md` only names the new API namespaces where CLI/bootstrap behavior needs them.
+    - `devflow/specs/repl-api.md` documents `skein.api.*.alpha`, `skein.core.*`, `skein.spools.*`, and `skein.repl` in C19/P5.
+    - `devflow/specs/daemon-runtime.md` uses `skein.api.weaver.alpha`, `skein.api.runtime.alpha`, and `skein.api.*.alpha` consistently in the runtime contracts.
+    - `devflow/specs/cli.md` only names the new API namespaces where CLI/bootstrap behavior needs them.
 - Confirmed tier narrative reads coherently in `AGENTS.md` and `spools/README.md`.
 - Grep used for stale names, excluding `devflow/archive/**` and `devflow/rfcs/**` as requested:
-  - `rg -n "skein\.(batch|events|graph|hooks|patterns|relations|runtime|views)\.alpha|skein\.weaver\.(api|runtime|config|metadata|socket)|skein\.(db|query|client|specs)\b" AGENTS.md README.md CONTRIBUTING.md docs devflow spools .agents -g '!devflow/archive/**' -g '!devflow/rfcs/**'`
-  - Remaining expected hits in `devflow/feat/ns-tiers/proposal.md` are the mapping/proposal itself; actionable stale hits are listed above.
+    - `rg -n "skein\.(batch|events|graph|hooks|patterns|relations|runtime|views)\.alpha|skein\.weaver\.(api|runtime|config|metadata|socket)|skein\.(db|query|client|specs)\b" AGENTS.md README.md CONTRIBUTING.md docs devflow spools .agents -g '!devflow/archive/**' -g '!devflow/rfcs/**'`
+    - Remaining expected hits in `devflow/feat/ns-tiers/proposal.md` are the mapping/proposal itself; actionable stale hits are listed above.
 - Confirmed `devflow/archive/**` and `devflow/rfcs/**` have no working-tree changes in `git status --short`.
 
 ## Validation
@@ -32,6 +32,7 @@
 ## Verdict
 
 request-changes
+
 ## Fixes applied
 
 - Finding 1: Updated `devflow/feat/treadle/proposal.md` to name `skein.api.weaver.alpha` instead of the pre-tier `skein.weaver.api`.

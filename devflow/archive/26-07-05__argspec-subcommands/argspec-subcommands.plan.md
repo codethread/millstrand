@@ -15,12 +15,12 @@ Add a declarative `:subcommands` concept to the blessed arg-spec DSL so multi-ve
 
 ## PLAN-ArgspecSub-001.P3 Affected areas
 
-| ID                      | Area                                    | Expected change                                          |
-| ----------------------- | --------------------------------------- | -------------------------------------------------------- |
-| PLAN-ArgspecSub-001.AA1 | `src/skein/api/cli/alpha.clj`           | `:subcommands` in parse/explain + structural validation  |
-| PLAN-ArgspecSub-001.AA2 | `src/skein/api/weaver/alpha.clj`        | registration-time arg-spec validation; help detail check |
-| PLAN-ArgspecSub-001.AA3 | `spools/src/skein/spools/batteries.clj` | `query`/`pattern` arg-specs use `:subcommands`           |
-| PLAN-ArgspecSub-001.AA4 | `devflow/specs/*` (at finish)           | merge the three deltas                                   |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-ArgspecSub-001.AA1 | `src/skein/api/cli/alpha.clj` | `:subcommands` in parse/explain + structural validation |
+| PLAN-ArgspecSub-001.AA2 | `src/skein/api/weaver/alpha.clj` | registration-time arg-spec validation; help detail check |
+| PLAN-ArgspecSub-001.AA3 | `spools/src/skein/spools/batteries.clj` | `query`/`pattern` arg-specs use `:subcommands` |
+| PLAN-ArgspecSub-001.AA4 | `devflow/specs/*` (at finish) | merge the three deltas |
 
 ## PLAN-ArgspecSub-001.P4 Contract and migration impact
 

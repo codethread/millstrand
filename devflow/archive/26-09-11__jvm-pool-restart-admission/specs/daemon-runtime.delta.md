@@ -1,9 +1,13 @@
 # Weaver runtime delta for JVM pool restart admission
 
 **Document ID:** `DELTA-Jpra-001`
+
 **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
 **Feature:** [../proposal.md](../proposal.md)
+
 **Status:** Merged
+
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jpra-001.P1 Summary

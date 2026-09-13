@@ -16,25 +16,25 @@ References:
 ## TASK-003.P2 Implementation notes
 
 - Inspect and update metadata/status paths in:
-  - `src/skein/core/weaver/metadata.clj`
-  - `src/skein/core/weaver/socket.clj`
-  - `src/skein/core/client.clj`
-  - Go CLI metadata/status parsing under `cli/internal`
-  - affected tests under `test/` and `cli/`
+    - `src/skein/core/weaver/metadata.clj`
+    - `src/skein/core/weaver/socket.clj`
+    - `src/skein/core/client.clj`
+    - Go CLI metadata/status parsing under `cli/internal`
+    - affected tests under `test/` and `cli/`
 - For `:sqlite-file`:
-  - `:storage-kind :sqlite-file`
-  - `:storage-label` equals canonical DB path
-  - `:canonical-db-path` equals canonical DB path
-  - `database_kind: "sqlite-file"`
-  - `database_label` equals canonical DB path
-  - `database_path` equals canonical DB path
+    - `:storage-kind :sqlite-file`
+    - `:storage-label` equals canonical DB path
+    - `:canonical-db-path` equals canonical DB path
+    - `database_kind: "sqlite-file"`
+    - `database_label` equals canonical DB path
+    - `database_path` equals canonical DB path
 - For `:sqlite-memory`:
-  - `:storage-kind :sqlite-memory`
-  - `:storage-label` is a stable weaver-lifetime diagnostic label
-  - `:canonical-db-path nil`
-  - `database_kind: "sqlite-memory"`
-  - `database_label` equals the diagnostic label
-  - `database_path: null`
+    - `:storage-kind :sqlite-memory`
+    - `:storage-label` is a stable weaver-lifetime diagnostic label
+    - `:canonical-db-path nil`
+    - `database_kind: "sqlite-memory"`
+    - `database_label` equals the diagnostic label
+    - `database_path: null`
 - Config-dir/world clients should continue routing by selected world and weaver id, not by DB path.
 - Legacy db-file-oriented Clojure client helpers should remain file-only and fail loudly for non-file storage.
 - Do not add public CLI storage selection flags.

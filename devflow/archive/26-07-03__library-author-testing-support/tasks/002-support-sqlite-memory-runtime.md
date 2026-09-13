@@ -21,10 +21,10 @@ References:
 - Initialize schema through the same `skein.core.db/init!` path.
 - Ensure `runtime/stop!` closes the held connection and later use fails loudly.
 - Add tests for:
-  - schema/init and basic strand CRUD/list/ready through weaver API
-  - transaction rollback behavior where appropriate
-  - basic concurrent weaver API calls at test scale
-  - closed connection failure after stop
+    - schema/init and basic strand CRUD/list/ready through weaver API
+    - transaction rollback behavior where appropriate
+    - basic concurrent weaver API calls at test scale
+    - closed connection failure after stop
 
 ## TASK-002.P3 Done when
 

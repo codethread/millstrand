@@ -1,9 +1,13 @@
 # CLI delta for JVM pools
 
 **Document ID:** `DELTA-Jvp-001`
+
 **Root spec:** [cli.md](../../../specs/cli.md)
+
 **Feature:** [../proposal.md](../proposal.md)
+
 **Status:** Implemented and promoted to [CLI root spec](../../../specs/cli.md#spec-002p4a-jvm-pools)
+
 **Last Updated:** 2026-09-11
 
 ## DELTA-Jvp-001.P1 Summary

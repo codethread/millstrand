@@ -48,15 +48,15 @@ Mill owns one registry at `StateRoot()/jvm-pools/membership.json`. Its exact JSO
 
 ```json
 {
-  "format": "millstrand.jvm-pool-membership/v1",
-  "revision": "membership-<opaque-uuid>",
-  "members": [
-    {
-      "config_dir": "/canonical/workspace/.millstrand",
-      "source_cwd": "/canonical/caller-or-repository-directory",
-      "jvm_pool": "backend"
-    }
-  ]
+	"format": "millstrand.jvm-pool-membership/v1",
+	"revision": "membership-<opaque-uuid>",
+	"members": [
+		{
+			"config_dir": "/canonical/workspace/.millstrand",
+			"source_cwd": "/canonical/caller-or-repository-directory",
+			"jvm_pool": "backend"
+		}
+	]
 }
 ```
 
@@ -88,25 +88,25 @@ The exact manifest is:
 
 ```json
 {
-  "format": "millstrand.jvm-pool-launch/v1",
-  "jvm_pool": "backend",
-  "host_id": "host-<opaque-uuid>",
-  "host_generation_id": "host-generation-<opaque-uuid>",
-  "membership_revision": "membership-<opaque-uuid>",
-  "millstrand_source": "/canonical/millstrand/source",
-  "millstrand_version": "dev",
-  "members": [
-    {
-      "config_dir": "/canonical/A/.millstrand",
-      "source_cwd": "/canonical/A",
-      "state_dir": "/canonical/state/weavers/<world-hash>",
-      "data_dir": "/canonical/state/weavers/<world-hash>/data",
-      "name": "A",
-      "weaver_id": "weaver-<opaque-uuid>",
-      "generation_id": "generation-<opaque-uuid>",
-      "dependency_diagnostic": "/canonical/state/weavers/<world-hash>/dependency.json"
-    }
-  ]
+	"format": "millstrand.jvm-pool-launch/v1",
+	"jvm_pool": "backend",
+	"host_id": "host-<opaque-uuid>",
+	"host_generation_id": "host-generation-<opaque-uuid>",
+	"membership_revision": "membership-<opaque-uuid>",
+	"millstrand_source": "/canonical/millstrand/source",
+	"millstrand_version": "dev",
+	"members": [
+		{
+			"config_dir": "/canonical/A/.millstrand",
+			"source_cwd": "/canonical/A",
+			"state_dir": "/canonical/state/weavers/<world-hash>",
+			"data_dir": "/canonical/state/weavers/<world-hash>/data",
+			"name": "A",
+			"weaver_id": "weaver-<opaque-uuid>",
+			"generation_id": "generation-<opaque-uuid>",
+			"dependency_diagnostic": "/canonical/state/weavers/<world-hash>/dependency.json"
+		}
+	]
 }
 ```
 
@@ -176,10 +176,10 @@ Keep each member's current `weaver.json` location and current fields. Add these 
 
 ```json
 {
-  "jvm_pool": "backend",
-  "host_id": "host-<opaque-uuid>",
-  "host_generation_id": "host-generation-<opaque-uuid>",
-  "member_basis_fingerprint": "sha256:<hex>"
+	"jvm_pool": "backend",
+	"host_id": "host-<opaque-uuid>",
+	"host_generation_id": "host-generation-<opaque-uuid>",
+	"member_basis_fingerprint": "sha256:<hex>"
 }
 ```
 
@@ -189,23 +189,23 @@ The ready marker is `StateRoot()/jvm-pools/hosts/<pool-hash>/ready.json` with th
 
 ```json
 {
-  "format": "millstrand.jvm-pool-ready/v1",
-  "jvm_pool": "backend",
-  "host_id": "host-<opaque-uuid>",
-  "host_generation_id": "host-generation-<opaque-uuid>",
-  "pid": 12345,
-  "membership_revision": "membership-<opaque-uuid>",
-  "basis_fingerprint": "sha256:<hex>",
-  "members": [
-    {
-      "config_dir": "/canonical/A/.millstrand",
-      "weaver_id": "weaver-<opaque-uuid>",
-      "generation_id": "generation-<opaque-uuid>",
-      "socket_path": "/canonical/state/weavers/<world-hash>/weaver.sock",
-      "nrepl_host": "127.0.0.1",
-      "nrepl_port": 43123
-    }
-  ]
+	"format": "millstrand.jvm-pool-ready/v1",
+	"jvm_pool": "backend",
+	"host_id": "host-<opaque-uuid>",
+	"host_generation_id": "host-generation-<opaque-uuid>",
+	"pid": 12345,
+	"membership_revision": "membership-<opaque-uuid>",
+	"basis_fingerprint": "sha256:<hex>",
+	"members": [
+		{
+			"config_dir": "/canonical/A/.millstrand",
+			"weaver_id": "weaver-<opaque-uuid>",
+			"generation_id": "generation-<opaque-uuid>",
+			"socket_path": "/canonical/state/weavers/<world-hash>/weaver.sock",
+			"nrepl_host": "127.0.0.1",
+			"nrepl_port": 43123
+		}
+	]
 }
 ```
 
@@ -255,32 +255,32 @@ For every member already in the admitted host, the manifest carries an old basel
 
 ```json
 {
-  "format": "millstrand.jvm-pool-probe/v1",
-  "jvm_pool": "backend",
-  "probe_id": "probe-<opaque-uuid>",
-  "candidate_host_id": "probe-host-<opaque-uuid>",
-  "candidate_host_generation_id": "probe-host-generation-<opaque-uuid>",
-  "probe_root": "/private/pool-probes/<probe-id>",
-  "millstrand_source": "/canonical/millstrand/source",
-  "result": "/private/pool-probes/<probe-id>/result.json",
-  "collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
-  "members": [
-    {
-      "original_config_dir": "/canonical/A/.millstrand",
-      "original_source_cwd": "/canonical/A",
-      "probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
-      "probe_state_dir": "/private/pool-probes/<probe-id>/members/A/state",
-      "probe_data_dir": "/private/pool-probes/<probe-id>/members/A/data",
-      "member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl",
-      "name": "A",
-      "candidate_weaver_id": "probe-weaver-<opaque-uuid>",
-      "candidate_generation_id": "probe-generation-<opaque-uuid>",
-      "old_member_baseline": {
-        "status": "admitted",
-        "projection": {}
-      }
-    }
-  ]
+	"format": "millstrand.jvm-pool-probe/v1",
+	"jvm_pool": "backend",
+	"probe_id": "probe-<opaque-uuid>",
+	"candidate_host_id": "probe-host-<opaque-uuid>",
+	"candidate_host_generation_id": "probe-host-generation-<opaque-uuid>",
+	"probe_root": "/private/pool-probes/<probe-id>",
+	"millstrand_source": "/canonical/millstrand/source",
+	"result": "/private/pool-probes/<probe-id>/result.json",
+	"collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
+	"members": [
+		{
+			"original_config_dir": "/canonical/A/.millstrand",
+			"original_source_cwd": "/canonical/A",
+			"probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
+			"probe_state_dir": "/private/pool-probes/<probe-id>/members/A/state",
+			"probe_data_dir": "/private/pool-probes/<probe-id>/members/A/data",
+			"member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl",
+			"name": "A",
+			"candidate_weaver_id": "probe-weaver-<opaque-uuid>",
+			"candidate_generation_id": "probe-generation-<opaque-uuid>",
+			"old_member_baseline": {
+				"status": "admitted",
+				"projection": {}
+			}
+		}
+	]
 }
 ```
 
@@ -288,28 +288,28 @@ The probe launch has no launch token and does not register a process-custody all
 
 ```json
 {
-  "format": "millstrand.jvm-pool-probe-result/v1",
-  "probe_id": "probe-<opaque-uuid>",
-  "success": true,
-  "stage": "probe/complete",
-  "probe_root": "/private/pool-probes/<probe-id>",
-  "source_workspace": "/canonical/A/.millstrand",
-  "completed": ["basis/compose", "member/A", "member/B"],
-  "members": [
-    {
-      "original_config_dir": "/canonical/A/.millstrand",
-      "probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
-      "candidate_weaver_id": "probe-weaver-<opaque-uuid>",
-      "candidate_generation_id": "probe-generation-<opaque-uuid>",
-      "baseline_kind": "live",
-      "status": "validated",
-      "registry_projection": {},
-      "registry_diff": {"added": {}, "removed": {}, "changed": {}},
-      "member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl"
-    }
-  ],
-  "collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
-  "log": "/private/pool-probes/<probe-id>/probe.log"
+	"format": "millstrand.jvm-pool-probe-result/v1",
+	"probe_id": "probe-<opaque-uuid>",
+	"success": true,
+	"stage": "probe/complete",
+	"probe_root": "/private/pool-probes/<probe-id>",
+	"source_workspace": "/canonical/A/.millstrand",
+	"completed": ["basis/compose", "member/A", "member/B"],
+	"members": [
+		{
+			"original_config_dir": "/canonical/A/.millstrand",
+			"probe_config_dir": "/private/pool-probes/<probe-id>/members/A/config",
+			"candidate_weaver_id": "probe-weaver-<opaque-uuid>",
+			"candidate_generation_id": "probe-generation-<opaque-uuid>",
+			"baseline_kind": "live",
+			"status": "validated",
+			"registry_projection": {},
+			"registry_diff": { "added": {}, "removed": {}, "changed": {} },
+			"member_diagnostic": "/private/pool-probes/<probe-id>/members/A/diagnostic.jsonl"
+		}
+	],
+	"collective_diagnostic": "/private/pool-probes/<probe-id>/collective.jsonl",
+	"log": "/private/pool-probes/<probe-id>/probe.log"
 }
 ```
 
@@ -327,11 +327,11 @@ Preserve the isolated status shape. Add the following fields only for a workspac
 
 ```json
 {
-  "jvm_pool": "backend",
-  "registered_members": ["/canonical/A/.millstrand", "/canonical/B/.millstrand"],
-  "live_members": ["/canonical/A/.millstrand"],
-  "pending_members": ["/canonical/B/.millstrand"],
-  "restart_required": true
+	"jvm_pool": "backend",
+	"registered_members": ["/canonical/A/.millstrand", "/canonical/B/.millstrand"],
+	"live_members": ["/canonical/A/.millstrand"],
+	"pending_members": ["/canonical/B/.millstrand"],
+	"restart_required": true
 }
 ```
 

@@ -8,9 +8,7 @@ Read first: `attr-scaling-ship-now.plan.md` (ASSN-PLAN-001 `PH4`, `P6` V1–V7, 
 
 Run every blocking gate and the smoke demo; fix only what the gates surface (no new feature scope). Confirm the WAL sidecars and runtime artifacts are cleaned.
 
-- `dev/skein/smoke.clj` (`AA7`): ensure smoke exercises **lean `list` + full
-  `show`** (ASSN-DELTA-002.CC1/CC2) and cleans `-wal`/`-shm`/`.sqlite` state
-  (`R3`, `V7`). Extend it if that coverage is missing.
+- `dev/skein/smoke.clj` (`AA7`): ensure smoke exercises **lean `list` + full `show`** (ASSN-DELTA-002.CC1/CC2) and cleans `-wal`/`-shm`/`.sqlite` state (`R3`, `V7`). Extend it if that coverage is missing.
 
 ## Validation — run all, all must pass
 
@@ -28,13 +26,9 @@ git status --short                 # V7: no generated sqlite/-wal/-shm/runtime a
 
 ## Acceptance
 
-- All gates green; smoke green with lean-list/full-show coverage; `git status
-  --short` clean of generated SQLite/WAL/SHM/runtime metadata.
-- The blocking undeclared-key invariant gate (from Task 003) is present and
-  green in `clojure -M:test`.
+- All gates green; smoke green with lean-list/full-show coverage; `git status --short` clean of generated SQLite/WAL/SHM/runtime metadata.
+- The blocking undeclared-key invariant gate (from Task 003) is present and green in `clojure -M:test`.
 
 ## Guardrails
 
-- Never start/stop/restart or reload the canonical weaver (workspace
-  `/Users/ct/dev/projects/skein-src/.skein`); smoke uses its own disposable
-  `--workspace`. Never `--no-verify`.
+- Never start/stop/restart or reload the canonical weaver (workspace `/Users/ct/dev/projects/skein-src/.skein`); smoke uses its own disposable `--workspace`. Never `--no-verify`.

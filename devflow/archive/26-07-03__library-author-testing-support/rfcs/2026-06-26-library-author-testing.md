@@ -38,7 +38,7 @@ The current guidance is mostly conceptual: write pure Clojure tests where possib
 ## RFC-005.P4 Options
 
 | ID | Summary | Pros | Cons |
-| -- | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-005.O1 | Documentation only: add `docs/library-authoring.md` with deps.edn examples, pure tests, local-root dev dependency guidance, and copyable snippets for disposable daemon worlds. | Lowest implementation cost; teaches Clojure fundamentals; no new API to maintain. | Still leaves non-Clojure authors writing brittle process orchestration; harder for Atom to dogfood consistently; repeated boilerplate across libraries. |
 | RFC-005.O2 | Add docs plus a minimal `atom.test.alpha` dev/test namespace for disposable daemon-world tests, initially focused on in-JVM test orchestration and daemon-routed REPL calls. | First-class support; tests real user workflow; easier dogfooding; centralizes cleanup, isolation, and diagnostics without wrapping task behavior. | Adds a blessed alpha API surface; must avoid growing into smoke-test or CLI-wrapper infrastructure. |
 | RFC-005.O3 | Add a larger public harness including Go CLI binary building/discovery, CLI subprocess helpers, daemon REPL stdin helpers, and rich assertions. | Strong end-to-end conformance story; authors can test CLI behavior too. | Large hidden scope; binary/version mismatch questions; risks duplicating smoke workflow and becoming a parallel product surface. |

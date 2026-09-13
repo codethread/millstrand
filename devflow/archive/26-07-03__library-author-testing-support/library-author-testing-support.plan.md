@@ -18,7 +18,7 @@ Deliver first-class library-author testing support by refactoring weaver storage
 ## LAT-PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | LAT-PLAN-001.AA1 | `skein.core.db` | Add or expose storage construction support for file-backed datasource and held in-memory SQLite connection without changing schema/query functions. |
 | LAT-PLAN-001.AA2 | `skein.core.weaver.runtime` | Start runtimes from a storage handle, own storage close lifecycle, and keep existing weaver API call sites using a next.jdbc-compatible connectable. |
 | LAT-PLAN-001.AA3 | `skein.core.weaver.metadata` / socket status | Publish storage kind/label and file path only for file storage; validate metadata accordingly. |
@@ -100,10 +100,10 @@ Outcome: Migrate the weaver-world library-author-style cases `daemon-init-runs-w
 ### LAT-PLAN-001.DN3 Pre-implementation drift audit — 2026-07-03
 
 - Audited the plan/tasks against the current codebase before starting task 1; feature artifacts were written 2026-06-26 and the repo moved on:
-  - The libs→spools rename landed: `libs.edn` → `spools.edn` (legacy `libs.edn` now fails loudly), `skein.libs.alpha` → `skein.api.runtime.alpha` (`sync!`/`use!` take the runtime explicitly), `test/skein/libs_test.clj` → `test/skein/spools_test.clj`, and the dogfood targets are now `daemon-init-runs-with-spool-classloader-after-sync` and `connected-client-use-executes-in-daemon-runtime`.
-  - Namespaces moved under `skein.core.*`: task file paths corrected to `src/skein/core/db.clj`, `src/skein/core/weaver/{runtime,metadata,socket}.clj`, `src/skein/core/client.clj`.
-  - RFC-016 (test concurrency, Implemented) shipped `:publish? false` multi-runtime JVM support, runtime-owned `:spool-state`, and the parallel test runner. This removes the one-runtime-per-JVM blocker RFC-016.G5 called out for this feature; `skein.test.alpha` must start unpublished runtimes so weaver worlds nest and parallelize.
-  - Backlog `sh835` (Refinement) duplicates this feature's in-memory storage slice (tasks 2–3). RFC-005.NG4a/REC7 explicitly keep in-memory in this feature, so the task queue proceeds unchanged; flagged to the owner that `sh835` should be closed as merged into `wbs6r` scope.
+    - The libs→spools rename landed: `libs.edn` → `spools.edn` (legacy `libs.edn` now fails loudly), `skein.libs.alpha` → `skein.api.runtime.alpha` (`sync!`/`use!` take the runtime explicitly), `test/skein/libs_test.clj` → `test/skein/spools_test.clj`, and the dogfood targets are now `daemon-init-runs-with-spool-classloader-after-sync` and `connected-client-use-executes-in-daemon-runtime`.
+    - Namespaces moved under `skein.core.*`: task file paths corrected to `src/skein/core/db.clj`, `src/skein/core/weaver/{runtime,metadata,socket}.clj`, `src/skein/core/client.clj`.
+    - RFC-016 (test concurrency, Implemented) shipped `:publish? false` multi-runtime JVM support, runtime-owned `:spool-state`, and the parallel test runner. This removes the one-runtime-per-JVM blocker RFC-016.G5 called out for this feature; `skein.test.alpha` must start unpublished runtimes so weaver worlds nest and parallelize.
+    - Backlog `sh835` (Refinement) duplicates this feature's in-memory storage slice (tasks 2–3). RFC-005.NG4a/REC7 explicitly keep in-memory in this feature, so the task queue proceeds unchanged; flagged to the owner that `sh835` should be closed as merged into `wbs6r` scope.
 - Proposal, plan, repl-api delta, and task files updated in place for the renames; contract content (storage kinds, metadata field names, helper vocabulary) unchanged.
 
 ### LAT-PLAN-001.DN4 Tasks 1–3 implemented — 2026-07-03
@@ -137,13 +137,7 @@ Outcome: Migrate the weaver-world library-author-style cases `daemon-init-runs-w
 
 ### LAT-PLAN-001.DN8 Follow-up from devflow extraction — 2026-07-03
 
-- The spool-git-distribution/devflow-extraction work added
-  `skein.spools.test-support/spool-checkout-root` (resolve a spool's checkout
-  root from a classpath source file, gitlib or local override) so the repo
-  config test can approve the extracted devflow spool offline. Dependency-code
-  resolution helpers like this belong in `skein.test.alpha` once this feature's
-  helper namespace ships — promote it (and migrate the test-support caller)
-  when branches converge.
+- The spool-git-distribution/devflow-extraction work added `skein.spools.test-support/spool-checkout-root` (resolve a spool's checkout root from a classpath source file, gitlib or local override) so the repo config test can approve the extracted devflow spool offline. Dependency-code resolution helpers like this belong in `skein.test.alpha` once this feature's helper namespace ships — promote it (and migrate the test-support caller) when branches converge.
 
 ### LAT-PLAN-001.DN9 Classpath checkout helper promoted — 2026-07-03
 

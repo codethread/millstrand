@@ -16,12 +16,12 @@ Retire the remaining sibling-repo installers on the ADR-003 exported-datum patte
 
 ## PLAN-Sbl-001.P3 Affected areas
 
-| ID               | Area                                                                 | Expected change                                    |
-| ---------------- | -------------------------------------------------------------------- | -------------------------------------------------- |
+| ID | Area | Expected change |
+| --- | --- | --- |
 | PLAN-Sbl-001.AA1 | `devflow.spool/src/ct/spools/devflow.clj`, `test/ct/spools/devflow_test.clj`, `release-exception.md` | Datum + deletion + kernel-path tests + break record |
 | PLAN-Sbl-001.AA2 | `kanban.spool/src/ct/spools/{kanban.clj,kanban/peering.clj}`, `test/ct/spools/{kanban_test.clj,kanban_peering_test.clj}`, `release-exception.md` | Datum + deletion + conversion + prose sweep + break record |
-| PLAN-Sbl-001.AA3 | `agent-harness.spool/test/ct/spools/{agent_run_test.clj,subagent_test.clj,bench_test.clj,bench_metrics_test.clj,delegation_test.clj}` | Module-path conversion + prose tidy (test-only)    |
-| PLAN-Sbl-001.AA4 | skein-src `test/skein/config_ops_test.clj`                            | v8-compatible activation conversion                |
+| PLAN-Sbl-001.AA3 | `agent-harness.spool/test/ct/spools/{agent_run_test.clj,subagent_test.clj,bench_test.clj,bench_metrics_test.clj,delegation_test.clj}` | Module-path conversion + prose tidy (test-only) |
+| PLAN-Sbl-001.AA4 | skein-src `test/skein/config_ops_test.clj` | v8-compatible activation conversion |
 
 ## PLAN-Sbl-001.P4 Contract and migration impact
 

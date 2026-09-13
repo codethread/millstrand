@@ -21,7 +21,7 @@ Build named weaver-side weave patterns as the owner-controlled complement to nam
 ## PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-001.AA1 | `src/skein/weaver` | Add pattern registry state, spec validation/explanation helpers, weaver API operations, socket allowlist dispatch, and reload clearing. |
 | PLAN-001.AA2 | `src/skein/repl.clj` and `src/skein/client.clj` | Add connected helpers/client ops for pattern registration, inspection, explanation, and `weave!`. |
 | PLAN-001.AA3 | `cli/` | Add `weave --pattern`, stdin JSON parsing, request payload, help text, and tests. |
@@ -90,7 +90,6 @@ Studied the active feature and adjacent query/view/socket/spec code. Added the m
 ### PLAN-001.DN3 Implementation — 2026-06-27
 
 Implemented the MVP with weaver-lifetime pattern registry state, spec-backed invocation, JSON socket `weave` / `pattern-explain`, Go CLI commands, REPL helpers, tests, smoke coverage, and promoted root spec updates. Caller explanation currently ships the registered spec name and printable `s/form` guidance; richer JSON Schema generation remains deferred.
-
 
 ### PLAN-001.DN4 Finish — 2026-06-27
 

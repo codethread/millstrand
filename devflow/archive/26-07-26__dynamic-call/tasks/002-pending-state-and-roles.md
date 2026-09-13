@@ -31,7 +31,7 @@ A bound dispatch pours, is observable, blocks done, and can be closed by nothing
 
 - **TASK-Dyc-002.OS1:** `dispatch!` and anything that fills a dispatch — task 3.
 - **TASK-Dyc-002.OS2:** The CLI verb and the `show`/`declared` discovery projection — task 4.
-- **TASK-Dyc-002.OS3:** Cycle *checking*. This task persists the path; task 3 checks it.
+- **TASK-Dyc-002.OS3:** Cycle _checking_. This task persists the path; task 3 checks it.
 
 ## TASK-Dyc-002.P5 References
 

@@ -340,15 +340,9 @@ Stopping a weaver ends its process-local runtime state. The graph remains in SQL
 ## Where to go next
 
 - [Millstrand user reference](./reference.md) — the index to Millstrand's guides, generated API documentation, and specifications. Use the specifications for exact behavior.
-- [Shipped reference spools](../spools/README.md) — a workflow engine, a feature
-  lifecycle, a kanban board, and more, as working code.
-- [Customising your workspace](./spools/customisation.md) — the full ladder from
-  `init.clj` to your own local spool.
-- [Writing shared spools](./spools/writing-shared-spools.md) — building extensions
-  other people can run.
-- [Testing your config and spools](./spools/testing.md) — from disposable worlds
-  to weaver-world integration tests against a chosen Millstrand checkout.
-- [Clojure crash course](./clojure-crash-course.md) — enough Clojure to be
-  comfortable in the REPL.
-- [Tenets](../devflow/TENETS.md) and [philosophy](../devflow/PHILOSOPHY.md) —
-  why Millstrand is shaped the way it is.
+- [Shipped reference spools](../spools/README.md) — a workflow engine, a feature lifecycle, a kanban board, and more, as working code.
+- [Customising your workspace](./spools/customisation.md) — the full ladder from `init.clj` to your own local spool.
+- [Writing shared spools](./spools/writing-shared-spools.md) — building extensions other people can run.
+- [Testing your config and spools](./spools/testing.md) — from disposable worlds to weaver-world integration tests against a chosen Millstrand checkout.
+- [Clojure crash course](./clojure-crash-course.md) — enough Clojure to be comfortable in the REPL.
+- [Tenets](../devflow/TENETS.md) and [philosophy](../devflow/PHILOSOPHY.md) — why Millstrand is shaped the way it is.

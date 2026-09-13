@@ -23,7 +23,7 @@ The central mechanic: pour the selected target's expansion under the run's curre
 ## TASK-Dyc-003.P3 Done when
 
 - **TASK-Dyc-003.DW1:** **The feature test (PLAN-Dyc-001.V1):** `step a -> dispatch -> step c` runs in one molecule; `step c` becomes ready only after the expansion's exits close; the run completes.
-- **TASK-Dyc-003.DW2:** After a fill, the join auto-closes through the *existing* cascade with no dispatch-specific branch, and the run reports done when everything closes.
+- **TASK-Dyc-003.DW2:** After a fill, the join auto-closes through the _existing_ cascade with no dispatch-specific branch, and the run reports done when everything closes.
 - **TASK-Dyc-003.DW3:** Param isolation (V5): a caller key with the same name as a target key does not reach the target.
 - **TASK-Dyc-003.DW4:** Cycle behavior (V4, V10): `A -> dispatch -> A` refused; a dispatch inside a fixed call to `C` cannot select `C`; two sibling dispatches may both select the same target; a repoint to an unrelated definition is not a cycle; a repoint back to an ancestor is.
 - **TASK-Dyc-003.DW5:** Parentage and collision (R4): expansion strands are `parent-of` the run's current root, and an expansion whose step ids collide with existing sibling ids is disjoint by prefixing.

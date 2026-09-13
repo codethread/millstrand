@@ -4,23 +4,12 @@
 
 ## PLAN-ShellGates-001.P1 Goal and scope
 
-Ship a mechanical, durable, re-runnable check of a workflow *artifact* — a machine done-signal independent of run exit status — by adding a `:shell` gate waiter and a classpath executor spool that fulfils it (proposal `G1`–`G4`). The workflow engine does not change: the executor is a treadle sibling that knows both the workflow gate vocabulary and process execution, and closes the gate through the ordinary `workflow/complete!` surface.
+Ship a mechanical, durable, re-runnable check of a workflow _artifact_ — a machine done-signal independent of run exit status — by adding a `:shell` gate waiter and a classpath executor spool that fulfils it (proposal `G1`–`G4`). The workflow engine does not change: the executor is a treadle sibling that knows both the workflow gate vocabulary and process execution, and closes the gate through the ordinary `workflow/complete!` surface.
 
 Resolved decisions binding this plan:
 
-- **PLAN-ShellGates-001.D1 (spool name — resolves `PROP-ShellGates-001.Q1`):** the
-  spool is **`skein.spools.reed`** — the loom reed beats each pick (weft) into a
-  consistent, checked position, i.e. the mechanical enforcer of the fabric, matching
-  the treadle/shuttle/selvage/carder house naming. Source lives at
-  `spools/src/skein/spools/reed.clj` (classpath tier, a sibling of `loom`/`workflow`,
-  **not** an approved local root). Contract doc `spools/reed.md`. Every proposal
-  reference to the working name `skein.spools.shell-gate` / `spools/shell-gate.md`
-  reads as `reed` / `spools/reed.md`.
-- **PLAN-ShellGates-001.D2:** the whole design is fixed by `PROP-ShellGates-001`:
-  `:shell` waiter; classpath executor spool; direct process execution (no shuttle);
-  loud distinct `shell/error` state; bounded output on gate attributes; argv from
-  trusted definition code with params supplying data only; no implicit shell; no
-  `:ci` family; the treadle/`sh` collision fix stays out of scope.
+- **PLAN-ShellGates-001.D1 (spool name — resolves `PROP-ShellGates-001.Q1`):** the spool is **`skein.spools.reed`** — the loom reed beats each pick (weft) into a consistent, checked position, i.e. the mechanical enforcer of the fabric, matching the treadle/shuttle/selvage/carder house naming. Source lives at `spools/src/skein/spools/reed.clj` (classpath tier, a sibling of `loom`/`workflow`, **not** an approved local root). Contract doc `spools/reed.md`. Every proposal reference to the working name `skein.spools.shell-gate` / `spools/shell-gate.md` reads as `reed` / `spools/reed.md`.
+- **PLAN-ShellGates-001.D2:** the whole design is fixed by `PROP-ShellGates-001`: `:shell` waiter; classpath executor spool; direct process execution (no shuttle); loud distinct `shell/error` state; bounded output on gate attributes; argv from trusted definition code with params supplying data only; no implicit shell; no `:ci` family; the treadle/`sh` collision fix stays out of scope.
 
 In scope: the `reed` spool and its `shell/*` gate vocabulary; the `:shell` executor registration + stall predicate + `stalled-shell-gates` query; the contract-doc triad; the doc-index/spec-index updates; optional live activation in this repo's `.skein`; the tested behaviour contract.
 
@@ -30,78 +19,30 @@ Out of scope (proposal non-goals, carried verbatim): option B / `workflow/valida
 
 The executor is a direct treadle analogue (`spools/shuttle/src/skein/spools/treadle.clj` is the reference implementation), minus everything shuttle-specific.
 
-- **PLAN-ShellGates-001.A1 (event-driven + scan reconciliation):** `install!`
-  registers one weaver event handler on the graph-mutation event types
-  (`:strand/added :strand/updated :batch/applied :strand/burned :strand/superseded`,
-  matching treadle's `event-types`) whose handler runs a `scan!`. `scan!` enumerates
-  ready `:shell` gates purely through the workflow surface —
-  `(workflow/active-runs)` → `(workflow/next-steps run-id)` filtered to
-  `(= "shell" (:gate step))` — so the executor never reaches into engine internals.
-  A cold `install!` runs one initial scan (treadle precedent), and `scan!` serializes
-  on a runtime-owned monitor so independent weaver runtimes in one JVM never block
-  each other.
-- **PLAN-ShellGates-001.A2 (runtime-owned state, no module-level atoms):** all state
-  lives under `skein.api.runtime.alpha/spool-state` keyed by the spool (treadle's
-  `new-state`/`state`/`state-version` idiom, TEN — no module-level atoms). The state
-  holds the scan monitor **and** a spool-owned worker `ExecutorService` on which
-  processes actually run. The worker pool is created lazily in `new-state` and shut
-  down on runtime stop (mirror shuttle's scheduler lifecycle; register a runtime-stop
-  hook so the pool does not outlive the world). Bump `state-version` if the state key
-  set ever changes, and keep a `state-shape-matches-declared-version` test as treadle
-  does — spool-state survives `reload!`.
-- **PLAN-ShellGates-001.A3 (process execution OFF the weaver event thread):** the
-  event handler must return promptly. When `scan!` finds a ready, un-run, un-errored
-  `:shell` gate it **claims** it idempotently (stamp a `shell/running` / claim marker
-  before dispatch so a concurrent scan or sibling executor does not double-launch —
-  treadle claims via `treadle/run` + a `delegates` edge; reed's claim is a single
-  attribute since there is no separate run strand), then submits the actual
-  `ProcessBuilder` execution to the worker pool. The event thread never blocks on a
-  child process. On completion the worker thread stamps the outcome and, on pass,
-  calls `workflow/complete!` — the same graph-mutation path treadle takes off its own
-  async work.
-- **PLAN-ShellGates-001.A4 (`shell/*` gate attribute contract):** all plain JSON
-  `TEXT` on the gate strand. Inputs are authored in the trusted workflow definition;
-  pour-time params supply only data elements the definition interpolates
-  (`PROP-ShellGates-001.NG3`).
+- **PLAN-ShellGates-001.A1 (event-driven + scan reconciliation):** `install!` registers one weaver event handler on the graph-mutation event types (`:strand/added :strand/updated :batch/applied :strand/burned :strand/superseded`, matching treadle's `event-types`) whose handler runs a `scan!`. `scan!` enumerates ready `:shell` gates purely through the workflow surface — `(workflow/active-runs)` → `(workflow/next-steps run-id)` filtered to `(= "shell" (:gate step))` — so the executor never reaches into engine internals. A cold `install!` runs one initial scan (treadle precedent), and `scan!` serializes on a runtime-owned monitor so independent weaver runtimes in one JVM never block each other.
+- **PLAN-ShellGates-001.A2 (runtime-owned state, no module-level atoms):** all state lives under `skein.api.runtime.alpha/spool-state` keyed by the spool (treadle's `new-state`/`state`/`state-version` idiom, TEN — no module-level atoms). The state holds the scan monitor **and** a spool-owned worker `ExecutorService` on which processes actually run. The worker pool is created lazily in `new-state` and shut down on runtime stop (mirror shuttle's scheduler lifecycle; register a runtime-stop hook so the pool does not outlive the world). Bump `state-version` if the state key set ever changes, and keep a `state-shape-matches-declared-version` test as treadle does — spool-state survives `reload!`.
+- **PLAN-ShellGates-001.A3 (process execution OFF the weaver event thread):** the event handler must return promptly. When `scan!` finds a ready, un-run, un-errored `:shell` gate it **claims** it idempotently (stamp a `shell/running` / claim marker before dispatch so a concurrent scan or sibling executor does not double-launch — treadle claims via `treadle/run` + a `delegates` edge; reed's claim is a single attribute since there is no separate run strand), then submits the actual `ProcessBuilder` execution to the worker pool. The event thread never blocks on a child process. On completion the worker thread stamps the outcome and, on pass, calls `workflow/complete!` — the same graph-mutation path treadle takes off its own async work.
+- **PLAN-ShellGates-001.A4 (`shell/*` gate attribute contract):** all plain JSON `TEXT` on the gate strand. Inputs are authored in the trusted workflow definition; pour-time params supply only data elements the definition interpolates (`PROP-ShellGates-001.NG3`).
 
-  | Attribute | On | Required | Meaning |
-  |---|---|---|---|
-  | `shell/argv` | gate (input) | **yes** | JSON array of strings, executed directly with **no** implicit shell. Missing / blank / non-array / non-string-element fails loudly onto `shell/error`, spawning no process (`NG4`, TEN-003). An author wanting shell features writes `["sh" "-c" "…"]` explicitly. |
-  | `shell/cwd` | gate (input) | no | Working directory for the process. Absent → the weaver's default working directory. |
-  | `shell/timeout-secs` | gate (input) | no | Wall-clock bound; on expiry the process is killed and `shell/error` is stamped. A non-positive / non-integer value fails loudly onto `shell/error` (TEN-003, do not silently clamp). |
-  | `shell/exit-code` | gate (recorded) | — | Process exit code, recorded on **both** outcomes (pass and fail). Absent on spawn error / invalid argv (no process ran). |
-  | `shell/output` | gate (recorded) | — | Bounded stdout+stderr **tail** (last N KB, one fixed bound), for audit. Bounded on purpose (`NG5`; large attribute payloads are a known cost per the attr-scaling work). |
-  | `shell/error` | gate (recorded) | — | Durable failure detail (non-zero exit, timeout, spawn error, or invalid argv). Its presence makes the gate a coordinator-visible stalled state and causes reed to **skip** the gate on later scans until cleared. |
+    | Attribute | On | Required | Meaning |
+    | --- | --- | --- | --- |
+    | `shell/argv` | gate (input) | **yes** | JSON array of strings, executed directly with **no** implicit shell. Missing / blank / non-array / non-string-element fails loudly onto `shell/error`, spawning no process (`NG4`, TEN-003). An author wanting shell features writes `["sh" "-c" "…"]` explicitly. |
+    | `shell/cwd` | gate (input) | no | Working directory for the process. Absent → the weaver's default working directory. |
+    | `shell/timeout-secs` | gate (input) | no | Wall-clock bound; on expiry the process is killed and `shell/error` is stamped. A non-positive / non-integer value fails loudly onto `shell/error` (TEN-003, do not silently clamp). |
+    | `shell/exit-code` | gate (recorded) | — | Process exit code, recorded on **both** outcomes (pass and fail). Absent on spawn error / invalid argv (no process ran). |
+    | `shell/output` | gate (recorded) | — | Bounded stdout+stderr **tail** (last N KB, one fixed bound), for audit. Bounded on purpose (`NG5`; large attribute payloads are a known cost per the attr-scaling work). |
+    | `shell/error` | gate (recorded) | — | Durable failure detail (non-zero exit, timeout, spawn error, or invalid argv). Its presence makes the gate a coordinator-visible stalled state and causes reed to **skip** the gate on later scans until cleared. |
 
 The **pass** outcome rides the ordinary workflow vocabulary only: reed closes the gate with `workflow/complete!` `:by "shell"` and `:notes` = a short result summary (surfacing as `workflow/outcome-by "shell"` / `workflow/notes`, mirroring treadle putting `shuttle/result` in `workflow/notes`). **No new `workflow/*` attribute is introduced** (`PROP-ShellGates-001.S3`).
-- **PLAN-ShellGates-001.A5 (loud, distinct failure — `G3`/`S4`):** a failed check does
-  **not** close the gate and does **not** masquerade as a failed shuttle run. reed
-  stamps `shell/error` (with `shell/exit-code` and bounded `shell/output` where a
-  process ran) and leaves the gate **ready and stamped** — a signal unmistakably
-  distinct from treadle's dead-delegated-run failure, because it lives on the gate as
-  a shell error rather than as a failed run strand.
-- **PLAN-ShellGates-001.A6 (deterministic skip + clear-to-retry recovery — `S4`):**
-  because the check is deterministic, a gate stamped `shell/error` (or with a live
-  claim marker) is **skipped** on every later scan until a coordinator clears the
-  stamp — an expensive `make test` runs once per deliberate request, not on every
-  graph mutation, exactly as treadle skips `treadle/error` gates. Recovery mirrors
-  treadle's clear-to-retry: the coordinator fixes the artifact (or rewrites
-  `shell/argv`/`shell/cwd`) and clears `shell/error`; the next scan finds a ready,
-  un-errored, un-claimed `:shell` gate and re-runs the deterministic check, closing
-  the gate on pass.
-- **PLAN-ShellGates-001.A7 (attention surface — `S2`/`S4`):** `install!` calls
-  `(workflow/register-executor! :shell gate-stalled?)` so `await!` stays silent
-  (`:waiting`) on a healthy `:shell` gate and surfaces `:stalled` when `gate-stalled?`
-  reports detail (a ready `:shell` gate carrying `shell/error`). It also registers a
-  `stalled-shell-gates` named query mirroring the predicate for SQL-side coordinator
-  inspection (treadle's `stalled-gates` precedent — but reed's is simpler: the failure
-  detail lives on the gate itself, so the query needs no `delegates`-edge join back to
-  a run row). No CLI op, no JSON socket op (`S2`, TEN-004/TEN-006).
+
+- **PLAN-ShellGates-001.A5 (loud, distinct failure — `G3`/`S4`):** a failed check does **not** close the gate and does **not** masquerade as a failed shuttle run. reed stamps `shell/error` (with `shell/exit-code` and bounded `shell/output` where a process ran) and leaves the gate **ready and stamped** — a signal unmistakably distinct from treadle's dead-delegated-run failure, because it lives on the gate as a shell error rather than as a failed run strand.
+- **PLAN-ShellGates-001.A6 (deterministic skip + clear-to-retry recovery — `S4`):** because the check is deterministic, a gate stamped `shell/error` (or with a live claim marker) is **skipped** on every later scan until a coordinator clears the stamp — an expensive `make test` runs once per deliberate request, not on every graph mutation, exactly as treadle skips `treadle/error` gates. Recovery mirrors treadle's clear-to-retry: the coordinator fixes the artifact (or rewrites `shell/argv`/`shell/cwd`) and clears `shell/error`; the next scan finds a ready, un-errored, un-claimed `:shell` gate and re-runs the deterministic check, closing the gate on pass.
+- **PLAN-ShellGates-001.A7 (attention surface — `S2`/`S4`):** `install!` calls `(workflow/register-executor! :shell gate-stalled?)` so `await!` stays silent (`:waiting`) on a healthy `:shell` gate and surfaces `:stalled` when `gate-stalled?` reports detail (a ready `:shell` gate carrying `shell/error`). It also registers a `stalled-shell-gates` named query mirroring the predicate for SQL-side coordinator inspection (treadle's `stalled-gates` precedent — but reed's is simpler: the failure detail lives on the gate itself, so the query needs no `delegates`-edge join back to a run row). No CLI op, no JSON socket op (`S2`, TEN-004/TEN-006).
 
 ## PLAN-ShellGates-001.P3 Affected areas
 
 | ID | Area | Expected change |
-|---|---|---|
+| --- | --- | --- |
 | PLAN-ShellGates-001.AA1 | `spools/src/skein/spools/reed.clj` (**new**) | The executor spool: ns docstring; runtime-owned state (scan monitor + worker pool, versioned shape); `scan!`/`on-event`; claim + off-thread `ProcessBuilder` run with bounded capture and timeout; `complete!`-on-pass, `shell/error`-on-fail; `gate-stalled?`; `install!` registering the event handler, `register-executor! :shell`, and `stalled-shell-gates`. No module-level atoms; `*warn-on-reflection*`-clean (Java process interop is a reflection hot spot — type-hint `ProcessBuilder`/`Process`). |
 | PLAN-ShellGates-001.AA2 | `spools/reed.md` (**new**) | Hand-authored contract doc in the style of `treadle.md`: overview, loading, the `shell/*` gate-attribute table, pass/fail/recovery/attention semantics, worked example, see-also. |
 | PLAN-ShellGates-001.AA3 | `spools/reed.cookbook.md` (**new**) | Worked composition recipes: a `test -s` artifact gate; an explicit `["sh" "-c" …]` multi-file check; the `:subagent`→`:shell` composition (a `:shell` gate `:depends-on` the subagent gate — the `NG1`/option-B case expressed as composition); recovering a stalled `shell/error` gate. |
@@ -114,23 +55,10 @@ The **pass** outcome rides the ordinary workflow vocabulary only: reed closes th
 
 ## PLAN-ShellGates-001.P4 Contract and migration impact
 
-- **PLAN-ShellGates-001.CM1:** Purely additive. No root behavioral spec changes
-  (`PROP-ShellGates-001` "Related root specs"): the strand model, CLI, REPL API, and
-  weaver runtime are untouched. **Verified** by reading all four root specs and the
-  gate/executor surface: the `:shell` waiter is a freeform gate-hint value the engine
-  already accepts (workflow.md §3), and `register-executor!` is already the
-  in-contract generalization point (workflow.md §4). The only spec touched is the
-  `SPEC-005` contract index, via `DELTA-ShellGates-001` (index membership only, no
-  behavior). No other delta is warranted.
-- **PLAN-ShellGates-001.CM2:** No new engine surface. reed adds no `workflow/*`
-  attribute and no engine fn; it consumes `active-runs`/`next-steps`/`complete!`/
-  `register-executor!`/`register-query!` exactly as treadle does.
-- **PLAN-ShellGates-001.CM3:** Capability stays opt-in. A classpath spool is inert
-  until a world's `.skein` activates it (`PROP-ShellGates-001.S2`); shipping on the
-  classpath grants no world process execution it did not opt into.
-- **PLAN-ShellGates-001.CM4:** No CLI/JSON-socket surface (TEN-006): inspection is
-  `strand show` + the workflow surface + the `stalled-shell-gates` named query. No
-  migration — new worlds and existing worlds are unaffected until they activate reed.
+- **PLAN-ShellGates-001.CM1:** Purely additive. No root behavioral spec changes (`PROP-ShellGates-001` "Related root specs"): the strand model, CLI, REPL API, and weaver runtime are untouched. **Verified** by reading all four root specs and the gate/executor surface: the `:shell` waiter is a freeform gate-hint value the engine already accepts (workflow.md §3), and `register-executor!` is already the in-contract generalization point (workflow.md §4). The only spec touched is the `SPEC-005` contract index, via `DELTA-ShellGates-001` (index membership only, no behavior). No other delta is warranted.
+- **PLAN-ShellGates-001.CM2:** No new engine surface. reed adds no `workflow/*` attribute and no engine fn; it consumes `active-runs`/`next-steps`/`complete!`/ `register-executor!`/`register-query!` exactly as treadle does.
+- **PLAN-ShellGates-001.CM3:** Capability stays opt-in. A classpath spool is inert until a world's `.skein` activates it (`PROP-ShellGates-001.S2`); shipping on the classpath grants no world process execution it did not opt into.
+- **PLAN-ShellGates-001.CM4:** No CLI/JSON-socket surface (TEN-006): inspection is `strand show` + the workflow surface + the `stalled-shell-gates` named query. No migration — new worlds and existing worlds are unaffected until they activate reed.
 
 ## PLAN-ShellGates-001.P5 Implementation phases
 
@@ -150,148 +78,43 @@ Outcome: if the repo runs reed live, `.skein/init.clj` activates it (ordered aft
 
 ## PLAN-ShellGates-001.P6 Validation strategy
 
-- **PLAN-ShellGates-001.V1 (`clojure -M:test`):** the new `skein.spools.reed-test`
-  namespace, driving real trivial deterministic commands (`true`, `false`,
-  `test -s <fixture>`, an `sh -c` that writes a fixture) rather than any harness.
-  Required cases:
-  - **pass** — a `:shell` gate whose command exits 0 closes the gate, records
-    `workflow/outcome-by "shell"`, `shell/exit-code 0`, and bounded `shell/output`;
-    the dependent step becomes ready.
-  - **fail** — a non-zero command stamps `shell/error` + `shell/exit-code` + captured
-    output, leaves the gate ready and stamped, and `gate-stalled?` /
-    `stalled-shell-gates` report it.
-  - **recovery** — fixing the artifact and clearing `shell/error` re-runs the check on
-    the next scan and closes the gate; a stamped `shell/error` gate is **not** re-run
-    on unrelated graph events (assert the expensive check runs once, not per mutation).
-  - **invalid argv** — missing / blank / non-array / non-string-element `shell/argv`
-    fails loudly onto `shell/error` with **no** process spawned.
-  - **timeout** — a command exceeding `shell/timeout-secs` is killed and stamped
-    `shell/error`; a non-positive/non-integer `shell/timeout-secs` fails loudly.
-  - **isolation** — a non-`:shell` gate (waiter `:subagent`, `:ci`, `:human`) is never
-    touched; `shell/output` capture is bounded (assert the bound on large output).
-  - **composition** — a `:self`/`:subagent` step feeding a dependent `:shell` gate runs
-    the check only once its dependency closes.
-- **PLAN-ShellGates-001.V2 (quality gates):** `make fmt-check`, `make lint`,
-  `make reflect-check` (reed compiles clean under `*warn-on-reflection*` — process
-  interop must be hinted), and `make docs-check` (regenerate `reed.api.md`, fail on
-  drift, build the site) — all at zero findings before commit.
-- **PLAN-ShellGates-001.V3 (isolation rule — non-negotiable):** every reed test runs
-  against a **disposable** weaver world and **never** the canonical `.skein` weaver.
-  `git status --short` must show no generated SQLite/runtime artifacts after a run.
-  When several agents run the suite concurrently, serialize behind the machine-wide
-  advisory lock (`flock -w 3600 /tmp/skein-test.lock clojure -M:test`).
-- **PLAN-ShellGates-001.V4 (test harness precedent — open question, see P7.Q2):** the
-  sibling executor (`test/skein/treadle_test.clj`) drives its event-fired contract with
-  `skein.spools.test-support/with-runtime` (an in-process real runtime that fires
-  events synchronously and polls with `test-support/poll-until`), which is the closest
-  precedent and satisfies V3. The proposal `S6` and the repo rules name
-  `skein.test.alpha` disposable weaver worlds. Both honour V3; the implementer should
-  follow the treadle `with-runtime` precedent unless a full socket weaver is genuinely
-  needed, and flag the choice at review.
+- **PLAN-ShellGates-001.V1 (`clojure -M:test`):** the new `skein.spools.reed-test` namespace, driving real trivial deterministic commands (`true`, `false`, `test -s <fixture>`, an `sh -c` that writes a fixture) rather than any harness. Required cases:
+    - **pass** — a `:shell` gate whose command exits 0 closes the gate, records `workflow/outcome-by "shell"`, `shell/exit-code 0`, and bounded `shell/output`; the dependent step becomes ready.
+    - **fail** — a non-zero command stamps `shell/error` + `shell/exit-code` + captured output, leaves the gate ready and stamped, and `gate-stalled?` / `stalled-shell-gates` report it.
+    - **recovery** — fixing the artifact and clearing `shell/error` re-runs the check on the next scan and closes the gate; a stamped `shell/error` gate is **not** re-run on unrelated graph events (assert the expensive check runs once, not per mutation).
+    - **invalid argv** — missing / blank / non-array / non-string-element `shell/argv` fails loudly onto `shell/error` with **no** process spawned.
+    - **timeout** — a command exceeding `shell/timeout-secs` is killed and stamped `shell/error`; a non-positive/non-integer `shell/timeout-secs` fails loudly.
+    - **isolation** — a non-`:shell` gate (waiter `:subagent`, `:ci`, `:human`) is never touched; `shell/output` capture is bounded (assert the bound on large output).
+    - **composition** — a `:self`/`:subagent` step feeding a dependent `:shell` gate runs the check only once its dependency closes.
+- **PLAN-ShellGates-001.V2 (quality gates):** `make fmt-check`, `make lint`, `make reflect-check` (reed compiles clean under `*warn-on-reflection*` — process interop must be hinted), and `make docs-check` (regenerate `reed.api.md`, fail on drift, build the site) — all at zero findings before commit.
+- **PLAN-ShellGates-001.V3 (isolation rule — non-negotiable):** every reed test runs against a **disposable** weaver world and **never** the canonical `.skein` weaver. `git status --short` must show no generated SQLite/runtime artifacts after a run. When several agents run the suite concurrently, serialize behind the machine-wide advisory lock (`flock -w 3600 /tmp/skein-test.lock clojure -M:test`).
+- **PLAN-ShellGates-001.V4 (test harness precedent — open question, see P7.Q2):** the sibling executor (`test/skein/treadle_test.clj`) drives its event-fired contract with `skein.spools.test-support/with-runtime` (an in-process real runtime that fires events synchronously and polls with `test-support/poll-until`), which is the closest precedent and satisfies V3. The proposal `S6` and the repo rules name `skein.test.alpha` disposable weaver worlds. Both honour V3; the implementer should follow the treadle `with-runtime` precedent unless a full socket weaver is genuinely needed, and flag the choice at review.
 
 ## PLAN-ShellGates-001.P7 Risks and open questions
 
-- **PLAN-ShellGates-001.R1 (blocking the event thread):** the weaver event handler must
-  return promptly. Running a child process (an expensive `make test`) inline would
-  stall every other event handler. Mitigation: A3 — the handler only claims and submits;
-  the process runs on the spool-owned worker pool. Review must confirm no
-  `.waitFor`/blocking read happens on the event thread.
-- **PLAN-ShellGates-001.R2 (gate-readiness race with concurrent scans / sibling
-  executors):** two scans (or a scan racing the initial `install!` scan) could both see
-  the same ready `:shell` gate and double-launch a process. Mitigation: the scan
-  serializes on the runtime-owned monitor (A1), and the claim marker is stamped before
-  dispatch and skipped thereafter (A3/A6) — the treadle idempotency pattern. Review the
-  claim/skip predicate against the recovery flow so a cleared error is re-run but a live
-  claim is not.
-- **PLAN-ShellGates-001.R3 (unbounded output):** a chatty command could write gigabytes.
-  Mitigation: capture a bounded tail only (A4 `shell/output`, `NG5`); never buffer the
-  whole stream into an attribute. Read the child's stdout/stderr into a bounded ring so
-  a runaway process cannot exhaust weaver heap before the timeout fires.
-- **PLAN-ShellGates-001.R4 (timeout enforcement + process cleanup):** a hung child must
-  be killed and its subtree not leaked. Mitigation: `shell/timeout-secs` enforced via
-  `Process/waitFor` with a timeout then `destroyForcibly`; ensure worker-pool shutdown
-  on runtime stop does not leave orphaned processes.
-- **PLAN-ShellGates-001.R5 (macOS/CI process semantics):** `ProcessBuilder` argv-exec,
-  cwd resolution, and exit-code/signal semantics differ subtly across macOS (dev) and
-  Linux (CI). Mitigation: tests use POSIX-portable trivial commands (`true`/`false`/
-  `test -s`); assert on exit code, not signal detail; keep the timeout-kill assertion
-  tolerant of platform kill semantics.
-- **PLAN-ShellGates-001.R6 (crash window):** a weaver crash between claim and outcome
-  leaves a gate claimed with no live process. Because the check is deterministic and
-  idempotent, recovery is safe: document that clearing the claim marker re-runs the
-  check (unlike treadle, there is no separate run strand to reconcile — this is
-  strictly simpler). Confirm the claim marker distinguishes "running" from "errored" so
-  a crashed-mid-run gate is recoverable by the same clear-to-retry path.
-- **PLAN-ShellGates-001.Q1 (repo live activation — PH3):** does this repo activate reed
-  in its canonical `.skein` now, or ship the spool + docs and defer activation? A
-  coordinator/user decision (the proposal lists activation as optional). Does not block
-  PH1/PH2.
-- **PLAN-ShellGates-001.Q2 (test harness — `with-runtime` vs `skein.test.alpha`):** see
-  V4. Recommend following the treadle `with-runtime` precedent; confirm with the
-  coordinator if a full socket weaver world is preferred for parity with the proposal's
-  wording.
+- **PLAN-ShellGates-001.R1 (blocking the event thread):** the weaver event handler must return promptly. Running a child process (an expensive `make test`) inline would stall every other event handler. Mitigation: A3 — the handler only claims and submits; the process runs on the spool-owned worker pool. Review must confirm no `.waitFor`/blocking read happens on the event thread.
+- **PLAN-ShellGates-001.R2 (gate-readiness race with concurrent scans / sibling executors):** two scans (or a scan racing the initial `install!` scan) could both see the same ready `:shell` gate and double-launch a process. Mitigation: the scan serializes on the runtime-owned monitor (A1), and the claim marker is stamped before dispatch and skipped thereafter (A3/A6) — the treadle idempotency pattern. Review the claim/skip predicate against the recovery flow so a cleared error is re-run but a live claim is not.
+- **PLAN-ShellGates-001.R3 (unbounded output):** a chatty command could write gigabytes. Mitigation: capture a bounded tail only (A4 `shell/output`, `NG5`); never buffer the whole stream into an attribute. Read the child's stdout/stderr into a bounded ring so a runaway process cannot exhaust weaver heap before the timeout fires.
+- **PLAN-ShellGates-001.R4 (timeout enforcement + process cleanup):** a hung child must be killed and its subtree not leaked. Mitigation: `shell/timeout-secs` enforced via `Process/waitFor` with a timeout then `destroyForcibly`; ensure worker-pool shutdown on runtime stop does not leave orphaned processes.
+- **PLAN-ShellGates-001.R5 (macOS/CI process semantics):** `ProcessBuilder` argv-exec, cwd resolution, and exit-code/signal semantics differ subtly across macOS (dev) and Linux (CI). Mitigation: tests use POSIX-portable trivial commands (`true`/`false`/ `test -s`); assert on exit code, not signal detail; keep the timeout-kill assertion tolerant of platform kill semantics.
+- **PLAN-ShellGates-001.R6 (crash window):** a weaver crash between claim and outcome leaves a gate claimed with no live process. Because the check is deterministic and idempotent, recovery is safe: document that clearing the claim marker re-runs the check (unlike treadle, there is no separate run strand to reconcile — this is strictly simpler). Confirm the claim marker distinguishes "running" from "errored" so a crashed-mid-run gate is recoverable by the same clear-to-retry path.
+- **PLAN-ShellGates-001.Q1 (repo live activation — PH3):** does this repo activate reed in its canonical `.skein` now, or ship the spool + docs and defer activation? A coordinator/user decision (the proposal lists activation as optional). Does not block PH1/PH2.
+- **PLAN-ShellGates-001.Q2 (test harness — `with-runtime` vs `skein.test.alpha`):** see V4. Recommend following the treadle `with-runtime` precedent; confirm with the coordinator if a full socket weaver world is preferred for parity with the proposal's wording.
 
 ## PLAN-ShellGates-001.P8 Task context
 
 For an AFK implementer picking this up cold:
 
-- **File map anchors.** Reference implementation: `spools/shuttle/src/skein/spools/treadle.clj`
-  (event handler, `scan!`, idempotent claim, `complete!`-on-success, `gate-stalled?`,
-  `register-executor!`, `register-query!`, runtime-owned versioned `spool-state`,
-  scan monitor) and its contract doc `spools/shuttle/treadle.md`. Classpath-spool
-  shape and install: `spools/src/skein/spools/loom.clj` + `.skein/init.clj`
-  activation of `:skein/spools-loom`. Gate/executor surface consumed:
-  `spools/src/skein/spools/workflow.clj` (`active-runs`, `next-steps`, `complete!`
-  requires `:by` on a gate, `register-executor!`) and `spools/workflow.md` §3/§4.
-  Test precedents: `test/skein/treadle_test.clj` (event-fired executor, `with-runtime`,
-  `poll-until`) and `test/skein/spools/loom_test.clj` (classpath-spool test placement);
-  `docs/library-authoring.md` §3 for `skein.test.alpha` worlds.
-- **What is shuttle-specific in treadle and must NOT leak into reed:** `shuttle/*`
-  attributes, the `spawn-run!` call, the treadle preamble, session resume,
-  `max-attempts`, the `delegates` edge + separate run strand, the blank-result-is-
-  failure rule, and the `treadle/superseded-by` edge-lockstep machinery. reed has no
-  separate run strand: its outcome lives on the gate itself, so its stall predicate and
-  query are strictly simpler than treadle's.
-- **Tenets that bite:** TEN-003 FAIL LOUDLY — missing/blank/non-array `shell/argv`,
-  bad `shell/timeout-secs`, spawn error, non-zero exit, and timeout all stamp a loud
-  distinct `shell/error`; never a "sensible default" and never a silent shell wrap.
-  TEN-004 Less is More — one waiter, one executor, no CLI op, no `:ci` family, no
-  command registry, bounded output only. TEN-002 — the trust boundary is the workflow
-  definition; `shell/argv` shape is authored in trusted definition code and params
-  supply data only. Implementation discipline (CLAUDE.md): no module-level atoms
-  (runtime-owned `spool-state`), every ns gets a docstring, and the spool must compile
-  clean under `*warn-on-reflection*` (`make reflect-check`) — process interop needs
-  type hints.
-- **Do NOT** restart/stop/reload the canonical mill or weaver. This is code + docs.
-  Any live poking uses a disposable `--workspace "$(mktemp -d)"`. Config pickup for a
-  selected workspace is `runtime/reload!`, never a restart.
-- **Task-queue slicing (recorded 2026-07-07 by the task-breakdown run).** The queue
-  is three sequential AFK tasks, one per phase: `TASK-ShellGates-001` (PH1 — reed.clj
-  + full `reed_test.clj` matrix), `TASK-ShellGates-002` (PH2 — `reed.md`/cookbook/
-generated `reed.api.md`, workflow.md/README indexes, `DELTA-ShellGates-001` merge), `TASK-ShellGates-003` (PH3 — `.skein/init.clj` activation + `CLAUDE.md`/`AGENTS.md` entries + full validation sweep). The suggested reed-core / failure-semantics split (slices 1+2) was **deliberately merged** into `TASK-ShellGates-001`: the loud, distinct failure path (`A5`/`A6`, the feature's whole point per `G3`/`S4`) and the claim/skip predicate are load-bearing to the executor's core, so a happy-path-only reed is not an independently shippable increment — matching treadle's shape (scan/execute/error is one coherent namespace) and this plan's own single-increment framing of PH1. `TASK-ShellGates-002` also has the implementer register reed in `scripts/generate_api_docs.clj`'s explicit `spool-docs` list (the api-doc generator enumerates spools by name, so `reed.api.md` is invisible to `make api-docs` until listed).
+- **File map anchors.** Reference implementation: `spools/shuttle/src/skein/spools/treadle.clj` (event handler, `scan!`, idempotent claim, `complete!`-on-success, `gate-stalled?`, `register-executor!`, `register-query!`, runtime-owned versioned `spool-state`, scan monitor) and its contract doc `spools/shuttle/treadle.md`. Classpath-spool shape and install: `spools/src/skein/spools/loom.clj` + `.skein/init.clj` activation of `:skein/spools-loom`. Gate/executor surface consumed: `spools/src/skein/spools/workflow.clj` (`active-runs`, `next-steps`, `complete!` requires `:by` on a gate, `register-executor!`) and `spools/workflow.md` §3/§4. Test precedents: `test/skein/treadle_test.clj` (event-fired executor, `with-runtime`, `poll-until`) and `test/skein/spools/loom_test.clj` (classpath-spool test placement); `docs/library-authoring.md` §3 for `skein.test.alpha` worlds.
+- **What is shuttle-specific in treadle and must NOT leak into reed:** `shuttle/*` attributes, the `spawn-run!` call, the treadle preamble, session resume, `max-attempts`, the `delegates` edge + separate run strand, the blank-result-is- failure rule, and the `treadle/superseded-by` edge-lockstep machinery. reed has no separate run strand: its outcome lives on the gate itself, so its stall predicate and query are strictly simpler than treadle's.
+- **Tenets that bite:** TEN-003 FAIL LOUDLY — missing/blank/non-array `shell/argv`, bad `shell/timeout-secs`, spawn error, non-zero exit, and timeout all stamp a loud distinct `shell/error`; never a "sensible default" and never a silent shell wrap. TEN-004 Less is More — one waiter, one executor, no CLI op, no `:ci` family, no command registry, bounded output only. TEN-002 — the trust boundary is the workflow definition; `shell/argv` shape is authored in trusted definition code and params supply data only. Implementation discipline (CLAUDE.md): no module-level atoms (runtime-owned `spool-state`), every ns gets a docstring, and the spool must compile clean under `*warn-on-reflection*` (`make reflect-check`) — process interop needs type hints.
+- **Do NOT** restart/stop/reload the canonical mill or weaver. This is code + docs. Any live poking uses a disposable `--workspace "$(mktemp -d)"`. Config pickup for a selected workspace is `runtime/reload!`, never a restart.
+- **Task-queue slicing (recorded 2026-07-07 by the task-breakdown run).** The queue is three sequential AFK tasks, one per phase: `TASK-ShellGates-001` (PH1 — reed.clj
+    - full `reed_test.clj` matrix), `TASK-ShellGates-002` (PH2 — `reed.md`/cookbook/ generated `reed.api.md`, workflow.md/README indexes, `DELTA-ShellGates-001` merge), `TASK-ShellGates-003` (PH3 — `.skein/init.clj` activation + `CLAUDE.md`/`AGENTS.md` entries + full validation sweep). The suggested reed-core / failure-semantics split (slices 1+2) was **deliberately merged** into `TASK-ShellGates-001`: the loud, distinct failure path (`A5`/`A6`, the feature's whole point per `G3`/`S4`) and the claim/skip predicate are load-bearing to the executor's core, so a happy-path-only reed is not an independently shippable increment — matching treadle's shape (scan/execute/error is one coherent namespace) and this plan's own single-increment framing of PH1. `TASK-ShellGates-002` also has the implementer register reed in `scripts/generate_api_docs.clj`'s explicit `spool-docs` list (the api-doc generator enumerates spools by name, so `reed.api.md` is invisible to `make api-docs` until listed).
 
 ## PLAN-ShellGates-001.P9 Developer Notes
 
-- **Root-spec delta verification (records `PROP-ShellGates-001` "Related root specs"):**
-  read all four root specs plus the gate/executor surface; confirmed no behavioral root
-  spec needs a delta. The `:shell` waiter is an already-accepted freeform gate hint
-  (`workflow.md` §3, ll. 150–174: `:ci` is a documented example waiter with no
-  consumer, which is exactly this shape) and `register-executor!` is the already-shipped
-  in-contract generalization point (`workflow.md` §4, ll. 288–302). The single spec
-  touched is the `SPEC-005` contract **index**, via `DELTA-ShellGates-001` — membership
-  only, no behavior.
-- **Contradiction found between proposal and code (surfaced for the coordinator):** the
-  proposal `S6` and the repo agent rules call for testing against `skein.test.alpha`
-  disposable weaver worlds, but the sibling executor the proposal names as the precedent
-  (`test/skein/treadle_test.clj`) tests with `skein.spools.test-support/with-runtime`, an
-  in-process real runtime, not a `skein.test.alpha` socket world. Both satisfy the
-  never-canonical-weaver isolation rule; the plan recommends the treadle `with-runtime`
-  precedent (V4, Q2). Not a design contradiction — a test-harness choice — but recorded
-  so the implementer/reviewer picks deliberately.
-- **Pre-existing index observation (not fixed here):** `SPEC-005.C3`'s classpath spool
-  list does not currently include `loom` (shipped after that spec's last update). This
-  delta adds only `reed`; the `loom` omission is out of scope for this feature and left
-  for the coordinator to note separately.
-- **Naming carry-over:** the proposal predates the `Q1` resolution and uses the working
-  name `skein.spools.shell-gate` / `spools/shell-gate.md` throughout. Read every such
-  reference as `skein.spools.reed` / `spools/reed.md` (`PLAN-ShellGates-001.D1`).
+- **Root-spec delta verification (records `PROP-ShellGates-001` "Related root specs"):** read all four root specs plus the gate/executor surface; confirmed no behavioral root spec needs a delta. The `:shell` waiter is an already-accepted freeform gate hint (`workflow.md` §3, ll. 150–174: `:ci` is a documented example waiter with no consumer, which is exactly this shape) and `register-executor!` is the already-shipped in-contract generalization point (`workflow.md` §4, ll. 288–302). The single spec touched is the `SPEC-005` contract **index**, via `DELTA-ShellGates-001` — membership only, no behavior.
+- **Contradiction found between proposal and code (surfaced for the coordinator):** the proposal `S6` and the repo agent rules call for testing against `skein.test.alpha` disposable weaver worlds, but the sibling executor the proposal names as the precedent (`test/skein/treadle_test.clj`) tests with `skein.spools.test-support/with-runtime`, an in-process real runtime, not a `skein.test.alpha` socket world. Both satisfy the never-canonical-weaver isolation rule; the plan recommends the treadle `with-runtime` precedent (V4, Q2). Not a design contradiction — a test-harness choice — but recorded so the implementer/reviewer picks deliberately.
+- **Pre-existing index observation (not fixed here):** `SPEC-005.C3`'s classpath spool list does not currently include `loom` (shipped after that spec's last update). This delta adds only `reed`; the `loom` omission is out of scope for this feature and left for the coordinator to note separately.
+- **Naming carry-over:** the proposal predates the `Q1` resolution and uses the working name `skein.spools.shell-gate` / `spools/shell-gate.md` throughout. Read every such reference as `skein.spools.reed` / `spools/reed.md` (`PLAN-ShellGates-001.D1`).

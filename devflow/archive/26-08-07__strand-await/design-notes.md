@@ -21,7 +21,8 @@ Idioms: --max-count 0 (until empty), --min-count 1 (until nonempty), --min-count
       [:and [:= :state "active"]
             [:not [:edge/out "depends-on" [:= :state "active"]]]]
 
-  (both conjuncts required: ready = the strand itself active AND no active depends-on target; the :not clause alone is only the blocker-free fragment). Verified compiling to the same NOT EXISTS shape as the ready path (db.clj ~1795). Export this full expression at the graph api seam (54qun compose seam) so config composes it by reference.
+    (both conjuncts required: ready = the strand itself active AND no active depends-on target; the :not clause alone is only the blocker-free fragment). Verified compiling to the same NOT EXISTS shape as the ready path (db.clj ~1795). Export this full expression at the graph api seam (54qun compose seam) so config composes it by reference.
+
 - No point sugar (strand await <id> --state/--attr) in v1: deferred; batteries ships id-parameterised queries covering the point cases instead.
 - Batteries ships a small coordination-query set out of the box, one spelling per selection (ADR-001.P5). The definitions (all verified compiling against src/skein/core/query.clj):
 

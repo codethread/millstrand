@@ -82,21 +82,21 @@ The first open after that rebuilds the repo-root cache, which takes a while on a
 
 1. Ensure `mill` is on `$PATH` and running:
 
-   ```sh
-   mill start
-   ```
+    ```sh
+    mill start
+    ```
 
 2. Start a weaver in the target Millstrand workspace:
 
-   ```sh
-   mill weaver start
-   ```
+    ```sh
+    mill weaver start
+    ```
 
 3. In Neovim, open a Clojure buffer and run:
 
-   ```vim
-   :MillstrandConnect
-   ```
+    ```vim
+    :MillstrandConnect
+    ```
 
 The command runs `mill weaver list`, decodes the JSON rows, shows running weavers with their friendly name, shortened config path, state, and nREPL endpoint, then runs:
 
