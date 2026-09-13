@@ -62,11 +62,14 @@
           (is (str/includes? prompt "substatus=completed"))
           (is (str/includes? prompt "settled=true"))
           (is (str/includes? prompt "non-blank"))
-          (is (str/includes? prompt
-                             "strand --workspace \"$MILLSTRAND_WORKSPACE\" agent stop"))
+          (is (str/includes? prompt "--timeout 60s"))
+          (is (str/includes? prompt "--timeout-secs 40"))
+          (is (not (str/includes? prompt "agent stop")))
+          (is (str/includes? prompt "AUTOMATIC_REVIEW_FAILURE"))
+          (is (str/includes? prompt "new unique `review-id`"))
           (is (str/includes? prompt "AUTOMATIC_REVIEW_SUCCESS"))
           (is (every? #(str/includes?
-                        % "strand --workspace \"$MILLSTRAND_WORKSPACE\"")
+                        % "--workspace \"$MILLSTRAND_WORKSPACE\"")
                       (re-seq #"(?m)^\s*strand .+$" prompt)))
           (is (= [(:id review-gate)]
                  (mapv :id (workflow/ready run-id)))))
@@ -150,6 +153,21 @@
                           (when (= "Resolve the review findings" (:title step)) step))
                        {:timeout-ms (test-support/await-budget-ms)
                         :on-timeout #(throw (ex-info "Verification did not pass" {}))})))))))))))
+
+(deftest review-requires-a-non-blank-review-id
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/spools-workflow
+                                    'millhouse.spools.workflow)
+      (let [definition (requiring-resolve 'me.workflows.review/review)
+            params (assoc work :review-target "external-task")
+            failure (try
+                      (workflow/start! "missing-review-id" definition params)
+                      nil
+                      (catch clojure.lang.ExceptionInfo exception
+                        exception))]
+        (is (= :workflow/params-invalid (:reason (ex-data failure))))
+        (is (str/includes? (:explain (ex-data failure)) ":review-id"))))))
 
 (deftest review-handoff-preserves-identity-and-defers-parameter-discovery
   (let [instruction (review/handoff-instruction

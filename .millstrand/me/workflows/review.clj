@@ -26,8 +26,8 @@
   (s/keys :req-un [::commit-range ::files]))
 (s/def ::review-params
   (s/keys :req-un [::feature ::branch ::worktree
-                   ::review-target]
-          :opt-un [::card ::review-id ::change-context]))
+                   ::review-target ::review-id]
+          :opt-un [::card ::change-context]))
 (s/def ::verification-key ::non-blank-string)
 (s/def ::verification-params (s/keys :req-un [::verification-key]))
 (s/def ::sha
@@ -135,7 +135,11 @@
   (format-alpha/prose
    "
      Orchestrate the repository's automatic review pass for branch `{branch}`
-     in `{worktree}`. The review handoff target is `{review-target}`{suffix}.
+     in `{worktree}`. The review handoff target is the external work/task
+     identity `{review-target}` carried into this handoff (pass `{review-id}`).
+     It is not a target receiving child writes in this originating runtime.
+     Findings remain on the automatic review gate's harness result; the
+     following resolution step records them on the work task.
 
      Before running anything, require both `MILLSTRAND_WORKSPACE` and
      `MILLSTRAND_RUN_ID` to be non-empty. An empty binding is an orchestration
@@ -143,14 +147,18 @@
      never derive it from the current directory or rely on CLI defaults.
 
      On any Git preflight, review setup, reviewer await, reviewer evidence, or
-     synthesis failure, immediately stop this exact orchestration run with:
+     synthesis failure, do not stop or mutate the serving run or its gates.
+     Instead, the final response must begin with one line in exactly this form,
+     using a concrete reason:
 
-     ```sh
-     strand --workspace \"$MILLSTRAND_WORKSPACE\" agent stop \"$MILLSTRAND_RUN_ID\" --reason \"automatic review did not complete successfully\"
+     ```text
+     AUTOMATIC_REVIEW_FAILURE <concrete reason>
      ```
 
-     Do not try any fallback stop or kill command, and do not return a success
-     message after requesting the stop.
+     Follow that line with useful failure details. Do not include the
+     `AUTOMATIC_REVIEW_SUCCESS` sentinel. After repairing the branch, recover by
+     starting a new review run with a new unique `review-id`; never complete a
+     failed gate by hand.
 
      First verify that the checked-out branch is `{branch}`, the worktree is
      clean, and these three full commit SHAs are identical:
@@ -160,8 +168,9 @@
      - the content of
        `$(git rev-parse --git-path millstrand-land-quality-head)`
 
-     Stop on any mismatch. The preceding quality gate applies only to that
-     pushed HEAD; reviewing another commit would invalidate its evidence.
+     Report any mismatch as an automatic review failure. The preceding quality
+     gate applies only to that pushed HEAD; reviewing another commit would
+     invalidate its evidence.
 
      Resolve the immutable review range:
 
@@ -173,16 +182,26 @@
 
      Do not substitute a mutable branch name for either SHA. Require the
      review command to return `status=scheduled` and at least one run. Await
-     every returned run separately:
+     every returned run separately, repeating the bounded await until it
+     reports settlement:
 
      ```sh
-     strand --workspace \"$MILLSTRAND_WORKSPACE\" await --query agent-run-settled --param run-id=RUN_ID --min-count 1
-     strand --workspace \"$MILLSTRAND_WORKSPACE\" agent show RUN_ID
+     strand --timeout 60s --workspace \"$MILLSTRAND_WORKSPACE\" await --query agent-run-settled --param run-id=RUN_ID --min-count 1 --timeout-secs 40
+     ```
+
+     A normal await/query timeout, including one while `agent show` still
+     reports a running child, is pending rather than failure. Continue bounded
+     awaits for that same run and do not stop or kill it. Once settlement is
+     reported, inspect the run:
+
+     ```sh
+     strand --timeout 60s --workspace \"$MILLSTRAND_WORKSPACE\" agent show RUN_ID
      ```
 
      Settlement alone is not success. Every shown run must have
      `status=stopped`, `substatus=completed`, `settled=true`, and a non-blank
-     `result`. A stopped child without `substatus=completed` is a failed review,
+     `result`. Only an actually failed child or invalid evidence fails this
+     review; a stopped child without `substatus=completed` is a failed review,
      never a pass.
 
      After every reviewer succeeds, synthesize their results. Your final
@@ -201,6 +220,7 @@
    " {:branch branch
       :worktree worktree
       :review-target review-target
+      :review-id review-id
       :head-ref "HEAD^{commit}"
       :upstream-ref "@{upstream}^{commit}"
       :success-example
@@ -210,8 +230,7 @@
                   "head" "FULL_SHA"
                   "reviewers" [(array-map "name" "REVIEWER"
                                           "run-id" "RUN_ID")]
-                  "verdict" "findings|no-findings"))
-      :suffix (if review-id (str " (pass " review-id ")") "")}))
+                  "verdict" "findings|no-findings"))}))
 
 (workflow/defworkflow review
   "Review and validate implemented work without authorizing a merge."
@@ -222,8 +241,8 @@
                 :branch "Branch containing the committed change."
                 :worktree "Absolute path to the branch's worktree."
                 :card "Optional kanban card to move into review."
-                :review-target "Task strand receiving the review handoff."
-                :review-id "Optional identifier for this review pass."
+                :review-target "External work/task identity carried into handoff, not a same-runtime child-write target. Findings stay on gate/result; resolution records them on the work task."
+                :review-id "Non-blank identifier unique to this review pass; use a new value for every retry."
                 :change-context "Optional captured range and changed files."}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Review: " branch))
@@ -245,9 +264,10 @@
                                "review/verification-key" verification-key}
                   (format-alpha/prose
                    "
-                     Review orchestration is automatic. A failed child review leaves
-                     this gate blocked; repair or retry it without completing the gate
-                     by hand.
+                     Review orchestration is automatic. A failed child review or
+                     invalid result is reported with AUTOMATIC_REVIEW_FAILURE and
+                     blocks verification. Repair, then start a new review run with a
+                     unique review-id; never complete a gate by hand.
                    " {}))
 
    (workflow/gate :verify-automatic-review
@@ -272,9 +292,11 @@
                   (format-alpha/prose
                    "
                      Read the automatic-review gate's `harness/result`. Record its
-                     combined verdict and each resolution on the review task. Resolve
-                     every P1/P2 finding, then commit and push repairs. Obtain focused
-                     follow-up review for material code changes.
+                     combined verdict and each resolution on the external work/task
+                     identity carried in `review-target`. Findings are durably stored
+                     on the automatic gate/result; this step records them on the work
+                     task. Resolve every P1/P2 finding, then commit and push repairs.
+                     Obtain focused follow-up review for material code changes.
                    " {}))
    (support/shell-gate :final-ci-green "Validate the reviewed branch HEAD" [:resolve-review]
                        (fn [{:keys [branch]}]
