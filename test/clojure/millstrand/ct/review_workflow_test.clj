@@ -12,6 +12,15 @@
 (def ^:private work
   {:feature "feature-task" :branch "feature/review" :worktree "/tmp/review-fixture"})
 
+(def ^:private successful-review
+  (str "AUTOMATIC_REVIEW_SUCCESS "
+       "{\"status\":\"success\","
+       "\"base\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+       "\"head\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
+       "\"reviewers\":[{\"name\":\"correctness\",\"run-id\":\"reviewer-1\"}],"
+       "\"verdict\":\"no-findings\"}\n\n"
+       "No findings."))
+
 (defn- workflow-definition
   "Resolve a workspace workflow declaration without teaching clj-kondo its
   Vars."
@@ -53,10 +62,29 @@
           (is (str/includes? prompt "substatus=completed"))
           (is (str/includes? prompt "settled=true"))
           (is (str/includes? prompt "non-blank"))
-          (is (str/includes? prompt "strand agent stop"))
-          (is (str/includes? prompt "SUCCESS"))
+          (is (str/includes? prompt
+                             "strand --workspace \"$MILLSTRAND_WORKSPACE\" agent stop"))
+          (is (str/includes? prompt "AUTOMATIC_REVIEW_SUCCESS"))
+          (is (every? #(str/includes?
+                        % "strand --workspace \"$MILLSTRAND_WORKSPACE\"")
+                      (re-seq #"(?m)^\s*strand .+$" prompt)))
           (is (= [(:id review-gate)]
                  (mapv :id (workflow/ready run-id)))))
+        (workflow/complete! run-id
+                            {:by "coordinator-run"
+                             :attributes {"harness/result" successful-review}})
+        (let [verification-gate (first (workflow/ready run-id))
+              gate-strand (weaver/show rt (:id verification-gate))]
+          (is (= "Verify automatic review completion evidence"
+                 (:title verification-gate)))
+          (is (= "code" (:gate verification-gate)))
+          (is (= "me.workflows.review/verify-automatic-review!"
+                 (attr-get gate-strand :code/fn)))
+          (is (= "verified"
+                 (get ((requiring-resolve
+                        'me.workflows.review/verify-automatic-review!)
+                       (attr-get gate-strand :code/params))
+                      "status"))))
         (advance)
         (is (= "Resolve the review findings"
                (:title (first (workflow/ready run-id)))))
@@ -72,6 +100,56 @@
         (advance)
         (is (workflow/done? run-id))
         (is (empty? (weaver/list rt [:= [:attr "kind"] "merge-queue-entry"] {})))))))
+
+(deftest automatic-review-verification-blocks-failure-and-accepts-positive-evidence
+  (doseq [[run-id result expected]
+          [["failed-review" "Automatic review did not complete successfully." :blocked]
+           ["successful-review" successful-review :passed]]]
+    (with-runtime
+      (fn [rt _]
+        (test-support/activate-spool! rt :millhouse/spools-workflow
+                                      'millhouse.spools.workflow)
+        (let [target (:id (weaver/add! rt {:title run-id
+                                           :attributes {:kind "task"}}))
+              params (assoc work :feature run-id :review-target target
+                            :review-id run-id)]
+          (workflow/start! run-id
+                           (workflow-definition 'me.workflows.review/review)
+                           params)
+          (workflow/complete! run-id {:by "test-agent"})
+          (workflow/complete! run-id {:by "test-agent"})
+          (workflow/complete! run-id
+                              {:by "coordinator-run"
+                               :attributes {"harness/result" result}})
+          (let [verification-gate (first (workflow/ready run-id))]
+            (test-support/activate-spool!
+             rt :millhouse/spools-workflow-providers 'millhouse.spools.workflow.spool
+             :after [:millhouse/spools-workflow])
+            (case expected
+              :blocked
+              (let [failed-gate
+                    (test-support/poll-until
+                     #(let [gate (weaver/show rt (:id verification-gate))]
+                        (when (attr-get gate :gate/error) gate))
+                     {:timeout-ms (test-support/await-budget-ms)
+                      :on-timeout #(throw
+                                    (ex-info "Verification did not fail"
+                                             {:gate (weaver/show
+                                                     rt (:id verification-gate))
+                                              :ready (workflow/ready run-id)}))})]
+                (is (str/includes? (attr-get failed-gate :gate/error)
+                                   "missing its success sentinel"))
+                (is (= [(:id verification-gate)]
+                       (mapv :id (workflow/ready run-id)))))
+
+              :passed
+              (is (= "Resolve the review findings"
+                     (:title
+                      (test-support/poll-until
+                       #(let [step (first (workflow/ready run-id))]
+                          (when (= "Resolve the review findings" (:title step)) step))
+                       {:timeout-ms (test-support/await-budget-ms)
+                        :on-timeout #(throw (ex-info "Verification did not pass" {}))})))))))))))
 
 (deftest review-handoff-preserves-identity-and-defers-parameter-discovery
   (let [instruction (review/handoff-instruction
