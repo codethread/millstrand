@@ -1,4 +1,4 @@
-.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo kondo-import kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search kondo-lint kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop spool-suite-gate
+.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo kondo-import kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search kondo-lint kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop spool-suite-gate spool-suite-gate-test
 
 help:
 	@printf '%s\n' \
@@ -282,8 +282,11 @@ test-warm:
 	NS="$(NS)" bash scripts/test-warm
 
 # Run the pinned Millhouse Workflow consumer suite against this checkout.
-spool-suite-gate:
+spool-suite-gate: spool-suite-gate-test
 	bash scripts/spool-suite-gate
+
+spool-suite-gate-test:
+	bash test/shell/quality/spool-suite-gate-regression.sh
 
 # Reap the worktree's warm REPL by recorded PID (PID only, never `pkill -f`) and
 # remove the runtime files (PLAN-Ttv-001.R1). The land cleanup step calls this

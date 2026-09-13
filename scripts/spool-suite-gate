@@ -48,8 +48,12 @@ millhouse_checkout="$temp_root/millhouse.spool"
 gitlib="${GITLIBS:-$HOME/.gitlibs}/libs/millhouse.spools/workflow/$millhouse_sha"
 
 if [ -d "$gitlib" ]; then
-  cp -R "$gitlib" "$millhouse_checkout"
-  chmod -R u+w "$millhouse_checkout"
+  cached_sha="$(git -C "$gitlib" rev-parse --verify 'HEAD^{commit}')"
+  if [ "$cached_sha" != "$millhouse_sha" ]; then
+    echo "spool-suite-gate: cached Millhouse $cached_sha, expected $millhouse_sha" >&2
+    exit 1
+  fi
+  git clone -q --no-checkout "$gitlib" "$millhouse_checkout"
 else
   mkdir -p "$millhouse_checkout"
   git -C "$millhouse_checkout" init -q
@@ -57,16 +61,18 @@ else
   if ! git -C "$millhouse_checkout" fetch -q --depth 1 origin "$millhouse_sha"; then
     git -C "$millhouse_checkout" fetch -q origin
   fi
-  git -C "$millhouse_checkout" checkout -q "$millhouse_sha"
 fi
 
+git -C "$millhouse_checkout" checkout -q --detach "$millhouse_sha"
 materialized_sha="$(git -C "$millhouse_checkout" rev-parse --verify 'HEAD^{commit}')"
 if [ "$materialized_sha" != "$millhouse_sha" ]; then
   echo "spool-suite-gate: materialized Millhouse $materialized_sha, expected $millhouse_sha" >&2
   exit 1
 fi
-if ! git -C "$millhouse_checkout" diff --quiet HEAD --; then
-  echo "spool-suite-gate: materialized Millhouse checkout differs from $millhouse_sha" >&2
+materialized_status="$(git -C "$millhouse_checkout" status --porcelain --untracked-files=all)"
+if [ -n "$materialized_status" ]; then
+  echo "spool-suite-gate: materialized Millhouse checkout is dirty:" >&2
+  printf '%s\n' "$materialized_status" >&2
   exit 1
 fi
 
