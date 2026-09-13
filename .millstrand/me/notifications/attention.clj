@@ -36,7 +36,8 @@
   (* 5 60 1000))
 
 (def ^:private sqlite-timestamp-formatter
-  (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
+  (-> (java.time.format.DateTimeFormatter/ofPattern "uuuu-MM-dd HH:mm:ss")
+      (.withResolverStyle java.time.format.ResolverStyle/STRICT)))
 
 (defn- strand-age-ms
   "Return milliseconds since a strand's last mutation.

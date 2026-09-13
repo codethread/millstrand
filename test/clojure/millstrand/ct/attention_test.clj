@@ -25,3 +25,25 @@
             :updated_at "not-a-sqlite-timestamp"}
            (ex-data exception)))
     (is (instance? DateTimeParseException (ex-cause exception)))))
+
+(deftest parked-run-rule-fails-loudly-on-impossible-updated-at
+  (let [strand {:id "run-456"
+                :title "Impossible timestamp run"
+                :state "active"
+                :updated_at "2026-02-30 00:00:00"
+                :attributes {:harness/run "true"
+                             :harness/status "ready"
+                             :harness/substatus "pending"}}
+        exception (try
+                    (attention/parked-run-rule
+                     {:strand strand :ready-ids #{(:id strand)}})
+                    nil
+                    (catch clojure.lang.ExceptionInfo cause
+                      cause))]
+    (is (instance? clojure.lang.ExceptionInfo exception))
+    (is (= "Parked-run detector could not parse strand updated_at"
+           (ex-message exception)))
+    (is (= {:strand "run-456"
+            :updated_at "2026-02-30 00:00:00"}
+           (ex-data exception)))
+    (is (instance? DateTimeParseException (ex-cause exception)))))
