@@ -411,13 +411,24 @@
                       (find-ns 'hooks.millstrand)))]
     ((ns-resolve hook-ns hook) context)))
 
-(deftest published-hook-surface-has-four-stable-entrypoints
+(deftest published-hook-surface-has-five-stable-entrypoints
   (let [hook-ns (or (find-ns 'hooks.millstrand)
                     (do
                       (load-file "resources/clj-kondo.exports/io.millstrand/millstrand/hooks/millstrand.clj")
                       (find-ns 'hooks.millstrand)))]
-    (is (= '#{defauthoring defvalue deffn use-vars}
+    (is (= '#{defauthoring defvalue deffn prime-advice use-vars}
            (set (keys (ns-publics hook-ns)))))))
+
+(deftest prime-advice-hook-treats-the-target-as-data
+  (let [node (api/list-node
+              [(api/token-node 'millstrand/defprime-advice)
+               (api/token-node 'kanban)
+               (api/token-node 'advice-text)])
+        analyzed (run-exported-hook 'prime-advice {:node node})]
+    (is (= '(do
+              (identity millstrand/defprime-advice)
+              (identity advice-text))
+           (api/sexpr (:node analyzed))))))
 
 (deftest defauthoring-hook-defines-generated-macro-vars
   (let [node (api/list-node

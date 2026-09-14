@@ -38,7 +38,7 @@ Use the live discovery commands before relying on prose that may describe a diff
 
 - `strand help` lists registered operations. `strand help <op>` shows exact arguments generated from that operation's declaration.
 - `strand about <op>` explains an operation's purpose and conventions when its author provides a manual.
-- `strand prime <op>` supplies run-first working context when an operation carries a discipline that must be read before use.
+- `strand prime <op>` supplies run-first working context when an operation carries a discipline that must be read before use. It returns the op author's authoritative prime first, followed by active module-owned advice in module and source declaration order; each appendix includes provenance.
 - `mill prime millstrand` locates the Millstrand source and this reference without requiring a running weaver.
 - `mill changelog` prints the release notes retained with the resolved Millstrand source. It does not require a running mill or weaver.
 

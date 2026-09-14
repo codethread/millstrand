@@ -324,12 +324,22 @@ The durable form belongs in the module source:
 
 (millstrand/defop! echo
   "Echo the given text."
-  {:arg-spec echo-arg-spec}
+  {:arg-spec echo-arg-spec
+   :prime "Pass the exact text that should be returned."}
   [{:op/keys [args]}]
   {:text (:text args)})
 ```
 
 Activate that module with `runtime/module!` as in the query example above. The form owns the op's help, parser contract, and handler declaration as one published contribution.
+
+A separate repository or wrapper module can append local run-first guidance without replacing the op author's prime:
+
+```clojure
+(millstrand/defprime-advice echo
+  "Run this only after checking the repository's generated-file policy.")
+```
+
+`echo` must already have a non-blank `:prime`. `strand prime echo` returns that base first and then active advice in module and source declaration order, with provenance for each appendix. Removing the wrapper module removes only its advice.
 
 ```clojure
 (ns my.workflow)

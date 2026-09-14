@@ -19,6 +19,7 @@
   (:import [java.lang ProcessHandle]
            [java.time Instant]
            [java.util.concurrent ArrayBlockingQueue]
+           [java.util.concurrent.locks ReentrantLock]
            [java.nio.file Files StandardCopyOption]
            [java.nio.file.attribute FileAttribute]))
 
@@ -673,6 +674,7 @@
             pattern-store (core-registry/backed-registry :patterns)
             hook-store (core-registry/backed-registry :hooks)
             bin-store (core-registry/backed-registry :bins)
+            prime-advice-store (core-registry/backed-registry :prime-advice)
             runtime-base {:storage storage
                           :datasource ds
                           :clock (atom (clock/system-clock))
@@ -682,6 +684,7 @@
                           :op-store op-store
                           :hook-store hook-store
                           :bin-store bin-store
+                          :prime-advice-store prime-advice-store
                           :glossary-registry (atom {})
                           :help-transform-slot (atom nil)
                           :generation-id generation-id
@@ -695,7 +698,7 @@
                           :module-state
                           (atom ((requiring-resolve
                                   'millstrand.core.weaver.module-refresh/initial-state)))
-                          :module-refresh-lock (Object.)
+                          :module-refresh-lock (ReentrantLock.)
                           :spool-state (atom {})
                           :server server
                           :pool-host pool-host

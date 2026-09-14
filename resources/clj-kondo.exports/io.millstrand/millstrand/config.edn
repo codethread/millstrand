@@ -1,6 +1,7 @@
 {:hooks
  {:analyze-call
-  {millstrand.api.millstrand.alpha/defop hooks.millstrand/deffn
+  {millstrand.api.millstrand.alpha/defprime-advice hooks.millstrand/prime-advice
+   millstrand.api.millstrand.alpha/defop hooks.millstrand/deffn
    millstrand.api.millstrand.alpha/defop! hooks.millstrand/deffn
    millstrand.api.millstrand.alpha/defquery hooks.millstrand/defvalue
    millstrand.api.millstrand.alpha/defquery! hooks.millstrand/defvalue

@@ -181,6 +181,7 @@ Millstrand's discovery convention has three tiers — generated `help`, authored
 2. **Author leaf classes and per-verb annotations on the arg-spec node, not prose blobs.** Every invocable leaf carries `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`). Interior nodes carry neither. A flat op's root is its leaf. Each subcommand's spec may carry a closed `use-when`/`notes`/`failure-modes` sub-map (string arrays; `failure-modes` holds glossary outcome **names**). The projection folds them into that verb's node, so `help` stays the single non-drifting source for anything derivable from a verb's shape.
 3. **Ship `:about` when your op has semantics beyond its argument shapes.** Author a non-blank `:about` prose string in the op metadata (not an `about` subcommand); the builtin `strand about <op>` meta-verb projects it in a minimal `{about, source}` envelope. Keep it cross-verb narrative (purpose, conventions, attribute contracts) — never restate a node-derivable fact, that is `help`'s job.
 4. **Ship `:prime` when your spool carries working discipline.** If an agent must load conventions before acting (board lanes, handover contracts, workflow rules), author a non-blank `:prime` prose string in the op metadata; `strand prime <op>` projects it. Generate it from the same definitions the spool installs so the discipline can never drift from the installed surface.
+5. **Append wrapper guidance with `defprime-advice`.** A wrapper or repository module may add run-first guidance without taking ownership of the op's prime. Declare `(millstrand/defprime-advice op-name text)` at top level in that module source. The target op must have a non-blank base `:prime`. Projection keeps the base first, then appends active advice in module activation order and source order. The result's `appendices` data identifies each owning module, namespace, source pointer, and explicit order. Removing or refreshing one module changes only its advice. The form is invalid outside module source collection; it cannot create, prepend, replace, or override a prime.
 
 ### Seed glossary outcomes with a lifecycle declaration
 
@@ -256,7 +257,7 @@ State plainly that the coordinate does not activate the module and that dependen
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Each family has three forms:
+Module sources publish registry entries through kind-specific authoring forms. Six Var-backed core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Each family has three forms. Ordered prime advice uses the separate current-source-only `defprime-advice` form described above.
 
 - `def<kind>` validates and defines an ordinary Var but does not select it.
 - `use-<kind>!` selects one or more declaration Vars into the module currently being collected and returns those Vars in argument order as a vector.

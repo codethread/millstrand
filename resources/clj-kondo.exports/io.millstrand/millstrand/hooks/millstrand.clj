@@ -151,6 +151,19 @@
                               [defn-node])))
                (meta node))})))
 
+(defn prime-advice
+  "Analyze prime advice as one literal target symbol and one text expression."
+  [context]
+  (let [[node [form-node target-node text-node]]
+        (hook-children :prime-advice context 3 true)]
+    (symbol-name :prime-advice target-node)
+    {:node (with-meta
+             (api/list-node
+              [(api/token-node 'do)
+               (identity-node form-node)
+               (identity-node text-node)])
+             (meta node))}))
+
 (defn use-vars
   "Analyze a typed use form as Var references without defining Vars."
   [context]

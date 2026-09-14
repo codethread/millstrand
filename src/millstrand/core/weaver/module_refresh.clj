@@ -18,13 +18,24 @@
             [millstrand.core.weaver.lifecycle-effects :as lifecycle-effects]
             [millstrand.core.weaver.module-graph :as module-graph]
             [millstrand.core.weaver.module-publication :as publication]
-            [millstrand.core.weaver.module-refresh.entry-points :as entry-points]))
+            [millstrand.core.weaver.module-refresh.entry-points :as entry-points])
+  (:import [java.util.concurrent.locks ReentrantLock]))
 
 (def plan-caveat
   "The one honest side effect a dry-run plan still incurs (DELTA-OlrRepl-001.CC14)."
   (format/reflow
    "|Collection may evaluate module source code. No registry publication,
     |resource reconcile, or coordinator state write runs."))
+
+(defmacro ^:private with-refresh-lock
+  "Run `body` while holding the runtime's reentrant module refresh lock."
+  [lock & body]
+  `(let [^ReentrantLock lock# ~lock]
+     (.lock lock#)
+     (try
+       (do ~@body)
+       (finally
+         (.unlock lock#)))))
 
 (def ^:private declaration-record-key
   ::declaration-record)
@@ -1052,12 +1063,7 @@
 
   Validation failures leave the live world untouched."
   [runtime {:keys [load-startup-files! with-loader]} opts]
-  ;; The runtime slot is one dedicated Object monitor. Splint cannot see the
-  ;; stable object behind the map lookup; refreshes serialize so two collectors
-  ;; never publish interleaved desired graphs.
-  #_{:clj-kondo/ignore [:locking-suspicious-lock]
-     :splint/disable [lint/locking-object]}
-  (locking (:module-refresh-lock runtime)
+  (with-refresh-lock (:module-refresh-lock runtime)
     (let [selection (select-refresh runtime load-startup-files! opts)
           {:keys [mode collection selected]} selection
           state @(:module-state runtime)
@@ -1114,6 +1120,8 @@
                                             candidate-projection)
                              :baseline-status (:status old-generation)))})
                 _ (publication/validate-op-candidates! backends (:candidates staged))
+                _ (publication/validate-prime-advice-candidates!
+                   backends (:candidates staged))
                 _ (publication/validate-kind-candidates!
                    runtime backends (:candidates staged))
                 _ (diagnostic! opts :candidate/validate :completed

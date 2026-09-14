@@ -1,5 +1,5 @@
 (ns millstrand.core.weaver.core-registry-test
-  "Owner-partition semantics shared by the six core weaver registries.
+  "Owner-partition semantics shared by the core weaver registries.
 
   Each core kind (ops, queries, patterns, hooks, events, bins) is backed by the same
   owner-registry kernel, so the deletion-completeness, same-layer collision,

@@ -1,9 +1,9 @@
 (ns millstrand.core.weaver.core-registry
-  "Owner-partition backing for the six core weaver registries.
+  "Owner-partition backing for the core weaver registries.
 
-  CLI ops, named queries, weave patterns, lifecycle hooks, event handlers, and
-  executable declarations each become one kind declared on an `owner-registry`
-  kernel. Every declaration
+  CLI ops, named queries, weave patterns, lifecycle hooks, event handlers,
+  executable declarations, and prime advice each become one kind declared on an
+  `owner-registry` kernel. Every declaration
   is owned by a stable keyword owner in a fixed layer (`:defaults < :spools <
   :workspace < :direct`); replacing an owner partition is complete, so an
   omitted key disappears, and cross-owner collisions or missing override intent
@@ -18,17 +18,38 @@
   layer. Owner-complete replacement and removal are the sharp tools the module
   contribution path reuses without forking these semantics."
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [millstrand.core.weaver.owner-registry :as owner-registry]))
 
-;; Permissive entry specs: the API layer runs each registry's rich validator
-;; before an entry reaches the kernel, so the kind spec only pins the coarse
-;; stored shape a projection reader depends on.
+;; Most entry specs are permissive because their API layer runs the rich
+;; validator before an entry reaches the kernel. Prime advice has no separate
+;; direct-registration surface, so its stored projection is checked here.
 (s/def ::op-entry map?)
 (s/def ::query-entry (s/or :where-vector vector? :detailed map?))
 (s/def ::pattern-entry map?)
 (s/def ::hook-entry map?)
 (s/def ::event-entry map?)
 (s/def ::bin-entry map?)
+
+(defn- non-blank-string? [value]
+  (and (string? value) (not (str/blank? value))))
+
+(s/def ::prime-advice-source
+  (s/nilable
+   (s/and map?
+          #(= #{:file :line} (set (keys %)))
+          #(non-blank-string? (:file %))
+          #(pos-int? (:line %)))))
+(s/def ::prime-advice-entry
+  (s/and map?
+         #(= #{:target :text :module/key :provenance :ordinal :source}
+             (set (keys %)))
+         #(non-blank-string? (:target %))
+         #(non-blank-string? (:text %))
+         #(keyword? (:module/key %))
+         #(symbol? (:provenance %))
+         #(nat-int? (:ordinal %))
+         #(s/valid? ::prime-advice-source (:source %))))
 
 (def ^:private kind-declarations
   "Declaration datum per core kind: registered entry spec and binding moment
@@ -39,7 +60,9 @@
    :patterns {:entry-spec ::pattern-entry :binding-moment :pattern/invocation}
    :hooks {:entry-spec ::hook-entry :binding-moment :hook/dispatch-start}
    :events {:entry-spec ::event-entry :binding-moment :event/dispatch-start}
-   :bins {:entry-spec ::bin-entry :binding-moment :bin/invocation}})
+   :bins {:entry-spec ::bin-entry :binding-moment :bin/invocation}
+   :prime-advice {:entry-spec ::prime-advice-entry
+                  :binding-moment :prime/projection}})
 
 (def system-owner
   "Owner keyword for Millstrand-shipped defaults such as the built-in help op."

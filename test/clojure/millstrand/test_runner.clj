@@ -99,6 +99,8 @@
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'millstrand.core.weaver.registry-snapshots-test
+   ;; Redefines the publication seam while pinning a refresh/read interleaving.
+   'millstrand.core.weaver.prime-advice-test
    ;; Startup tests park futures across a process-local artifact claim and
    ;; redefine scheduler, storage, and metadata Vars. The claim map and
    ;; `with-redefs` are JVM-global, so this namespace cannot share the
