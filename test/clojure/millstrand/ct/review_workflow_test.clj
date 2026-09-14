@@ -405,7 +405,7 @@
                                      error-fragment)))))))))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "e8a26477852216bca2579b050a2356c86af132b7"
+  (is (= "6410da676b3b41be55a58f4abc5fe773cfc75cb9"
          (get-in workspace-deps ['ct.spools/harnesses :git/sha])))
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
