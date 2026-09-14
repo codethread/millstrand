@@ -40,10 +40,13 @@
 (s/def ::head ::sha)
 (s/def ::name ::non-blank-string)
 (s/def ::run-id ::non-blank-string)
-(s/def ::reviewer (s/keys :req-un [::name ::run-id]))
-(s/def ::reviewers (s/coll-of ::reviewer :kind vector?))
+(s/def ::successful-reviewer
+  (s/and (s/keys :req-un [::name ::run-id])
+         #(= #{:name :run-id} (set (keys %)))))
+(s/def ::reviewers
+  (s/coll-of ::successful-reviewer :kind vector? :min-count 1))
 (s/def ::verdict #{"findings" "no-findings"})
-(s/def ::reason ::non-blank-string)
+(s/def ::reason (s/nilable ::non-blank-string))
 (s/def ::repo-root ::non-blank-string)
 (s/def ::source #{"branch"})
 (s/def ::base-sha ::sha)
@@ -59,26 +62,46 @@
              (set (keys %)))
          #(= (:base %) (:base-sha %) (:merge-base %))
          #(= (:tip %) (:tip-sha %))))
-(s/def ::runs (s/coll-of map? :kind vector?))
+(s/def ::id ::non-blank-string)
+(s/def ::seat ::non-blank-string)
+(s/def ::reviewer ::non-blank-string)
+(s/def ::selection-run
+  (s/and (s/keys :req-un [::id ::reviewer ::seat])
+         #(= #{:id :reviewer :seat} (set (keys %)))))
+(s/def ::runs (s/coll-of ::selection-run :kind vector?))
 (s/def ::skip
-  (s/and map?
+  (s/and (s/keys :req-un [::reviewer ::reason])
          #(= #{:reviewer :reason} (set (keys %)))
-         #(support/non-blank-string? (:reviewer %))
          #(= "glob-mismatch" (:reason %))))
-(s/def ::skips (s/coll-of ::skip :kind vector? :min-count 1))
+(s/def ::skips (s/coll-of ::skip :kind vector?))
 (s/def ::selection
   (s/and (s/keys :req-un [::status ::reason ::change ::runs ::skips])
-         #(= #{:status :reason :change :runs :skips} (set (keys %)))
+         #(= #{:status :reason :change :runs :skips} (set (keys %)))))
+(s/def ::scheduled-selection
+  (s/and ::selection
+         #(= "scheduled" (:status %))
+         #(nil? (:reason %))
+         #(seq (:runs %))))
+(s/def ::no-applicable-selection
+  (s/and ::selection
          #(= "skipped" (:status %))
          #(= "no-matching-reviewers" (:reason %))
-         #(empty? (:runs %))))
+         #(empty? (:runs %))
+         #(seq (:skips %))))
 (s/def ::success-evidence
-  (s/and (s/keys :req-un [::status ::base ::head ::reviewers ::verdict])
+  (s/and (s/keys :req-un [::status ::base ::head ::selection
+                          ::reviewers ::verdict])
+         #(= #{:status :base :head :selection :reviewers :verdict}
+             (set (keys %)))
          #(= "success" (:status %))
-         #(seq (:reviewers %))))
+         #(s/valid? ::scheduled-selection (:selection %))
+         #(let [change (get-in % [:selection :change])]
+            (and (= (:base %) (:base change))
+                 (= (:head %) (:tip change))))))
 (s/def ::no-applicable-reviewer-evidence
   (s/and (s/keys :req-un [::base ::head ::selection])
          #(= #{:base :head :selection} (set (keys %)))
+         #(s/valid? ::no-applicable-selection (:selection %))
          #(let [change (get-in % [:selection :change])]
             (and (= (:base %) (:base change))
                  (= (:head %) (:tip change))))))
@@ -133,17 +156,49 @@
       (fail! "Automatic review result is missing a valid completion sentinel"
              {:gate (:id gate)}))))
 
-(defn- require-complete-no-applicable-selection!
+(defn- distinct-values?
+  [values]
+  (= (count values) (count (distinct values))))
+
+(defn- require-complete-roster-selection!
   [runtime evidence]
   (let [active-reviewers (mapv :name (reviewers/reviewers runtime))
+        selected-runs (get-in evidence [:selection :runs])
+        selected-run-ids (mapv :id selected-runs)
+        selected-reviewers (mapv :reviewer selected-runs)
         skipped-reviewers (mapv :reviewer (get-in evidence
-                                                  [:selection :skips]))]
-    (when-not (and (= (count skipped-reviewers)
-                      (count (distinct skipped-reviewers)))
-                   (= (set active-reviewers) (set skipped-reviewers)))
-      (fail! "No-applicable review selection does not match the active roster"
+                                                  [:selection :skips]))
+        represented-reviewers (into selected-reviewers skipped-reviewers)]
+    (when-not (distinct-values? selected-run-ids)
+      (fail! "Scheduled review selection contains duplicate run IDs"
+             {:selected-run-ids selected-run-ids}))
+    (when-not (and (distinct-values? represented-reviewers)
+                   (= (set active-reviewers) (set represented-reviewers)))
+      (fail! "Review selection does not match the active roster"
              {:active-reviewers active-reviewers
+              :selected-reviewers selected-reviewers
               :skipped-reviewers skipped-reviewers}))
+    evidence))
+
+(defn- require-successful-selected-runs!
+  [evidence]
+  (let [selected-runs (get-in evidence [:selection :runs])
+        successful-runs (:reviewers evidence)
+        successful-run-ids (mapv :run-id successful-runs)
+        successful-reviewers (mapv :name successful-runs)
+        selected-identities (mapv (fn [{:keys [id reviewer]}]
+                                    {:name reviewer :run-id id})
+                                  selected-runs)]
+    (when-not (and (distinct-values? successful-run-ids)
+                   (distinct-values? successful-reviewers))
+      (fail! "Successful reviewer evidence contains duplicate run IDs or names"
+             {:successful-run-ids successful-run-ids
+              :successful-reviewers successful-reviewers}))
+    (when-not (and (= (count selected-identities) (count successful-runs))
+                   (= (set selected-identities) (set successful-runs)))
+      (fail! "Successful reviewer runs do not match the scheduled selection"
+             {:selected-runs selected-identities
+              :successful-runs successful-runs}))
     evidence))
 
 (defn verify-automatic-review!
@@ -152,9 +207,10 @@
   The code executor binds the originating runtime but passes only `code/params`.
   Resolve the correlated active verification gate in that runtime, then follow
   its declared dependency to avoid reading a similarly named gate from another
-  workflow run. Return compact evidence for `code/result`. Accept either a
-  completed reviewer set or a genuine glob-only no-applicable-reviewer outcome;
-  fail loudly for every other result."
+  workflow run. Return validated evidence for `code/result`, including the
+  complete frozen selection. Accept either a completed reviewer set or a
+  genuine glob-only no-applicable-reviewer outcome; fail loudly for every other
+  result."
   [params]
   (require-valid! ::verification-params params
                   "Invalid automatic review verification params")
@@ -180,8 +236,9 @@
          "Automatic review dependency is not unique"
          {:verification-gate (:id verification-gate)})
         evidence (completion-evidence review-gate)
-        evidence (if (= "no-applicable-reviewer" (:outcome evidence))
-                   (require-complete-no-applicable-selection! runtime evidence)
+        evidence (require-complete-roster-selection! runtime evidence)
+        evidence (if (= "reviewed" (:outcome evidence))
+                   (require-successful-selected-runs! evidence)
                    evidence)
         selection (:selection evidence)]
     (cond-> {"status" (:outcome evidence)
@@ -189,9 +246,13 @@
              "base" (:base evidence)
              "head" (:head evidence)
              "reviewers" (count (:reviewers evidence))}
+      (:reviewers evidence) (assoc "successful-reviewers"
+                                   (:reviewers evidence))
       (:verdict evidence) (assoc "verdict" (:verdict evidence))
       selection (assoc "selection" selection
                        "reason" (:reason selection)
+                       "selected-runs" (mapv #(select-keys % [:id :reviewer])
+                                             (:runs selection))
                        "skipped-reviewers" (mapv :reviewer
                                                  (:skips selection))))))
 
@@ -305,8 +366,9 @@
      never a pass.
 
      After every scheduled reviewer succeeds, synthesize their results. Your
-     final response must begin with one line in exactly this form, using JSON
-     string values and one entry per successful reviewer:
+     final response must begin with one line in exactly this form. Embed the
+     complete `agent review` response unchanged as `selection`, alongside one
+     entry per successful reviewer:
 
      ```text
      AUTOMATIC_REVIEW_SUCCESS {success-example}
@@ -314,9 +376,11 @@
 
      Follow that line with the consolidated review. Include the frozen base and
      head SHAs, every reviewer name and run id, and one deduplicated P1/P2
-     verdict. Preserve concrete paths and lines. P1/P2 findings belong to the
-     following outcome step; failed or missing reviewer evidence blocks this
-     gate.
+     verdict. The successful reviewer identities must exactly match the
+     selection's runs. The selection's runs and glob-mismatch skips must account
+     for every active reviewer exactly once. Preserve concrete paths and lines.
+     P1/P2 findings belong to the following outcome step; failed or missing
+     reviewer evidence blocks this gate.
 
      For the valid no-applicable-reviewer result only, the final response must
      instead begin with this line. Embed the complete `agent review` response
@@ -339,12 +403,30 @@
       :upstream-ref "@{upstream}^{commit}"
       :success-example
       (json/write-str
-       (array-map "status" "success"
-                  "base" "FULL_SHA"
-                  "head" "FULL_SHA"
-                  "reviewers" [(array-map "name" "REVIEWER"
-                                          "run-id" "RUN_ID")]
-                  "verdict" "findings|no-findings"))
+       (array-map
+        "status" "success"
+        "base" "FULL_BASE_SHA"
+        "head" "FULL_HEAD_SHA"
+        "selection"
+        (array-map
+         "status" "scheduled"
+         "reason" nil
+         "change" (array-map "source" "branch"
+                             "repo-root" worktree
+                             "base" "FULL_BASE_SHA"
+                             "base-sha" "FULL_BASE_SHA"
+                             "merge-base" "FULL_BASE_SHA"
+                             "tip" "FULL_HEAD_SHA"
+                             "tip-sha" "FULL_HEAD_SHA"
+                             "paths" ["CHANGED_PATH"])
+         "runs" [(array-map "id" "RUN_ID"
+                            "reviewer" "SELECTED_REVIEWER"
+                            "seat" "SELECTED_SEAT")]
+         "skips" [(array-map "reviewer" "SKIPPED_REVIEWER"
+                             "reason" "glob-mismatch")])
+        "reviewers" [(array-map "name" "SELECTED_REVIEWER"
+                                "run-id" "RUN_ID")]
+        "verdict" "findings|no-findings"))
       :no-applicable-example
       (json/write-str
        (array-map
@@ -437,11 +519,11 @@
                      Read the automatic-review gate's `harness/result` and the
                      verification gate's `code/result`.
 
-                     For `status=reviewed`, record the combined verdict and each
-                     resolution on the external work/task identity carried in
-                     `review-target`. Resolve every P1/P2 finding, then commit and
-                     push repairs. Obtain focused follow-up review for material code
-                     changes.
+                     For `status=reviewed`, record the complete structured
+                     `selection` object, combined verdict, and each resolution on
+                     the external work/task identity carried in `review-target`.
+                     Resolve every P1/P2 finding, then commit and push repairs.
+                     Obtain focused follow-up review for material code changes.
 
                      For `status=no-applicable-reviewer`, record that status and the
                      complete structured `selection` object. Do not record a review
@@ -460,11 +542,13 @@
                     (format-alpha/prose
                      "
                        Record selection, review, and validation evidence on the work
-                       task. When verification reports
-                       `status=no-applicable-reviewer`, carry that status and its
-                       complete `selection` object into the landing handoff. State
-                       that no local roster reviewer ran; do not describe the work as
-                       reviewed or as having a no-findings verdict.
+                       task. Carry the complete `selection` object from either
+                       verified outcome into the landing handoff.
+
+                       When verification reports
+                       `status=no-applicable-reviewer`, state that no local roster
+                       reviewer ran; do not describe the work as reviewed or as
+                       having a no-findings verdict.
 
                        If the user authorized landing, read
                        `strand workflow show land` and start `strand workflow start

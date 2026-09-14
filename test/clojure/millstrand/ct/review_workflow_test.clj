@@ -37,14 +37,49 @@
 (def ^:private reviewer-source
   (slurp ".millstrand/me/agents/reviewers.clj"))
 
+(def ^:private successful-review-selection
+  {:status "scheduled"
+   :reason nil
+   :change {:source "branch"
+            :repo-root "/tmp/review-fixture"
+            :base "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            :base-sha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            :merge-base "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            :tip "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            :tip-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            :paths ["src/example.clj"]}
+   :runs [{:id "reviewer-1" :reviewer "correctness" :seat "reviewer"}]
+   :skips [{:reviewer "test-sleeps" :reason "glob-mismatch"}]})
+
+(defn- successful-result
+  ([selection successful-reviewers]
+   (successful-result selection successful-reviewers
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+  ([selection successful-reviewers base head]
+   (str "AUTOMATIC_REVIEW_SUCCESS "
+        (json/write-str
+         {:status "success"
+          :base base
+          :head head
+          :selection selection
+          :reviewers successful-reviewers
+          :verdict "no-findings"})
+        "\n\nNo findings.")))
+
 (def ^:private successful-review
-  (str "AUTOMATIC_REVIEW_SUCCESS "
-       "{\"status\":\"success\","
-       "\"base\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
-       "\"head\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
-       "\"reviewers\":[{\"name\":\"correctness\",\"run-id\":\"reviewer-1\"}],"
-       "\"verdict\":\"no-findings\"}\n\n"
-       "No findings."))
+  (successful-result successful-review-selection
+                     [{:name "correctness" :run-id "reviewer-1"}]))
+
+(def ^:private two-reviewer-selection
+  (assoc successful-review-selection
+         :runs [{:id "reviewer-1"
+                 :reviewer "correctness"
+                 :seat "reviewer"}
+                {:id "reviewer-2"
+                 :reviewer "docs-and-tests"
+                 :seat "luna"}]
+         :skips []))
 
 (def ^:private no-applicable-selection
   {:status "skipped"
@@ -154,6 +189,7 @@
           (is (str/includes? prompt "--branch \"$review_head\""))
           (is (str/includes? prompt "complete structured JSON response"))
           (is (str/includes? prompt "unchanged as `selection`"))
+          (is (str/includes? prompt "successful reviewer identities"))
           (is (str/includes? prompt "Every active reviewer must appear"))
           (is (str/includes? prompt "agent-run-settled"))
           (is (str/includes? prompt "status=stopped"))
@@ -186,11 +222,16 @@
           (is (= "code" (:gate verification-gate)))
           (is (= "me.workflows.review/verify-automatic-review!"
                  (attr-get gate-strand :code/fn)))
-          (is (= "reviewed"
-                 (get ((requiring-resolve
-                        'me.workflows.review/verify-automatic-review!)
-                       (attr-get gate-strand :code/params))
-                      "status"))))
+          (with-redefs [reviewers/reviewers
+                        (fn [_]
+                          [{:name "correctness"}
+                           {:name "test-sleeps"}])]
+            (let [evidence ((requiring-resolve
+                             'me.workflows.review/verify-automatic-review!)
+                            (attr-get gate-strand :code/params))]
+              (is (= "reviewed" (get evidence "status")))
+              (is (= successful-review-selection
+                     (get evidence "selection"))))))
         (advance)
         (is (= "Record the automatic review outcome"
                (:title (first (workflow/ready run-id)))))
@@ -205,7 +246,8 @@
           (is (str/includes? instruction "--workflow land"))
           (is (str/includes? instruction "strand workflow show land"))
           (is (str/includes? instruction "status=no-applicable-reviewer"))
-          (is (str/includes? instruction "complete `selection` object"))
+          (is (str/includes? instruction
+                             "selection` object from either"))
           (is (str/includes? instruction "validated work"))
           (is (= work (json/read-str (last (str/split instruction #"\n\n"))
                                      :key-fn keyword))))
@@ -220,7 +262,60 @@
             ["workspace-runtime-policy"]
             nil "missing a valid completion sentinel"]
            ["successful-review" successful-review
-            ["workspace-runtime-policy"] "reviewed" nil]
+            ["correctness" "test-sleeps"] "reviewed" nil]
+           ["success-without-selection"
+            (str "AUTOMATIC_REVIEW_SUCCESS "
+                 "{\"status\":\"success\","
+                 "\"base\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+                 "\"head\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
+                 "\"reviewers\":[{\"name\":\"correctness\","
+                 "\"run-id\":\"reviewer-1\"}],"
+                 "\"verdict\":\"no-findings\"}")
+            ["correctness" "test-sleeps"] nil "success evidence is invalid"]
+           ["success-range-mismatch"
+            (successful-result
+             successful-review-selection
+             [{:name "correctness" :run-id "reviewer-1"}]
+             "cccccccccccccccccccccccccccccccccccccccc"
+             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            ["correctness" "test-sleeps"] nil "success evidence is invalid"]
+           ["success-incomplete-roster" successful-review
+            ["correctness" "test-sleeps" "workspace-runtime-policy"]
+            nil "does not match the active roster"]
+           ["success-duplicate-selected-run-id"
+            (successful-result
+             (assoc-in two-reviewer-selection [:runs 1 :id] "reviewer-1")
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "docs-and-tests" :run-id "reviewer-1"}])
+            ["correctness" "docs-and-tests"]
+            nil "selection contains duplicate run IDs"]
+           ["success-duplicate-successful-run-id"
+            (successful-result
+             two-reviewer-selection
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "docs-and-tests" :run-id "reviewer-1"}])
+            ["correctness" "docs-and-tests"]
+            nil "evidence contains duplicate run IDs or names"]
+           ["success-duplicate-successful-reviewer"
+            (successful-result
+             two-reviewer-selection
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "correctness" :run-id "reviewer-2"}])
+            ["correctness" "docs-and-tests"]
+            nil "evidence contains duplicate run IDs or names"]
+           ["success-run-identity-mismatch"
+            (successful-result
+             successful-review-selection
+             [{:name "correctness" :run-id "different-run"}])
+            ["correctness" "test-sleeps"]
+            nil "do not match the scheduled selection"]
+           ["success-invalid-skip-reason"
+            (successful-result
+             (assoc-in successful-review-selection [:skips 0 :reason]
+                       "seat-unavailable")
+             [{:name "correctness" :run-id "reviewer-1"}])
+            ["correctness" "test-sleeps"]
+            nil "success evidence is invalid"]
            ["no-applicable-reviewer" no-applicable-reviewer
             ["workspace-runtime-policy"] "no-applicable-reviewer" nil]
            ["incomplete-roster" no-applicable-reviewer
@@ -276,18 +371,30 @@
                   (is (= expected-status (get evidence "status")))
                   (is (= (if (= "reviewed" expected-status) 1 0)
                          (get evidence "reviewers")))
-                  (when (= "no-applicable-reviewer" expected-status)
-                    (is (= no-applicable-selection
-                           (get evidence "selection")))
-                    (workflow/complete!
-                     run-id
-                     {:by "code-executor"
-                      :attributes {"code/result" evidence}})
-                    (is (= "Record the automatic review outcome"
-                           (:title (first (workflow/ready run-id)))))
-                    (workflow/complete! run-id {:by "test-agent"})
-                    (is (= "Validate the resulting branch HEAD"
-                           (:title (first (workflow/ready run-id)))))))
+                  (if (= "reviewed" expected-status)
+                    (do
+                      (is (= successful-review-selection
+                             (get evidence "selection")))
+                      (is (= [{:id "reviewer-1"
+                               :reviewer "correctness"}]
+                             (get evidence "selected-runs")))
+                      (is (= [{:name "correctness"
+                               :run-id "reviewer-1"}]
+                             (get evidence "successful-reviewers")))
+                      (is (= ["test-sleeps"]
+                             (get evidence "skipped-reviewers"))))
+                    (do
+                      (is (= no-applicable-selection
+                             (get evidence "selection")))
+                      (workflow/complete!
+                       run-id
+                       {:by "code-executor"
+                        :attributes {"code/result" evidence}})
+                      (is (= "Record the automatic review outcome"
+                             (:title (first (workflow/ready run-id)))))
+                      (workflow/complete! run-id {:by "test-agent"})
+                      (is (= "Validate the resulting branch HEAD"
+                             (:title (first (workflow/ready run-id))))))))
                 (let [failure (try
                                 (verify!)
                                 nil
@@ -363,6 +470,7 @@
         (is (= ["docs-and-tests" "runtime-correctness" "source-form"
                 "test-sleeps" "workspace-runtime-policy"]
                (mapv :name catalog)))
+        (is (every? (comp seq :glob) catalog))
         (is (= ["test/clojure/**" "cli/*_test.go" "cli/**/*_test.go"
                 "tools/*_test.go" "tools/**/*_test.go"
                 "spools/*/test/**"]
