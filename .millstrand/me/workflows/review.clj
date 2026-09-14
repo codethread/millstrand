@@ -156,16 +156,23 @@
       (fail! "Automatic review result is missing a valid completion sentinel"
              {:gate (:id gate)}))))
 
+(defn- distinct-values?
+  [values]
+  (= (count values) (count (distinct values))))
+
 (defn- require-complete-roster-selection!
   [runtime evidence]
   (let [active-reviewers (mapv :name (reviewers/reviewers runtime))
-        selected-reviewers (mapv :reviewer (get-in evidence
-                                                   [:selection :runs]))
+        selected-runs (get-in evidence [:selection :runs])
+        selected-run-ids (mapv :id selected-runs)
+        selected-reviewers (mapv :reviewer selected-runs)
         skipped-reviewers (mapv :reviewer (get-in evidence
                                                   [:selection :skips]))
         represented-reviewers (into selected-reviewers skipped-reviewers)]
-    (when-not (and (= (count represented-reviewers)
-                      (count (distinct represented-reviewers)))
+    (when-not (distinct-values? selected-run-ids)
+      (fail! "Scheduled review selection contains duplicate run IDs"
+             {:selected-run-ids selected-run-ids}))
+    (when-not (and (distinct-values? represented-reviewers)
                    (= (set active-reviewers) (set represented-reviewers)))
       (fail! "Review selection does not match the active roster"
              {:active-reviewers active-reviewers
@@ -177,9 +184,16 @@
   [evidence]
   (let [selected-runs (get-in evidence [:selection :runs])
         successful-runs (:reviewers evidence)
+        successful-run-ids (mapv :run-id successful-runs)
+        successful-reviewers (mapv :name successful-runs)
         selected-identities (mapv (fn [{:keys [id reviewer]}]
                                     {:name reviewer :run-id id})
                                   selected-runs)]
+    (when-not (and (distinct-values? successful-run-ids)
+                   (distinct-values? successful-reviewers))
+      (fail! "Successful reviewer evidence contains duplicate run IDs or names"
+             {:successful-run-ids successful-run-ids
+              :successful-reviewers successful-reviewers}))
     (when-not (and (= (count selected-identities) (count successful-runs))
                    (= (set selected-identities) (set successful-runs)))
       (fail! "Successful reviewer runs do not match the scheduled selection"

@@ -71,6 +71,16 @@
   (successful-result successful-review-selection
                      [{:name "correctness" :run-id "reviewer-1"}]))
 
+(def ^:private two-reviewer-selection
+  (assoc successful-review-selection
+         :runs [{:id "reviewer-1"
+                 :reviewer "correctness"
+                 :seat "reviewer"}
+                {:id "reviewer-2"
+                 :reviewer "docs-and-tests"
+                 :seat "luna"}]
+         :skips []))
+
 (def ^:private no-applicable-selection
   {:status "skipped"
    :reason "no-matching-reviewers"
@@ -272,6 +282,27 @@
            ["success-incomplete-roster" successful-review
             ["correctness" "test-sleeps" "workspace-runtime-policy"]
             nil "does not match the active roster"]
+           ["success-duplicate-selected-run-id"
+            (successful-result
+             (assoc-in two-reviewer-selection [:runs 1 :id] "reviewer-1")
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "docs-and-tests" :run-id "reviewer-1"}])
+            ["correctness" "docs-and-tests"]
+            nil "selection contains duplicate run IDs"]
+           ["success-duplicate-successful-run-id"
+            (successful-result
+             two-reviewer-selection
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "docs-and-tests" :run-id "reviewer-1"}])
+            ["correctness" "docs-and-tests"]
+            nil "evidence contains duplicate run IDs or names"]
+           ["success-duplicate-successful-reviewer"
+            (successful-result
+             two-reviewer-selection
+             [{:name "correctness" :run-id "reviewer-1"}
+              {:name "correctness" :run-id "reviewer-2"}])
+            ["correctness" "docs-and-tests"]
+            nil "evidence contains duplicate run IDs or names"]
            ["success-run-identity-mismatch"
             (successful-result
              successful-review-selection
