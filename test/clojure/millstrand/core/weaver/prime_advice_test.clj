@@ -6,7 +6,7 @@
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.weaver.module-publication :as publication]
             [millstrand.test.alpha :as t])
-  (:import [java.lang Thread$State]))
+  (:import [java.util.concurrent.locks ReentrantLock]))
 
 (defn bare-op
   "Return a stable value for direct-registration failure fixtures."
@@ -24,21 +24,20 @@
        "  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n"
        body "\n"))
 
-(defn- await-thread-state [^Thread thread expected]
+(defn- await-queued-reader [^ReentrantLock lock ^Thread reader]
   (loop [attempts 100000]
-    (let [actual (.getState thread)]
-      (cond
-        (= expected actual) actual
-        (= Thread$State/TERMINATED actual)
-        (throw (ex-info "Reader terminated before reaching the expected state"
-                        {:expected expected :actual actual}))
-        (zero? attempts)
-        (throw (ex-info "Reader did not reach the expected state"
-                        {:expected expected :actual actual}))
-        :else
-        (do
-          (Thread/yield)
-          (recur (dec attempts)))))))
+    (cond
+      (.hasQueuedThread lock reader) true
+      (not (.isAlive reader))
+      (throw (ex-info "Prime reader terminated before queueing on the refresh lock"
+                      {:thread/state (.getState reader)}))
+      (zero? attempts)
+      (throw (ex-info "Prime reader did not queue on the refresh lock"
+                      {:thread/state (.getState reader)}))
+      :else
+      (do
+        (Thread/yield)
+        (recur (dec attempts))))))
 
 (def ^:private base-source
   (module-source
@@ -141,6 +140,7 @@
           release-publication (promise)
           read-started (promise)
           read-result (promise)
+          ^ReentrantLock refresh-lock (:module-refresh-lock (:runtime ctx))
           refresh-result
           (future
             (with-redefs [publication/publish!
@@ -165,8 +165,7 @@
         (.start reader)
         (let [read-thread (deref read-started 5000 nil)]
           (is (some? read-thread))
-          (is (= Thread$State/BLOCKED
-                 (await-thread-state read-thread Thread$State/BLOCKED))))
+          (is (true? (await-queued-reader refresh-lock read-thread))))
         (finally
           (deliver release-publication true)
           (.join reader 5000)))
@@ -174,6 +173,57 @@
       (let [prime (deref read-result 5000 ::timeout)]
         (is (map? prime))
         (is (= "Base discipline.\n\nWrapper A." (:prime prime)))))))
+
+(deftest blocked-prime-read-is-interruptible
+  (t/with-weaver-world
+    [ctx {:storage :sqlite-memory
+          :files {"modules/base.clj" base-source
+                  "modules/wrapper-a.clj" wrapper-a-source}}]
+    (t/declare-module! ctx :base {:file "modules/base.clj"})
+    (let [original-publish! publication/publish!
+          published (promise)
+          release-publication (promise)
+          begin-read (promise)
+          read-started (promise)
+          read-finished (promise)
+          ^ReentrantLock refresh-lock (:module-refresh-lock (:runtime ctx))
+          refresh-result
+          (future
+            (with-redefs [publication/publish!
+                          (fn [& args]
+                            (let [result (apply original-publish! args)]
+                              (deliver published true)
+                              @release-publication
+                              result))]
+              (t/declare-module! ctx :wrapper-a
+                                 {:file "modules/wrapper-a.clj"
+                                  :after [:base]})))
+          read-future
+          (future
+            @begin-read
+            (deliver read-started (Thread/currentThread))
+            (try
+              (weaver/op! (:runtime ctx) 'prime ["guided"])
+              (deliver read-finished :returned)
+              (catch InterruptedException interrupted
+                (deliver read-finished interrupted))
+              (catch Throwable throwable
+                (deliver read-finished throwable))))]
+      (try
+        (is (true? (deref published 5000 false)))
+        (deliver begin-read true)
+        (let [read-thread (deref read-started 5000 nil)]
+          (is (some? read-thread))
+          (is (true? (await-queued-reader refresh-lock read-thread))))
+        (future-cancel read-future)
+        (is (instance? InterruptedException
+                       (deref read-finished 5000 ::timeout)))
+        (is (not (realized? refresh-result)))
+        (finally
+          (deliver begin-read true)
+          (future-cancel read-future)
+          (deliver release-publication true)))
+      (is (= :applied (:status @refresh-result))))))
 
 (deftest prime-advice-declarations-fail-loudly
   (t/with-weaver-world

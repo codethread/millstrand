@@ -60,7 +60,8 @@
             [millstrand.api.return-shape.alpha :as return-shape]
             [millstrand.api.spec.alpha :as spec-alpha]
             [millstrand.core.weaver.core-registry :as core-registry]
-            [millstrand.core.weaver.module-graph :as module-graph]))
+            [millstrand.core.weaver.module-graph :as module-graph])
+  (:import [java.util.concurrent.locks ReentrantLock]))
 
 (def ^:private schema-version
   "Positive integer versioning the help-schema contract itself.
@@ -734,11 +735,17 @@
   "Return an op's composed prime, base source, and ordered advice appendices.
 
   Serialize the projection with module refresh so its op, advice, and active
-  module graph all come from one completed publication."
+  module graph all come from one completed publication. Lock acquisition is
+  interruptible so request deadline cancellation cannot park a reader behind a
+  long refresh."
   [ctx]
-  (let [refresh-lock (:module-refresh-lock (:op/runtime ctx))]
-    (locking refresh-lock
-      (meta-verb-result ctx :prime))))
+  (let [^ReentrantLock refresh-lock
+        (:module-refresh-lock (:op/runtime ctx))]
+    (.lockInterruptibly refresh-lock)
+    (try
+      (meta-verb-result ctx :prime)
+      (finally
+        (.unlock refresh-lock)))))
 
 (defn- meta-verb-arg-spec
   "Arg-spec for a builtin meta-verb: one required op name and a reserved trailing

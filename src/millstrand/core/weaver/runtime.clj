@@ -19,6 +19,7 @@
   (:import [java.lang ProcessHandle]
            [java.time Instant]
            [java.util.concurrent ArrayBlockingQueue]
+           [java.util.concurrent.locks ReentrantLock]
            [java.nio.file Files StandardCopyOption]
            [java.nio.file.attribute FileAttribute]))
 
@@ -697,7 +698,7 @@
                           :module-state
                           (atom ((requiring-resolve
                                   'millstrand.core.weaver.module-refresh/initial-state)))
-                          :module-refresh-lock (Object.)
+                          :module-refresh-lock (ReentrantLock.)
                           :spool-state (atom {})
                           :server server
                           :pool-host pool-host
