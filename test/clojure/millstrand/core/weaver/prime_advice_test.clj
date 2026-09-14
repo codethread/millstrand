@@ -4,7 +4,9 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.test.alpha :as t]))
+            [millstrand.core.weaver.module-publication :as publication]
+            [millstrand.test.alpha :as t])
+  (:import [java.lang Thread$State]))
 
 (defn bare-op
   "Return a stable value for direct-registration failure fixtures."
@@ -21,6 +23,22 @@
   (str "(ns " namespace "\n"
        "  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n"
        body "\n"))
+
+(defn- await-thread-state [^Thread thread expected]
+  (loop [attempts 100000]
+    (let [actual (.getState thread)]
+      (cond
+        (= expected actual) actual
+        (= Thread$State/TERMINATED actual)
+        (throw (ex-info "Reader terminated before reaching the expected state"
+                        {:expected expected :actual actual}))
+        (zero? attempts)
+        (throw (ex-info "Reader did not reach the expected state"
+                        {:expected expected :actual actual}))
+        :else
+        (do
+          (Thread/yield)
+          (recur (dec attempts)))))))
 
 (def ^:private base-source
   (module-source
@@ -111,6 +129,51 @@
       (is (= [["wrapper-a" "Wrapper A."]]
              (mapv (juxt #(get-in % [:provenance :module]) :text)
                    (:appendices prime)))))))
+
+(deftest prime-read-waits-for-module-publication-to-complete
+  (t/with-weaver-world
+    [ctx {:storage :sqlite-memory
+          :files {"modules/base.clj" base-source
+                  "modules/wrapper-a.clj" wrapper-a-source}}]
+    (t/declare-module! ctx :base {:file "modules/base.clj"})
+    (let [original-publish! publication/publish!
+          published (promise)
+          release-publication (promise)
+          read-started (promise)
+          read-result (promise)
+          refresh-result
+          (future
+            (with-redefs [publication/publish!
+                          (fn [& args]
+                            (let [result (apply original-publish! args)]
+                              (deliver published true)
+                              @release-publication
+                              result))]
+              (t/declare-module! ctx :wrapper-a
+                                 {:file "modules/wrapper-a.clj"
+                                  :after [:base]})))
+          reader (Thread.
+                  (fn []
+                    (deliver read-started (Thread/currentThread))
+                    (deliver read-result
+                             (try
+                               (weaver/op! (:runtime ctx) 'prime ["guided"])
+                               (catch Throwable throwable
+                                 throwable)))))]
+      (try
+        (is (true? (deref published 5000 false)))
+        (.start reader)
+        (let [read-thread (deref read-started 5000 nil)]
+          (is (some? read-thread))
+          (is (= Thread$State/BLOCKED
+                 (await-thread-state read-thread Thread$State/BLOCKED))))
+        (finally
+          (deliver release-publication true)
+          (.join reader 5000)))
+      (is (= :applied (:status @refresh-result)))
+      (let [prime (deref read-result 5000 ::timeout)]
+        (is (map? prime))
+        (is (= "Base discipline.\n\nWrapper A." (:prime prime)))))))
 
 (deftest prime-advice-declarations-fail-loudly
   (t/with-weaver-world

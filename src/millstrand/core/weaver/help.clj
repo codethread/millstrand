@@ -731,9 +731,14 @@
   (meta-verb-result ctx :about))
 
 (defn op-prime-handler
-  "Return an op's composed prime, base source, and ordered advice appendices."
+  "Return an op's composed prime, base source, and ordered advice appendices.
+
+  Serialize the projection with module refresh so its op, advice, and active
+  module graph all come from one completed publication."
   [ctx]
-  (meta-verb-result ctx :prime))
+  (let [refresh-lock (:module-refresh-lock (:op/runtime ctx))]
+    (locking refresh-lock
+      (meta-verb-result ctx :prime))))
 
 (defn- meta-verb-arg-spec
   "Arg-spec for a builtin meta-verb: one required op name and a reserved trailing
