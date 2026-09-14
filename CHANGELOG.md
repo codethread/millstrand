@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.3 - 2026-09-14
+
+- `mill` can manage opt-in named JVM pools, including host-scoped membership, status, restart admission, and continuity across Millstrand restarts.
+- `mill` now starts a missing Weaver when forwarding a command and reports lifecycle and restart progress in a readable form with less polling overhead.
+- Workspace modules can contribute prime advice that is composed through their selected owner configuration.
+- Repository review workflows support path-scoped reviewer rosters and retain the provenance of scheduled reviewer selection.
+- Socket requests now return structured error frames for every Clojure throwable instead of dropping the connection.
+- The repository adds a runnable hello-world example, reusable release automation, external spool-consumer checks, and enforced Markdown and clj-kondo formatting gates.
+- Agent delegation and review configuration now use the shared Harnesses and Millhouse workflow surfaces.
+
 ## 0.5.2 - 2026-09-01
 
 - Workspace-owned declarations can be defined across focused namespaces and selected through one owner-complete configuration module.
