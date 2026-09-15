@@ -43,10 +43,10 @@ func TestSourceVersionRequiresVersionFile(t *testing.T) {
 	}
 }
 
-func TestValidateSourceVersionRejectsReleaseSkew(t *testing.T) {
+func TestValidateSourceVersionAcceptsReleaseSkew(t *testing.T) {
 	source := writeVersionFixture(t, "0.5.1\n")
-	if _, err := ValidateSourceVersion(source, "0.5.0"); err == nil || !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("expected release skew failure, got %v", err)
+	if version, err := ValidateSourceVersion(source, "0.5.0"); err != nil || version != "0.5.1" {
+		t.Fatalf("mixed-release source validation = %q, %v", version, err)
 	}
 	if version, err := ValidateSourceVersion(source, "dev"); err != nil || version != "0.5.1" {
 		t.Fatalf("development source validation = %q, %v", version, err)

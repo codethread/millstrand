@@ -17,7 +17,8 @@
   Read `VERSION` from the Mill-supplied runtime root. Missing, non-file, and
   malformed release identities fail during Weaver startup. When Mill supplies
   `expected-version`, require it to conform to
-  `:millstrand.release/expected-version` and match the retained source."
+  `:millstrand.release/expected-version`. Product release differences do not
+  determine transport or bootstrap compatibility."
   ([generation-basis]
    (version generation-basis nil))
   ([generation-basis expected-version]
@@ -46,12 +47,4 @@
                                    expected-version)))
            (throw (ex-info "Mill product version is invalid"
                            {:mill-version expected-version})))
-         (when (and expected-version
-                    (not= "dev" expected-version)
-                    (not= value expected-version))
-           (throw (ex-info
-                   "Millstrand source version does not match Mill product version"
-                   {:path (.getPath file)
-                    :source-version value
-                    :mill-version expected-version})))
          value)))))

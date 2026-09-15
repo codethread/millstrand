@@ -39,6 +39,10 @@ func startForwardOwnedBlockingProcess(t *testing.T) *exec.Cmd {
 }
 
 func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
+	// A newer Weaver and client may use application ops unknown to this Mill.
+	originalVersion := config.Version
+	config.Version = "0.5.0"
+	t.Cleanup(func() { config.Version = originalVersion })
 	world, cfg := forwardWorld(t)
 	var gotReq map[string]any
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
@@ -47,12 +51,12 @@ func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	})
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-invoke")
 
-	frames := runInvoke(t, cfg, map[string]any{"name": "add", "argv": []any{"hello"}, "payloads": map[string]any{}})
+	frames := runInvoke(t, cfg, map[string]any{"name": "future-app-op", "argv": []any{"hello"}, "payloads": map[string]any{}, "client": map[string]any{"pid": os.Getpid(), "version": "0.6.0", "build_id": "new-client-build"}})
 	if gotReq["operation"] != "invoke" || gotReq["weaver_id"] != "weaver-invoke" {
 		t.Fatalf("weaver did not receive an invoke frame: %#v", gotReq)
 	}
 	args, ok := gotReq["arguments"].(map[string]any)
-	if !ok || args["name"] != "add" {
+	if !ok || args["name"] != "future-app-op" || args["client"].(map[string]any)["build_id"] != "new-client-build" {
 		t.Fatalf("invoke envelope not forwarded verbatim as arguments: %#v", gotReq["arguments"])
 	}
 	if len(frames) != 1 || frames[0]["ok"] != true || frames[0]["result"].(map[string]any)["title"] != "hello" {

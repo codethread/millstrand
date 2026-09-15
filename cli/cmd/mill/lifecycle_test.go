@@ -484,7 +484,7 @@ func TestValidateMetadataRejectsWhitespaceOnlyName(t *testing.T) {
 	}
 }
 
-func TestValidateMetadataRejectsMissingAndMismatchedProductVersion(t *testing.T) {
+func TestValidateMetadataRequiresProductIdentityButAcceptsDifferentReleases(t *testing.T) {
 	world := config.World{ConfigDir: filepath.Join(t.TempDir(), "cfg")}
 	world.StateDir = filepath.Join(t.TempDir(), "state")
 	world.DataDir = filepath.Join(t.TempDir(), "data")
@@ -499,9 +499,13 @@ func TestValidateMetadataRejectsMissingAndMismatchedProductVersion(t *testing.T)
 	originalVersion := config.Version
 	config.Version = "0.5.1"
 	t.Cleanup(func() { config.Version = originalVersion })
-	m.Version = "0.5.0"
-	if got := validateMetadata(world, m); !strings.Contains(got, "does not match") {
-		t.Fatalf("expected product version mismatch, got %q", got)
+	m.Version = "0.5.2"
+	if got := validateMetadata(world, m); got != "" {
+		t.Fatalf("older Mill must accept newer Weaver release: %q", got)
+	}
+	m.ProtocolVersion++
+	if got := validateMetadata(world, m); !strings.Contains(got, "weaver protocol mismatch") {
+		t.Fatalf("expected unsupported protocol rejection, got %q", got)
 	}
 }
 
@@ -559,7 +563,7 @@ func TestResolveLaunchSourceUnusableInstalledAndNoCheckoutFailsLoud(t *testing.T
 	}
 }
 
-func TestResolveLaunchSourceRejectsProductVersionSkew(t *testing.T) {
+func TestResolveLaunchSourceAcceptsProductVersionSkew(t *testing.T) {
 	source := tempSource(t)
 	if err := os.WriteFile(filepath.Join(source, config.VersionFileName), []byte("0.5.0\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -569,8 +573,8 @@ func TestResolveLaunchSourceRejectsProductVersionSkew(t *testing.T) {
 	t.Cleanup(func() { config.Version = originalVersion })
 	t.Setenv("MILLSTRAND_SOURCE", source)
 
-	if _, err := resolveLaunchSource(t.TempDir()); err == nil || !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("expected product version skew failure, got %v", err)
+	if got, err := resolveLaunchSource(t.TempDir()); err != nil || got != source {
+		t.Fatalf("mixed-release source = %q, %v", got, err)
 	}
 }
 
@@ -620,6 +624,13 @@ func TestWeaverReplContextAddsSourceWithoutPublicStatusIdentity(t *testing.T) {
 	}
 	if _, ok := status["source"]; ok {
 		t.Fatalf("public status must not expose source: %#v", status)
+	}
+	// Advancing checkout metadata must not prevent attachment to a live Weaver.
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	if err := os.WriteFile(filepath.Join(source, config.VersionFileName), []byte("0.5.3\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	context, err := s.weaverReplContext(req)
 	if err != nil {
