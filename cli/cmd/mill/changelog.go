@@ -19,8 +19,13 @@ func renderChangelog() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mill changelog cannot resolve the Millstrand source from cwd %s: %w", cwd, err)
 	}
-	if _, err := config.ValidateSourceVersion(source, config.Version); err != nil {
+	version, err := config.ValidateSourceVersion(source, config.Version)
+	if err != nil {
 		return nil, fmt.Errorf("mill changelog cannot read the resolved release identity: %w", err)
+	}
+	// Changelog is release-specific content, not a connection admission gate.
+	if config.Version != "dev" && version != config.Version {
+		return nil, fmt.Errorf("mill changelog source version %s does not match binary product version %s", version, config.Version)
 	}
 	path := filepath.Join(source, changelogFileName)
 	info, err := os.Stat(path)
