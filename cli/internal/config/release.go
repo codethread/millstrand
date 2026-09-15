@@ -40,9 +40,8 @@ func SourceVersion(source string) (string, error) {
 	return string(content), nil
 }
 
-// ValidateSourceVersion requires source to carry the same canonical product
-// version as the invoking release. Development binaries retain their "dev"
-// marker and validate only the source file shape.
+// ValidateSourceVersion validates source and binary product metadata independently.
+// Release differences do not determine transport or bootstrap compatibility.
 func ValidateSourceVersion(source, expected string) (string, error) {
 	version, err := SourceVersion(source)
 	if err != nil {
@@ -53,9 +52,6 @@ func ValidateSourceVersion(source, expected string) (string, error) {
 	}
 	if !ValidVersion(expected) {
 		return "", fmt.Errorf("millstrand binary product version %q is invalid", expected)
-	}
-	if version != expected {
-		return "", fmt.Errorf("millstrand source version %s does not match binary product version %s", version, expected)
 	}
 	return version, nil
 }

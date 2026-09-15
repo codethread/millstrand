@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"millstrand-strand-cli/internal/config"
 )
 
 func TestMillChangelogCommandHierarchy(t *testing.T) {
@@ -31,6 +33,17 @@ func TestRenderChangelogPrintsResolvedFile(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Fatalf("changelog output = %q, want %q", got, want)
+	}
+}
+
+func TestRenderChangelogRejectsDifferentReleaseContent(t *testing.T) {
+	source := writeSourceFixture(t, map[string]string{"VERSION": "0.5.2\n", "CHANGELOG.md": "# New release\n"})
+	t.Setenv("MILLSTRAND_SOURCE", source)
+	original := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = original })
+	if _, err := renderChangelog(); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected release-specific changelog rejection, got %v", err)
 	}
 }
 

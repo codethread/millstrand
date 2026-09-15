@@ -44,16 +44,14 @@
       (finally
         (test-support/delete-tree! source)))))
 
-(deftest version-requires-the-mill-and-source-release-to-match
+(deftest version-accepts-different-mill-and-source-releases
   (let [source (io/file (test-support/temp-dir "millstrand-release"))]
     (try
       (spit (io/file source "VERSION") "0.5.1\n")
       (is (= "0.5.1"
              (release/version (generation-basis source) "0.5.1")))
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo
-           #"does not match Mill product version"
-           (release/version (generation-basis source) "0.5.0")))
+      (is (= "0.5.1"
+             (release/version (generation-basis source) "0.5.0")))
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Mill product version is invalid"

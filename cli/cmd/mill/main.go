@@ -409,7 +409,11 @@ func (s *server) handle(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/protocol", "malformed mill request", err.Error()))
 		return
 	}
-	if req.ProtocolVersion != client.MillProtocolVersion || req.RequestID == "" || req.MillID != s.meta.MillID {
+	if req.ProtocolVersion != client.MillProtocolVersion {
+		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/protocol", "unsupported mill protocol", fmt.Sprintf("got v%d, mill supports v%d", req.ProtocolVersion, client.MillProtocolVersion)))
+		return
+	}
+	if req.RequestID == "" || req.MillID != s.meta.MillID {
 		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/identity", "mill request identity mismatch", ""))
 		return
 	}
