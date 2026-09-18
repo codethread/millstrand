@@ -22,6 +22,23 @@
                       millstrand/workspace-config {:local/root ".millstrand"}
                       org.clojure/test.check {:mvn/version "1.1.1"}
                       clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+         ;; codethread/config still pulls earlier Millhouse revisions. The
+         ;; workspace's direct pins are the consumer contract under test.
+         :override-deps {millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                 :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                 :deps/root "spools/land"}
+                         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                     :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                     :deps/root "spools/workflow"}
+                         millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                   :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                   :deps/root "spools/kanban"}
+                         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                  :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                  :deps/root "spools/chime"}
+                         millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                 :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                 :deps/root "spools/cron"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
