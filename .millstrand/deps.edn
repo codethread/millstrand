@@ -7,7 +7,8 @@
         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/workflow"}
         millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/kanban"}
         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/chime"}
-        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/cron"}}
+        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/cron"}
+        millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c" :deps/root "spools/identity"}}
  :aliases
  {:dev
   {:extra-paths ["."]

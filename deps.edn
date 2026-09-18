@@ -38,7 +38,10 @@
                                                   :deps/root "spools/chime"}
                          millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git"
                                                  :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
-                                                 :deps/root "spools/cron"}}
+                                                 :deps/root "spools/cron"}
+                         millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                     :git/sha "f80b80c8697e48a6ce56344372a32136d2bf279c"
+                                                     :deps/root "spools/identity"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
