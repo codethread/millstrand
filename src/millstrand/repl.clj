@@ -410,21 +410,15 @@
                           (pos? (.length (.getBuffer out))) (assoc :out (str out)))]
               (recur (conj events event)))))))))
 
-(defn- attach-session
-  "Open a thin nREPL client session prepared for live weaver-side evaluation."
-  [host port]
-  (let [conn (nrepl/connect :host host :port (Integer/parseInt port))
-        session (nrepl/client-session (nrepl/client conn 60000))]
-    (eval-remote! session remote-session-bootstrap)
-    [conn session]))
-
 (defn- attach-stdin! [host port]
-  (let [source (slurp *in*)
-        [conn session] (attach-session host port)]
-    (with-open [_ ^java.io.Closeable conn]
-      (let [responses (eval-remote-responses! session
+  (let [source (slurp *in*)]
+    (with-open [^java.io.Closeable conn (nrepl/connect :host host :port (Integer/parseInt port))]
+      ;; The whole stdin source evaluates in one request, so a retained session
+      ;; adds no semantics and would outlive an abruptly disconnected client.
+      (let [client (nrepl/client conn 60000)
+            responses (eval-remote-responses! client
                                               {:ns (str session-ns-name)
-                                               :code (str "(millstrand.repl/eval-source-forms! "
+                                               :code (str "((requiring-resolve 'millstrand.repl/eval-source-forms!) "
                                                           (pr-str source) ")")})]
         (doseq [{:keys [out value]} (read-string (last (keep :value responses)))]
           (when out
@@ -437,7 +431,40 @@
       (throw (ex-info "nREPL command-line REPL implementation is unavailable"
                       {:var 'nrepl.cmdline/run-repl}))))
 
-(defn- helper-ready-prompt []
+(defn- close-session! [session]
+  (let [responses (doall (nrepl/message session {:op "close"}))
+        statuses (set (mapcat :status responses))]
+    (when-not (or (contains? statuses "session-closed")
+                  (contains? statuses :session-closed))
+      (throw (ex-info "nREPL session did not close"
+                      {:responses responses})))))
+
+(defn- session-cleanup
+  "Return orderly cleanup for session and register best-effort JVM-exit cleanup."
+  [session]
+  (let [open? (atom true)
+        runtime (Runtime/getRuntime)
+        shutdown-hook (Thread.
+                       ^Runnable
+                       (fn []
+                         (when (compare-and-set! open? true false)
+                           (try
+                             ;; Sending is eager. Do not await a reply while the
+                             ;; JVM is already shutting down.
+                             (nrepl/message session {:op "close"})
+                             (catch Throwable _))))
+                       "millstrand-nrepl-session-cleanup")]
+    (.addShutdownHook runtime shutdown-hook)
+    (fn []
+      (try
+        (when (compare-and-set! open? true false)
+          (close-session! session))
+        (finally
+          (try
+            (.removeShutdownHook runtime shutdown-hook)
+            (catch IllegalStateException _)))))))
+
+(defn- helper-ready-prompt [session-opened!]
   (let [initialized? (atom false)]
     (fn [_]
       (when (compare-and-set! initialized? false true)
@@ -445,6 +472,7 @@
           (when-not session
             (throw (ex-info "nREPL cmdline client did not expose an active session before prompting"
                             {:var 'nrepl.cmdline/running-repl})))
+          (session-opened! session)
           (eval-remote! session remote-session-bootstrap)))
       (print "millstrand=> "))))
 
@@ -453,10 +481,24 @@
    (attach-repl! host port {}))
   ([host port {:keys [run-repl-fn]
                :or {run-repl-fn (nrepl-run-repl)}}]
-   (run-repl-fn
-    host
-    (Integer/parseInt port)
-    {:prompt (helper-ready-prompt)})))
+   (let [cleanup (atom nil)
+         primary-error (volatile! nil)]
+     (try
+       (run-repl-fn
+        host
+        (Integer/parseInt port)
+        {:prompt (helper-ready-prompt #(reset! cleanup (session-cleanup %)))})
+       (catch Throwable t
+         (vreset! primary-error t)
+         (throw t))
+       (finally
+         (when-let [cleanup! @cleanup]
+           (try
+             (cleanup!)
+             (catch Throwable cleanup-error
+               (if-let [primary @primary-error]
+                 (.addSuppressed ^Throwable primary cleanup-error)
+                 (throw cleanup-error))))))))))
 
 (defn -main
   "Start a direct live weaver REPL or evaluate stdin forms.
