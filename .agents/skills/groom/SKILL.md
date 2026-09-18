@@ -47,7 +47,7 @@ strand kanban board |
 ### Grooming ops (mutations)
 
 - `strand kanban priority <id> <p1..p4>` — re-rank (p1 immediate blocker … p4 someday).
-- `strand kanban promote <id>` — refinement → pending.
+- `strand update <id> --attr kanban/lane=pending` — refinement → pending.
 - `strand kanban finish <id> --outcome abandoned` — close dead cards, within the lifecycle: **features close only from claimed/in_review; epics close from refinement/pending** (reversible via `reopen`). A stale pending/refinement feature therefore cannot be abandoned by grooming — note it and flag it in the report instead.
 - `strand kanban note <id> ...` — annotate a card with grooming rationale.
 - `strand kanban add ... --epic <id>` — file gaps discovered while grooming.
@@ -64,9 +64,9 @@ Exact flags: `strand help kanban`.
 
 ## Constraints
 
-- Grooming never claims, reviews, or finishes-as-done cards — lane movement beyond `promote` belongs to whoever works the card. In particular, never claim a card just to make it abandonable.
+- Grooming never claims, reviews, or finishes-as-done cards — lane movement beyond pending belongs to whoever works the card. In particular, never claim a card just to make it abandonable.
 - Mutate nothing until the scan reads have succeeded: run recipes with `set -o pipefail`, and treat a failed or truncated `kanban board`/`kanban card` read (non-zero pipeline exit, jq parse error, missing lane keys) as an abort — report which command failed, never an "empty backlog" verdict.
-- Mutate only through `strand kanban ...` ops, never raw `strand update` against card strands.
+- Use `strand update <id> --attr kanban/lane=<lane>` for simple lane changes. Keep `strand kanban ...` for its structured operations: add, claim, priority, label, task, note, finish, and reopen.
 - If the guidance below is report-only (e.g. "just tell me what's stale"), make no mutations.
 
 ## Guidance
