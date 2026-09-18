@@ -276,6 +276,5 @@
                                                   :list
                                                   []
                                                   {:nrepl-client (fn [conn _timeout-ms] conn)
-                                                   :nrepl-client-session (fn [client _timeout-ms] client)
-                                                   :nrepl-message (fn [_session _message]
+                                                   :nrepl-message (fn [_client _message]
                                                                     (throw (java.net.SocketTimeoutException. "timed out")))}))))))

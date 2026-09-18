@@ -79,6 +79,20 @@
          (finally
            (reset-open-state!)))))))
 
+(defn- retained-session-ids [endpoint]
+  (with-open [conn (nrepl/connect :host (:host endpoint) :port (:port endpoint))]
+    (let [responses (doall (nrepl/message (nrepl/client conn 60000)
+                                          {:op "ls-sessions"}))]
+      (set (mapcat :sessions responses)))))
+
+(defn- nrepl-session-thread-names []
+  (->> (Thread/getAllStackTraces)
+       keys
+       (filter #(.isAlive ^Thread %))
+       (map #(.getName ^Thread %))
+       (filter #(str/starts-with? % "nREPL-session-"))
+       set))
+
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -208,11 +222,39 @@
           ((ns-resolve 'millstrand.repl 'attach-stdin!) (:host endpoint) (str (:port endpoint))))
         (is (= "a1\nb2\n" (str out)))))))
 
+(deftest repeated-one-shot-clients-retain-no-sessions-or-threads
+  (with-runtime
+    (fn [rt _]
+      (let [{:keys [endpoint config-dir]} (:metadata rt)
+            baseline-sessions (retained-session-ids endpoint)
+            baseline-threads (nrepl-session-thread-names)]
+        (dotimes [_ 12]
+          (binding [*in* (java.io.StringReader. "(+ 1 2)\n")
+                    *out* (java.io.StringWriter.)
+                    *err* (java.io.StringWriter.)]
+            ((ns-resolve 'millstrand.repl 'attach-stdin!)
+             (:host endpoint)
+             (str (:port endpoint))))
+          (client/status-world config-dir))
+        (binding [*in* (java.io.StringReader. "(throw (ex-info \"boom\" {}))\n")
+                  *out* (java.io.StringWriter.)
+                  *err* (java.io.StringWriter.)]
+          (is (thrown? clojure.lang.ExceptionInfo
+                       ((ns-resolve 'millstrand.repl 'attach-stdin!)
+                        (:host endpoint)
+                        (str (:port endpoint))))))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (client/call-world config-dir {} :resolve-query :missing)))
+        (is (= baseline-sessions (retained-session-ids endpoint)))
+        (is (= baseline-threads (nrepl-session-thread-names)))))))
+
 (deftest attach-repl-delegates-to-helper-ready-nrepl-client-repl
   (with-runtime
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             calls (atom [])
+            connection (atom nil)
+            baseline-sessions (retained-session-ids endpoint)
             out (java.io.StringWriter.)
             run-repl-fn (fn [host port options]
                           (swap! calls conj {:host host
@@ -220,6 +262,7 @@
                                              :options options})
                           (let [conn (nrepl/connect :host host :port port)
                                 session (nrepl/client-session (nrepl/client conn 60000))]
+                            (reset! connection conn)
                             (try
                               (swap! nrepl.cmdline/running-repl assoc :client session)
                               ((:prompt options) 'user)
@@ -228,21 +271,24 @@
                                 (is (= "[\"user\" true]" (last (keep :value responses)))
                                     "the prompt bootstrap lands the session in the neutral namespace with millstrand.repl aliased"))
                               (finally
-                                (swap! nrepl.cmdline/running-repl assoc :client nil)
-                                (.close conn)))))]
-        (binding [*in* (java.io.StringReader. "(+ 10 5)\n")
-                  *out* out
-                  *err* (java.io.StringWriter.)]
-          ((ns-resolve 'millstrand.repl 'attach-repl!)
-           (:host endpoint)
-           (str (:port endpoint))
-           {:run-repl-fn run-repl-fn}))
-        (is (= [{:host (:host endpoint)
-                 :port (:port endpoint)
-                 :options {:prompt (:prompt (:options (first @calls)))}}]
-               @calls))
-        (is (fn? (get-in (first @calls) [:options :prompt])))
-        (is (not (str/includes? (str out) "15")))))))
+                                (swap! nrepl.cmdline/running-repl assoc :client nil)))))]
+        (try
+          (binding [*in* (java.io.StringReader. "(+ 10 5)\n")
+                    *out* out
+                    *err* (java.io.StringWriter.)]
+            ((ns-resolve 'millstrand.repl 'attach-repl!)
+             (:host endpoint)
+             (str (:port endpoint))
+             {:run-repl-fn run-repl-fn}))
+          (is (= [{:host (:host endpoint)
+                   :port (:port endpoint)
+                   :options {:prompt (:prompt (:options (first @calls)))}}]
+                 @calls))
+          (is (fn? (get-in (first @calls) [:options :prompt])))
+          (is (not (str/includes? (str out) "15")))
+          (is (= baseline-sessions (retained-session-ids endpoint)))
+          (finally
+            (some-> @connection .close)))))))
 
 (deftest attached-stdin-session-exposes-the-runtime-api
   (test-alpha/with-weaver-world

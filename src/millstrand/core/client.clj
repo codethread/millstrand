@@ -150,14 +150,15 @@
   into ExceptionInfo with client error data."
   ([conn form timeout-ms context]
    (eval-form conn form timeout-ms context {}))
-  ([conn form timeout-ms context {:keys [nrepl-client nrepl-client-session nrepl-message]
+  ([conn form timeout-ms context {:keys [nrepl-client nrepl-message]
                                   :or {nrepl-client nrepl/client
-                                       nrepl-client-session nrepl/client-session
                                        nrepl-message nrepl/message}}]
+   ;; These calls need no state between requests. Sending them without a
+   ;; retained session lets nREPL discard each ephemeral session after eval,
+   ;; including when this client disappears before an orderly cleanup.
    (let [client (nrepl-client conn timeout-ms)
-         session (nrepl-client-session client timeout-ms)
          responses (try
-                     (doall (nrepl-message session {:op "eval" :code form}))
+                     (doall (nrepl-message client {:op "eval" :code form}))
                      (catch java.net.SocketTimeoutException e
                        (throw (ex-info "Weaver nREPL request timed out" (assoc context :type :millstrand.core.client/timeout) e)))
                      (catch Exception e
