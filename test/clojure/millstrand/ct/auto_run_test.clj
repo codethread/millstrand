@@ -72,19 +72,32 @@
 
 (defn- ready-pr-gate-result
   "Run a materialized ready-PR gate against deterministic local command stubs."
-  [argv state]
-  (let [root (test-support/temp-dir "millstrand-auto-run-pr-gate")
-        bin (io/file root "bin")
-        head "0123456789012345678901234567890123456789"]
+  [argv overrides]
+  (let [head "0123456789012345678901234567890123456789"
+        {:keys [branch status upstream marker draft state base pr-branch pr-head body]}
+        (merge {:branch "auto/fixture-card"
+                :status ""
+                :upstream head
+                :marker head
+                :draft "false"
+                :state "OPEN"
+                :base "main"
+                :pr-branch "auto/fixture-card"
+                :pr-head head
+                :body "## Summary\n## Walkthrough\n## Verification"}
+               overrides)
+        root (test-support/temp-dir "millstrand-auto-run-pr-gate")
+        bin (io/file root "bin")]
     (try
-      (spit (io/file root "millstrand-land-quality-head") (str head "\n"))
+      (spit (io/file root "millstrand-land-quality-head") (str marker "\n"))
       (write-executable!
        (io/file bin "git")
        (str "#!/bin/sh\n"
             "case \"$*\" in\n"
-            "  'branch --show-current') echo auto/fixture-card ;;\n"
-            "  'status --porcelain --untracked-files=all') ;;\n"
-            "  'rev-parse --verify HEAD^{commit}'|'rev-parse --verify @{upstream}^{commit}') echo " head " ;;\n"
+            "  'branch --show-current') echo " branch " ;;\n"
+            "  'status --porcelain --untracked-files=all') printf '%s\\n' '" status "' ;;\n"
+            "  'rev-parse --verify HEAD^{commit}') echo " head " ;;\n"
+            "  'rev-parse --verify @{upstream}^{commit}') echo " upstream " ;;\n"
             "  'rev-parse --git-path millstrand-land-quality-head') printf '%s\\n' \"$PWD/millstrand-land-quality-head\" ;;\n"
             "  *) echo \"unexpected git call: $*\" >&2; exit 1 ;;\n"
             "esac\n"))
@@ -92,8 +105,8 @@
        (io/file bin "gh")
        (str "#!/bin/sh\n"
             "case \"$*\" in\n"
-            "  *'--json body'*) printf '%s\\n' '## Summary\n## Walkthrough\n## Verification' ;;\n"
-            "  *) printf 'false\\t" state "\\tmain\\tauto/fixture-card\\t" head "\\n' ;;\n"
+            "  *'--json body'*) printf '%s\\n' '" body "' ;;\n"
+            "  *) printf '" draft "\\t" state "\\t" base "\\t" pr-branch "\\t" pr-head "\\n' ;;\n"
             "esac\n"))
       (run-command root bin argv)
       (finally
@@ -130,8 +143,20 @@
               review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
-              ready-pr-result (ready-pr-gate-result verify-pr-argv "OPEN")
-              closed-pr-result (ready-pr-gate-result verify-pr-argv "CLOSED")
+              ready-pr-result (ready-pr-gate-result verify-pr-argv {})
+              rejected-pr-results
+              (mapv (fn [[label overrides]]
+                      [label (ready-pr-gate-result verify-pr-argv overrides)])
+                    [["dirty worktree" {:status "dirty"}]
+                     ["wrong branch" {:branch "auto/other"}]
+                     ["unpushed head" {:upstream "1111111111111111111111111111111111111111"}]
+                     ["unmarked head" {:marker "1111111111111111111111111111111111111111"}]
+                     ["draft PR" {:draft "true"}]
+                     ["closed PR" {:state "CLOSED"}]
+                     ["wrong PR base" {:base "release"}]
+                     ["wrong PR branch" {:pr-branch "auto/other"}]
+                     ["stale PR head" {:pr-head "1111111111111111111111111111111111111111"}]
+                     ["incomplete review package" {:body "## Summary"}]])
               handoff-step (role-step strands "handoff-worker")
               finisher-step (role-step strands "finisher")
               handoff (workflow/step-view handoff-step)
@@ -159,7 +184,9 @@
             (is (str/includes? (nth verify-pr-argv 2) "## Summary"))
             (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty"))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
-            (is (not (zero? (:exit closed-pr-result))) (:output closed-pr-result)))
+            (doseq [[label rejected-pr-result] rejected-pr-results]
+              (is (not (zero? (:exit rejected-pr-result)))
+                  (str label ": " (:output rejected-pr-result)))))
           (testing "the landing finisher is a separate, initially blocked target"
             (is (not= (:id handoff) (:id finisher)))
             (is (= [(:id handoff-step)]

@@ -21,12 +21,19 @@ strand auto-run status
 strand auto-run scan --by-identity YOUR_IDENTITY
 ```
 
-`status` shows the repository configuration and durable receipts. An `assigned` receipt means that Harnesses accepted a worker; inspect its run and the workflow frontier separately. A scan respects the two-worker limit and does not launch a card twice.
+`status` shows the repository configuration and durable receipts. An `assigned` receipt means that Harnesses accepted a worker. Inspect the worker and its workflow frontier with:
+
+```text
+strand agent show RUN_ID
+strand workflow ready WORKFLOW_RUN_ID
+```
+
+A scan respects the two-worker limit and does not launch a card twice.
 
 Disable the dispatcher through a repository policy change and normal refresh. Disabling stops new admission only. It does not stop an accepted worker, clear a receipt, or rearm a card.
 
 ## Delivery boundary
 
-The workflow requires implementation, the repository land-quality contract, a ready PR with its review package, PR checks, and deterministic PR verification before moving the card to review. It then calls Millhouse's autonomous landing contract. The delivery worker prepares a separate finisher target; the finisher waits for successful worker settlement and owns shared-land sign-off, FIFO merge, cleanup, and final card completion.
+The workflow requires implementation, the repository land-quality contract, a ready PR with its review package, PR checks, and deterministic PR verification before moving the card to review. Verification requires an open, non-draft PR targeting `main`, from the prepared branch at the pushed quality-marked HEAD, with `## Summary`, `## Walkthrough`, and `## Verification` in its body. It then calls Millhouse's autonomous landing contract. The delivery worker prepares a separate finisher target; the finisher waits for successful worker settlement and owns shared-land sign-off, FIFO merge, cleanup, and final card completion.
 
 On an observed delivery or landing failure, the worker adds `auto-run-failure`, records the evidence and retained resources, and leaves the card open. The workflow never retries a failed gate or replaces an accepted worker on its own.
