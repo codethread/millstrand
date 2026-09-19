@@ -50,6 +50,16 @@
                        (weaver/update! rt note-id
                                        {:attributes {:note/at "2026-01-02T00:00:00Z"}}))))))))
 
+(deftest note!-rejects-primitive-owned-decorations
+  (with-runtime
+    (fn [rt _config-dir]
+      (let [target (target! rt)]
+        (doseq [key ["note/text" "note/at" "note/round"]]
+          (testing (str "decoration " key " cannot override the primitive")
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"primitive-owned"
+                                  (notes/note! rt target "spoofed" {key "value"})))))))))
+
 (deftest note!-accepts-unresolved-identity-without-the-identity-module
   (with-runtime
     (fn [rt _config-dir]
@@ -194,6 +204,18 @@
                   {:target "target"
                    :decoration {"note/kind" "decision; echo pwned"
                                 "unsafe key" "value"}}))))
+        (testing "embedded single quotes in the target are POSIX escaped"
+          (is (= "strand note 'target'\"'\"'s' \"<text>\""
+                 (notes/writer-ref->prompt {:target "target's"}))))
+        (testing "embedded single quotes in the identity are POSIX escaped"
+          (is (= "strand note 'target' \"<text>\" --by-identity 'O'\"'\"'Reilly'"
+                 (notes/writer-ref->prompt
+                  {:target "target" :identity/by-identity "O'Reilly"}))))
+        (testing "embedded single quotes in decoration values are POSIX escaped"
+          (is (= "strand note 'target' \"<text>\" --attr 'note/kind=writer'\"'\"'s'"
+                 (notes/writer-ref->prompt
+                  {:target "target"
+                   :decoration {"note/kind" "writer's"}}))))
         (testing "no read/agent notes string leaks into the fragment"
           (is (not (str/includes? fragment "agent notes")))))
       (testing "a malformed ref fails loudly naming the offending field"

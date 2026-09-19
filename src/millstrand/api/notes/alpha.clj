@@ -28,6 +28,10 @@
 (declare identity-attr note-attr at-instant note-view require-int-round
          require-nonblank-identity! require-note-opts! shell-quote truncate)
 
+(def ^:private primitive-note-keys
+  #{"note/text" "note/at" "note/round"
+    :note/text :note/at :note/round})
+
 (defn note!
   "Append an immutable note strand to `target-id`'s memory and return its id.
 
@@ -222,6 +226,9 @@
   (when (contains? opts :by-identity)
     (throw (ex-info "Note attribution uses :identity/by-identity"
                     {:field :by-identity :value (:by-identity opts)})))
+  (when-let [reserved (seq (filter primitive-note-keys (keys opts)))]
+    (throw (ex-info "Note decorations cannot set primitive-owned attributes"
+                    {:field :decoration :keys (vec reserved)})))
   (when-some [by-identity (:identity/by-identity opts)]
     (require-nonblank-identity! by-identity))
   ;; The CLI's --attr map supplies string keys, so a decorating
