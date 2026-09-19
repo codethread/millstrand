@@ -75,26 +75,32 @@
 
             {failure-policy}
           " {:card card :failure-policy (autonomous/failure-policy card)})))
+      (workflow/step
+       :prepare-pr "Publish the exact change with its review package" :self
+       :depends-on [:implement]
+       (fn [{:keys [card branch]}]
+         (format-alpha/prose
+          "
+            Publish the committed {branch} and establish its upstream before
+            quality runs:
+
+            ```sh
+            git push -u origin {branch}
+            ```
+
+            Create or update its ready-for-review PR against main. Its nonempty
+            Markdown body must contain `## Summary`, `## Walkthrough`, and
+            `## Verification`. Put the PR URL and concise handoff on card {card};
+            retain detailed verification evidence on its task. Complete this step
+            only after publishing the committed revision and review package.
+          " {:card card :branch branch})))
       (land-support/shell-gate
-       :quality "Pass repository quality checks" [:implement]
+       :quality "Pass repository quality checks" [:prepare-pr]
        (fn [{:keys [branch]}]
          (land-support/sh-gate land-support/land-quality-gate-script
                                "auto-run-quality" branch))
        5400 failure-instruction)
-      (workflow/step
-       :prepare-pr "Publish the exact change with its review package" :self
-       :depends-on [:quality]
-       (fn [{:keys [card branch]}]
-         (format-alpha/prose
-          "
-            Push {branch} and create or update its ready-for-review PR against
-            main. Its nonempty Markdown body must contain `## Summary`,
-            `## Walkthrough`, and `## Verification`. Put the PR URL and concise
-            handoff on card {card}; retain detailed verification evidence on its
-            task. Complete this step only after publishing the committed revision
-            and review package.
-          " {:card card :branch branch})))
-      (land-support/shell-gate :ci "Wait for the PR checks" [:prepare-pr]
+      (land-support/shell-gate :ci "Wait for the PR checks" [:quality]
                                (fn [{:keys [branch]}]
                                  ["gh" "pr" "checks" branch "--watch" "--fail-fast"])
                                2100 failure-instruction)
