@@ -90,10 +90,11 @@ Physically deletes one strand and its incident edges. Returns `{:burned [<id>] :
 #### `note` — BAT-C9
 
 ```
-strand note <id> <text> [--by-identity actor] [--round round]
+strand note <id> <text> [--by-identity actor] [--round round] \
+  [--attr key=value]…
 ```
 
-Appends a closed note strand to an existing target strand. The target id and note text are required positionals. `--by-identity` stores a non-blank friendly actor string as `identity/by-identity` when present. It does not look up or require an active Identity spool. `--round` records the writer's round or pass tag when present. The handler stores note data on the note strand and attaches it to the target with an outgoing `notes` edge from the note to the target. It returns `{"id": <note-id>, "target": <target-id>}`. `target` is an output projection from that edge, not a stored note attribute. The removed `--by` flag is rejected.
+Appends a closed note strand to an existing target strand. The target id and note text are required positionals. `--by-identity` stores a non-blank friendly actor string as `identity/by-identity` when present. It does not look up or require an active Identity spool. `--attr` adds repeatable caller-owned decorations such as `note/kind=decision`, `kanban/card=true`, or `reviewer/seat=panel`; values may be payload references. A decorated `identity/by-identity` is the same attribution field and must also be non-blank. The primitive-owned `note/text` and `note/at` fields are not decorations. `--round` records the writer's round or pass tag when present. The handler stores note data on the note strand and attaches it to the target with an outgoing `notes` edge from the note to the target. It returns `{"id": <note-id>, "target": <target-id>}`. `target` is an output projection from that edge, not a stored note attribute. The removed `--by` flag is rejected.
 
 #### `weave` — BAT-C10
 

@@ -46,5 +46,5 @@ Function.
 
 Render `ref` as the note-writing CLI instruction fragment.
 
-This is the single renderer of the write fragment `strand note <target> "<text>" --by-identity <actor> --attr k=v …` — `<text>` stays a placeholder the agent fills in. `ref` must contain a string `:target`, an optional non-blank `:identity/by-identity` attribute, and an optional map of string `:decoration` entries. The old `:by` field and every other unknown field fail loudly. Renders only the write instruction — no read instruction.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/notes/alpha.clj#L84-L115">Source</a></sub></p>
+This is the single renderer of the write fragment `strand note <target> "<text>" --by-identity <actor> --attr k=v …` — `<text>` stays a placeholder the agent fills in. The target, actor, and each decoration key-value are POSIX-shell-quoted as one word; embedded single quotes are escaped. `ref` must contain a string `:target`, an optional non-blank `:identity/by-identity` attribute, and an optional map of string `:decoration` entries. The old `:by` field and every other unknown field fail loudly. Renders only the write instruction — no read instruction.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/notes/alpha.clj#L84-L118">Source</a></sub></p>

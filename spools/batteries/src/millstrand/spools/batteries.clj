@@ -483,7 +483,7 @@
            :round {:type :int
                    :doc "Review round the note belongs to."}
            :attr {:type :map
-                  :doc "Decorating attribute key=value on the note strand (e.g. note/kind); repeatable. Values may be payload references."}}
+                  :doc "Decorating key=value (e.g. note/kind=decision or kanban/card=true); repeatable; payload refs allowed; identity/by-identity must be non-blank."}}
    :positionals [{:name :id :type :string :required? true :doc "Target strand id."}
                  {:name :text :type :string :required? true :doc "Note text."}]})
 

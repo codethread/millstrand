@@ -86,10 +86,12 @@
 
   This is the single renderer of the write fragment
   `strand note <target> \"<text>\" --by-identity <actor> --attr k=v …` — `<text>`
-  stays a placeholder the agent fills in. `ref` must contain a string `:target`,
-  an optional non-blank `:identity/by-identity` attribute, and an optional map
-  of string `:decoration` entries. The old `:by` field and every other unknown
-  field fail loudly. Renders only the write instruction — no read instruction."
+  stays a placeholder the agent fills in. The target, actor, and each decoration
+  key-value are POSIX-shell-quoted as one word; embedded single quotes are
+  escaped. `ref` must contain a string `:target`, an optional non-blank
+  `:identity/by-identity` attribute, and an optional map of string
+  `:decoration` entries. The old `:by` field and every other unknown field fail
+  loudly. Renders only the write instruction — no read instruction."
   [ref]
   (when-not (map? ref)
     (throw (ex-info "writer-ref shape invalid" {:field :root :value ref})))
