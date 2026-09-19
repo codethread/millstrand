@@ -138,7 +138,9 @@
               root (workflow/current-root run-id)
               strands (:strands (graph/subgraph runtime [(:id root)]))
               views (map workflow/step-view strands)
+              prepare-pr (titled-strand strands "Publish the exact change with its review package")
               quality (titled-strand strands "Pass repository quality checks")
+              ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
               review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
@@ -173,9 +175,18 @@
             (is (= [(:id verify-pr)]
                    (mapv :to_strand_id
                          (graph/outgoing-edges runtime [(:id review-card)] "depends-on"))))
-            (is (= [(:id (titled-strand strands "Wait for the PR checks"))]
+            (is (= [(:id ci)]
                    (mapv :to_strand_id
                          (graph/outgoing-edges runtime [(:id verify-pr)] "depends-on"))))
+            (is (= [(:id quality)]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id ci)] "depends-on"))))
+            (is (= [(:id prepare-pr)]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id quality)] "depends-on"))))
+            (is (= [(:id (titled-strand strands "Implement and verify the assigned feature"))]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id prepare-pr)] "depends-on"))))
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
             (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
             (is (str/includes? (nth verify-pr-argv 2) "state"))
