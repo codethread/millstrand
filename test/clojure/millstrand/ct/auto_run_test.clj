@@ -45,6 +45,11 @@
   [strands role]
   (first (filter #(= role (attr-get % :auto-run/role)) strands)))
 
+(defn- titled-strand
+  "Return the materialized workflow strand with `title`."
+  [strands title]
+  (first (filter #(= title (:title %)) strands)))
+
 (deftest repository-auto-run-activates-only-auto-full-land
   (test-alpha/with-weaver-world
     [ctx (world-options)]
@@ -71,6 +76,11 @@
               root (workflow/current-root run-id)
               strands (:strands (graph/subgraph runtime [(:id root)]))
               views (map workflow/step-view strands)
+              quality (titled-strand strands "Pass repository quality checks")
+              verify-pr (titled-strand strands "Verify the ready PR and review package")
+              review-card (titled-strand strands "Move the verified feature into review")
+              quality-argv (attr-get quality :shell/argv)
+              verify-pr-argv (attr-get verify-pr :shell/argv)
               handoff (workflow/step-view (role-step strands "handoff-worker"))
               finisher (workflow/step-view (role-step strands "finisher"))]
           (testing "delivery sequences implementation, quality, PR CI, review, and landing"
@@ -79,8 +89,21 @@
             (is (some #(= "Pass repository quality checks" (:title %)) views))
             (is (some #(= "Publish the exact change with its review package" (:title %)) views))
             (is (some #(= "Wait for the PR checks" (:title %)) views))
+            (is (some #(= "Verify the ready PR and review package" (:title %)) views))
             (is (some #(= "Move the verified feature into review" (:title %)) views))
-            (is (some #(= "Review and hand off autonomous landing" (:title %)) views)))
+            (is (some #(= "Review and hand off autonomous landing" (:title %)) views))
+            (is (= [(:id verify-pr)]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id review-card)] "depends-on"))))
+            (is (= [(:id (titled-strand strands "Wait for the PR checks"))]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id verify-pr)] "depends-on"))))
+            (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
+            (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
+            (is (str/includes? (nth verify-pr-argv 2) "baseRefName"))
+            (is (str/includes? (nth verify-pr-argv 2) "headRefOid"))
+            (is (str/includes? (nth verify-pr-argv 2) "## Summary"))
+            (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty")))
           (testing "the landing finisher is a separate, initially blocked target"
             (is (not= (:id handoff) (:id finisher)))
             (is (= "step" (:role handoff) (:role finisher)))

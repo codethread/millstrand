@@ -3,6 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millhouse.spools.land.autonomous :as autonomous]
+            [millhouse.spools.land.support :as land-support]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]))
 
@@ -15,15 +16,39 @@
 (s/def ::effort ::text)
 (s/def ::params (s/keys :req-un [::card ::feature ::branch ::worktree ::seat ::effort]))
 
-(defn- shell-gate
-  "Return one bounded shell gate running in the assigned worktree."
-  [id title dependencies argv timeout failure-instruction]
-  (workflow/gate id title :shell
-                 :depends-on dependencies
-                 :attributes {"shell/argv" argv
-                              "shell/cwd" (fn [{:keys [worktree]}] worktree)
-                              "shell/timeout-secs" timeout}
-                 failure-instruction))
+(def ^:private verify-pr-script
+  "Verify the ready PR and its immutable quality-marked head."
+  (str "set -eu\n"
+       "branch=\"$1\"\n"
+       "if [ \"$(git branch --show-current)\" != \"$branch\" ]; then\n"
+       "  echo \"expected branch $branch\" >&2\n"
+       "  exit 1\n"
+       "fi\n"
+       "if [ -n \"$(git status --porcelain --untracked-files=all)\" ]; then\n"
+       "  echo \"worktree is dirty\" >&2\n"
+       "  exit 1\n"
+       "fi\n"
+       "head=$(git rev-parse --verify HEAD^{commit})\n"
+       "upstream=$(git rev-parse --verify @{upstream}^{commit})\n"
+       "marker=$(cat \"$(git rev-parse --git-path millstrand-land-quality-head)\")\n"
+       "if [ \"$head\" != \"$upstream\" ] || [ \"$head\" != \"$marker\" ]; then\n"
+       "  echo \"quality-marked HEAD is not the pushed branch head\" >&2\n"
+       "  exit 1\n"
+       "fi\n"
+       "pr=$(gh pr view \"$branch\" --json isDraft,baseRefName,headRefName,headRefOid --jq '\n"
+       "  [.isDraft, .baseRefName, .headRefName, .headRefOid] | @tsv')\n"
+       "IFS='\t' read -r draft base pr_branch pr_head <<EOF\n"
+       "$pr\n"
+       "EOF\n"
+       "if [ \"$draft\" != false ] || [ \"$base\" != main ] || [ \"$pr_branch\" != \"$branch\" ] || [ \"$pr_head\" != \"$head\" ]; then\n"
+       "  echo \"PR is not a ready main PR at the quality-marked branch head\" >&2\n"
+       "  exit 1\n"
+       "fi\n"
+       "body=$(gh pr view \"$branch\" --json body --jq .body)\n"
+       "case \"$body\" in\n"
+       "  *'## Summary'*'## Walkthrough'*'## Verification'*) ;;\n"
+       "  *) echo \"PR is missing its required review package\" >&2; exit 1 ;;\n"
+       "esac\n"))
 
 (defn- delivery
   "Return the one repository-approved autonomous delivery workflow."
@@ -50,8 +75,12 @@
 
             {failure-policy}
           " {:card card :failure-policy (autonomous/failure-policy card)})))
-      (shell-gate :quality "Pass repository quality checks" [:implement]
-                  ["make" "land-quality"] 7200 failure-instruction)
+      (land-support/shell-gate
+       :quality "Pass repository quality checks" [:implement]
+       (fn [{:keys [branch]}]
+         (land-support/sh-gate land-support/land-quality-gate-script
+                               "auto-run-quality" branch))
+       5400 failure-instruction)
       (workflow/step
        :prepare-pr "Publish the exact change with its review package" :self
        :depends-on [:quality]
@@ -59,18 +88,24 @@
          (format-alpha/prose
           "
             Push {branch} and create or update its ready-for-review PR against
-            main. Put the PR URL and concise handoff on card {card}; retain
-            detailed verification evidence on its task. Complete this step only
-            after publishing the committed revision and review package. The next
-            gate verifies the exact PR head before shared landing reviews it.
+            main. Its nonempty Markdown body must contain `## Summary`,
+            `## Walkthrough`, and `## Verification`. Put the PR URL and concise
+            handoff on card {card}; retain detailed verification evidence on its
+            task. Complete this step only after publishing the committed revision
+            and review package.
           " {:card card :branch branch})))
-      (shell-gate :ci "Wait for the PR checks" [:prepare-pr]
-                  (fn [{:keys [branch]}]
-                    ["gh" "pr" "checks" branch "--watch" "--fail-fast"])
-                  2100 failure-instruction)
+      (land-support/shell-gate :ci "Wait for the PR checks" [:prepare-pr]
+                               (fn [{:keys [branch]}]
+                                 ["gh" "pr" "checks" branch "--watch" "--fail-fast"])
+                               2100 failure-instruction)
+      (land-support/shell-gate
+       :verify-pr "Verify the ready PR and review package" [:ci]
+       (fn [{:keys [branch]}]
+         (land-support/sh-gate verify-pr-script "auto-run-verify-pr" branch))
+       300 failure-instruction)
       (workflow/gate
        :review-card "Move the verified feature into review" :code
-       :depends-on [:ci]
+       :depends-on [:verify-pr]
        :attributes {"code/fn" "millhouse.spools.land.card-actions/review-card!"
                     "code/params" (fn [{:keys [card]}] {:card card})}
        failure-instruction)

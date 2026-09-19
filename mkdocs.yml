@@ -55,6 +55,7 @@ nav:
   - Home: index.md
   - Tutorial: docs/tutorial.md
   - Reference: docs/reference.md
+  - Automatic delivery: docs/auto-run.md
   # The user-side spools ladder: customise -> test -> share. The bundled
   # spools Millstrand ships keep their own section below.
   - Spools:
