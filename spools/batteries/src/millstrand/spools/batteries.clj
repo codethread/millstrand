@@ -475,15 +475,15 @@
 
 (def ^:private note-arg-spec
   {:op "note"
-   :doc "Append a note to a target strand's memory; its note/text/note/at content is write-once."
+   :doc "Append a note to a target strand's memory; note/text and note/at are write-once, and note/text, note/at, and note/round are reserved from decorations."
    :hook-class :mutating
    :deadline-class :standard
    :flags {:by-identity {:type :string
                          :doc "Friendly actor stored as identity/by-identity on the note."}
            :round {:type :int
-                   :doc "Review round the note belongs to."}
+                   :doc "Review round the note belongs to; do not use --attr note/round."}
            :attr {:type :map
-                  :doc "Decorating key=value (e.g. note/kind=decision or kanban/card=true); repeatable; payload refs allowed; identity/by-identity must be non-blank."}}
+                  :doc "Caller decoration key=value; repeatable; payload refs allowed; identity/by-identity must be non-blank; note/text, note/at, and note/round are reserved."}}
    :positionals [{:name :id :type :string :required? true :doc "Target strand id."}
                  {:name :text :type :string :required? true :doc "Note text."}]})
 
@@ -1049,7 +1049,10 @@
                     (patterns/explain rt nm)))))
 
 (millstrand/defop! note
-  "Append a note to a target strand's memory via the note primitive."
+  "Append a note to a target strand's memory via the note primitive.
+
+  The primitive-owned note/text, note/at, and note/round keys are reserved and
+  rejected as --attr decorations, including keyword-keyed trusted API input."
   (op-options 'note note-arg-spec)
   [ctx]
   (let [{:keys [id text by-identity round attr]} (:op/args ctx)]

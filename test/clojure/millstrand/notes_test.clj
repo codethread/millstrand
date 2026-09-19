@@ -50,15 +50,20 @@
                        (weaver/update! rt note-id
                                        {:attributes {:note/at "2026-01-02T00:00:00Z"}}))))))))
 
-(deftest note!-rejects-primitive-owned-decorations
+(deftest note!-rejects-primitive-owned-decorations-in-string-and-keyword-forms
   (with-runtime
     (fn [rt _config-dir]
       (let [target (target! rt)]
         (doseq [key ["note/text" "note/at" "note/round"]]
-          (testing (str "decoration " key " cannot override the primitive")
+          (testing (str "string decoration " key " cannot override the primitive")
             (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                   #"primitive-owned"
-                                  (notes/note! rt target "spoofed" {key "value"})))))))))
+                                  (notes/note! rt target "spoofed" {key "value"}))))
+          (testing (str "keyword decoration :" key " cannot override the primitive")
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"primitive-owned"
+                                  (notes/note! rt target "spoofed"
+                                               {(keyword key) "value"})))))))))
 
 (deftest note!-accepts-unresolved-identity-without-the-identity-module
   (with-runtime

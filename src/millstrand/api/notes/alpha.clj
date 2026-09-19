@@ -12,7 +12,9 @@
   Note content is immutable by storage enforcement, not convention: `note/text`
   and `note/at` are declared write-once keys (SPEC-001.P4), so once a note is
   written its content and timestamp cannot be rewritten, deleted, or archived on
-  any mutation path. Only the caller's decorating attributes stay mutable.
+  any mutation path. The primitive also owns `note/round`; callers cannot supply
+  `note/text`, `note/at`, or `note/round` as decorating attributes, in either
+  string- or keyword-keyed form. Only other caller decorations stay mutable.
 
   Callers own runtime selection and pass the target weaver runtime as the first
   argument, per the blessed-namespace convention. `writer-ref->prompt` renders
@@ -40,9 +42,11 @@
   decorating attrs, and links to the target by an outgoing `notes` edge — never a
   `note/for` attribute. `note/text` and `note/at` are storage-enforced write-once
   (SPEC-001.P4): the birth write here is legal, but no later mutation path can
-  rewrite, delete, or archive them. `:identity/by-identity` accepts a non-blank
-  friendly identity string without registry lookup; absent identity attribution
-  leaves the note valid. Fails loudly on blank text, a missing target, old `:by`
+  rewrite, delete, or archive them. The primitive-owned `note/text`, `note/at`,
+  and `note/round` keys are rejected as decorations in both string- and
+  keyword-keyed forms. `:identity/by-identity` accepts a non-blank friendly
+  identity string without registry lookup; absent identity attribution leaves
+  the note valid. Fails loudly on blank text, a missing target, old `:by`
   attribution, or a non-integer `:round` (the `note/round` contract is
   single-typed)."
   [runtime target-id text {:identity/keys [by-identity] :keys [round] :as opts}]
