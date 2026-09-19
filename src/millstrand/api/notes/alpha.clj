@@ -26,7 +26,7 @@
             [millstrand.core.specs :as specs]))
 
 (declare identity-attr note-attr at-instant note-view require-int-round
-         require-note-opts! truncate)
+         require-nonblank-identity! require-note-opts! shell-quote truncate)
 
 (defn note!
   "Append an immutable note strand to `target-id`'s memory and return its id.
@@ -110,7 +110,7 @@
       (throw (ex-info "writer-ref decoration must be a map of strings"
                       {:field :decoration :value decoration})))
     (str "strand note " target " \"<text>\""
-         (when by-identity (str " --by-identity " by-identity))
+         (when by-identity (str " --by-identity " (shell-quote by-identity)))
          ;; sort keeps the rendered flags deterministic across map orderings
          (str/join (for [[k v] (sort decoration)] (str " --attr " k "=" v))))))
 
@@ -200,6 +200,14 @@
 
 ;; --- option and round contracts ----------------------------------------------
 
+(defn- require-nonblank-identity!
+  "Return `value` when it is a non-blank identity attribution."
+  [value]
+  (when-not (s/valid? :identity/by-identity value)
+    (throw (ex-info "Note identity/by-identity must be a non-blank string"
+                    {:field :identity/by-identity :value value})))
+  value)
+
 (defn- require-note-opts!
   "Return valid note opts, rejecting removed or unqualified actor aliases."
   [opts]
@@ -211,13 +219,18 @@
   (when (contains? opts :by-identity)
     (throw (ex-info "Note attribution uses :identity/by-identity"
                     {:field :by-identity :value (:by-identity opts)})))
-  (when (and (some? (:identity/by-identity opts))
-             (not (s/valid? :identity/by-identity
-                            (:identity/by-identity opts))))
-    (throw (ex-info "Note identity/by-identity must be a non-blank string"
-                    {:field :identity/by-identity
-                     :value (:identity/by-identity opts)})))
+  (when-some [by-identity (:identity/by-identity opts)]
+    (require-nonblank-identity! by-identity))
+  ;; The CLI's --attr map supplies string keys, so a decorating
+  ;; "identity/by-identity" must obey the same attribution contract.
+  (when (contains? opts "identity/by-identity")
+    (require-nonblank-identity! (get opts "identity/by-identity")))
   opts)
+
+(defn- shell-quote
+  "Render `s` as one POSIX shell word."
+  [s]
+  (str "'" (str/replace s "'" "'\"'\"'") "'"))
 
 (defn- require-int-round
   "Return `round` when it is an integer (or nil); otherwise fail loudly.

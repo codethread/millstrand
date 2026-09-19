@@ -671,6 +671,10 @@
             (is (= "decision" (:note/kind stored)))
             (is (= "gpt" (:identity/by-identity stored)))
             (is (= "decision text" (:note/text stored)))))
+        (testing "a decorating identity remains non-blank"
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank"
+                                (weaver/op! rt 'note [(:id target) "bad actor"
+                                                      "--attr" "identity/by-identity=   "]))))
         (testing "the removed --by flag fails in the parser"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown flag --by"
                                 (weaver/op! rt 'note [(:id target) "legacy"

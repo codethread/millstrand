@@ -94,7 +94,11 @@
                               (notes/note! rt target "legacy actor" {:by "alice"})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"identity/by-identity"
                               (notes/note! rt target "unqualified actor"
-                                           {:by-identity "alice"})))))))
+                                           {:by-identity "alice"})))
+        (testing "a decorating identity still obeys attribution validation"
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank"
+                                (notes/note! rt target "decorated actor"
+                                             {"identity/by-identity" "   "}))))))))
 
 (deftest notes-orders-by-note-at-across-writers-and-filters-by-round
   (with-runtime
@@ -170,8 +174,13 @@
                        :identity/by-identity "alice"})]
         (testing "the fragment is the write instruction with a text placeholder"
           (is (= (str "strand note " target
-                      " \"<text>\" --by-identity alice --attr kanban/card=true --attr note/kind=decision")
+                      " \"<text>\" --by-identity 'alice' --attr kanban/card=true --attr note/kind=decision")
                  fragment)))
+        (testing "the identity remains one shell word with spaces and flag syntax"
+          (is (= (str "strand note " target
+                      " \"<text>\" --by-identity 'young crane --reviewer'")
+                 (notes/writer-ref->prompt
+                  {:target target :identity/by-identity "young crane --reviewer"}))))
         (testing "no read/agent notes string leaks into the fragment"
           (is (not (str/includes? fragment "agent notes")))))
       (testing "a malformed ref fails loudly naming the offending field"
