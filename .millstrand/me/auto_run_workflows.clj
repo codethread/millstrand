@@ -37,7 +37,7 @@
        "fi\n"
        "pr=$(gh pr view \"$branch\" --json isDraft,baseRefName,headRefName,headRefOid --jq '\n"
        "  [.isDraft, .baseRefName, .headRefName, .headRefOid] | @tsv')\n"
-       "IFS='\t' read -r draft base pr_branch pr_head <<EOF\n"
+       "IFS=\"$(printf '\\t')\" read -r draft base pr_branch pr_head <<EOF\n"
        "$pr\n"
        "EOF\n"
        "if [ \"$draft\" != false ] || [ \"$base\" != main ] || [ \"$pr_branch\" != \"$branch\" ] || [ \"$pr_head\" != \"$head\" ]; then\n"

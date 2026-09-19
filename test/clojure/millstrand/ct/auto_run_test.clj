@@ -9,6 +9,7 @@
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
+            [millstrand.spools.test-support :as test-support]
             [millstrand.test.alpha :as test-alpha]))
 
 (def ^:private workspace-root
@@ -50,6 +51,54 @@
   [strands title]
   (first (filter #(= title (:title %)) strands)))
 
+(defn- write-executable!
+  "Write shell `source` to `file` and make it executable."
+  [file source]
+  (io/make-parents file)
+  (spit file source)
+  (.setExecutable (io/file file) true))
+
+(defn- run-command
+  "Run `argv` in `dir` with the supplied executable directory first on PATH."
+  [dir bin argv]
+  (let [process (ProcessBuilder. ^java.util.List argv)
+        environment (.environment process)]
+    (.directory process (io/file dir))
+    (.put environment "PATH" (str bin ":" (.get environment "PATH")))
+    (.redirectErrorStream process true)
+    (let [running (.start process)
+          output (slurp (.getInputStream running))]
+      {:exit (.waitFor running) :output output})))
+
+(defn- ready-pr-gate-result
+  "Run a materialized ready-PR gate against deterministic local command stubs."
+  [argv]
+  (let [root (test-support/temp-dir "millstrand-auto-run-pr-gate")
+        bin (io/file root "bin")
+        head "0123456789012345678901234567890123456789"]
+    (try
+      (spit (io/file root "millstrand-land-quality-head") (str head "\n"))
+      (write-executable!
+       (io/file bin "git")
+       (str "#!/bin/sh\n"
+            "case \"$*\" in\n"
+            "  'branch --show-current') echo auto/fixture-card ;;\n"
+            "  'status --porcelain --untracked-files=all') ;;\n"
+            "  'rev-parse --verify HEAD^{commit}'|'rev-parse --verify @{upstream}^{commit}') echo " head " ;;\n"
+            "  'rev-parse --git-path millstrand-land-quality-head') printf '%s\\n' \"$PWD/millstrand-land-quality-head\" ;;\n"
+            "  *) echo \"unexpected git call: $*\" >&2; exit 1 ;;\n"
+            "esac\n"))
+      (write-executable!
+       (io/file bin "gh")
+       (str "#!/bin/sh\n"
+            "case \"$*\" in\n"
+            "  *'--json body'*) printf '%s\\n' '## Summary\n## Walkthrough\n## Verification' ;;\n"
+            "  *) printf 'false\\tmain\\tauto/fixture-card\\t" head "\\n' ;;\n"
+            "esac\n"))
+      (run-command root bin argv)
+      (finally
+        (test-support/delete-tree! root)))))
+
 (deftest repository-auto-run-activates-only-auto-full-land
   (test-alpha/with-weaver-world
     [ctx (world-options)]
@@ -81,6 +130,7 @@
               review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
+              ready-pr-result (ready-pr-gate-result verify-pr-argv)
               handoff (workflow/step-view (role-step strands "handoff-worker"))
               finisher (workflow/step-view (role-step strands "finisher"))]
           (testing "delivery sequences implementation, quality, PR CI, review, and landing"
@@ -103,7 +153,8 @@
             (is (str/includes? (nth verify-pr-argv 2) "baseRefName"))
             (is (str/includes? (nth verify-pr-argv 2) "headRefOid"))
             (is (str/includes? (nth verify-pr-argv 2) "## Summary"))
-            (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty")))
+            (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty"))
+            (is (zero? (:exit ready-pr-result)) (:output ready-pr-result)))
           (testing "the landing finisher is a separate, initially blocked target"
             (is (not= (:id handoff) (:id finisher)))
             (is (= "step" (:role handoff) (:role finisher)))
