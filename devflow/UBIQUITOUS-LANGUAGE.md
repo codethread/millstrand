@@ -196,7 +196,7 @@ The agreed landing contract validates the final branch HEAD incorporating curren
 >
 > **Dev:** "Which doc explains what a `gate` is?"
 >
-> **Domain expert:** "This one — it owns the word. The workflow spool owns the behavior: when a gate closes, what `:by` it needs, which **executor** fulfills its **waiter**."
+> **Domain expert:** "This one — it owns the word. The workflow spool owns the behavior: when a gate closes, what `:by-identity` it needs, which **executor** fulfills its **waiter**."
 
 ## Flagged ambiguities
 

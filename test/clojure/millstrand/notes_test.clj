@@ -4,10 +4,11 @@
   by the sub-second `note/at` stamp."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [millhouse.spools.identity :as identity]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.notes.alpha :as notes]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.spools.test-support :refer [with-runtime]]
+            [millstrand.spools.test-support :as test-support :refer [with-runtime]]
             [millstrand.test.alpha :as test-alpha])
   (:import (java.time Instant)))
 
@@ -24,19 +25,77 @@
     (fn [rt _config-dir]
       (let [_ (set-time! rt (Instant/parse "2026-01-01T00:00:00.500Z"))
             target (target! rt)
-            {note-id :id target-out :target} (notes/note! rt target "remember this" {:by "alice" :round 3})
+            {note-id :id target-out :target}
+            (notes/note! rt target "remember this"
+                         {:identity/by-identity "unresolved-kind-otter" :round 3})
             note (weaver/show rt note-id)]
         (is (= target target-out))
         (testing "content attributes land"
           (is (= "remember this" (get-in note [:attributes :note/text])))
           (is (= "2026-01-01T00:00:00.500Z" (get-in note [:attributes :note/at])))
-          (is (= "alice" (get-in note [:attributes :note/by])))
+          (is (= "unresolved-kind-otter"
+                 (get-in note [:attributes :identity/by-identity])))
           (is (= 3 (get-in note [:attributes :note/round])))
+          (is (nil? (get-in note [:attributes :note/by])))
           (is (= "closed" (:state note))))
         (testing "the link is the notes edge, never note/for"
           (is (nil? (get-in note [:attributes :note/for])))
           (is (= [note-id]
-                 (mapv :from_strand_id (graph/incoming-edges rt [target] "notes")))))))))
+                 (mapv :from_strand_id (graph/incoming-edges rt [target] "notes")))))
+        (testing "content stays immutable after birth"
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (weaver/update! rt note-id
+                                       {:attributes {:note/text "rewritten"}})))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (weaver/update! rt note-id
+                                       {:attributes {:note/at "2026-01-02T00:00:00Z"}}))))))))
+
+(deftest note!-rejects-primitive-owned-decorations-in-string-and-keyword-forms
+  (with-runtime
+    (fn [rt _config-dir]
+      (let [target (target! rt)]
+        (doseq [key ["note/text" "note/at" "note/round"]]
+          (testing (str "string decoration " key " cannot override the primitive")
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"primitive-owned"
+                                  (notes/note! rt target "spoofed" {key "value"}))))
+          (testing (str "keyword decoration :" key " cannot override the primitive")
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"primitive-owned"
+                                  (notes/note! rt target "spoofed"
+                                               {(keyword key) "value"})))))))))
+
+(deftest note!-accepts-unresolved-identity-without-the-identity-module
+  (with-runtime
+    (fn [rt _config-dir]
+      (let [target (target! rt)
+            {note-id :id} (notes/note! rt target "needs later enrichment"
+                                       {:identity/by-identity "late-kind-otter"})
+            anonymous-id (:id (notes/note! rt target "anonymous" {}))]
+        (testing "the raw and absent actors need no registry lookup"
+          (is (= "late-kind-otter"
+                 (get-in (weaver/show rt note-id)
+                         [:attributes :identity/by-identity])))
+          (is (nil? (get-in (weaver/show rt anonymous-id)
+                            [:attributes :identity/by-identity])))
+          (is (empty? (graph/incoming-edges rt [note-id] "attributed"))))
+        (testing "the composed identity module enriches durable attribution"
+          (test-support/activate-spool! rt :millhouse/spools-identity
+                                        'millhouse.spools.identity)
+          (test-alpha/await-quiescent! rt)
+          (is (= :unresolved
+                 (:status (first (identity/inspect-attributions rt [note-id])))))
+          (let [actor (weaver/add!
+                       rt
+                       {:title "late-kind-otter"
+                        :attributes {:identity/session "true"
+                                     :identity/id "late-kind-otter"
+                                     :identity/harness "test"
+                                     :identity/native-session-id "late-native"}})]
+            (test-alpha/await-quiescent! rt)
+            (is (= [(:id actor)]
+                   (mapv :from_strand_id
+                         (graph/incoming-edges rt [note-id] "attributed"))))))))))
 
 (deftest note!-rejects-blank-text-and-missing-target
   (with-runtime
@@ -45,7 +104,16 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank"
                               (notes/note! rt target "   " {})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not found"
-                              (notes/note! rt "no-such-strand" "hi" {})))))))
+                              (notes/note! rt "no-such-strand" "hi" {})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"identity/by-identity"
+                              (notes/note! rt target "legacy actor" {:by "alice"})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"identity/by-identity"
+                              (notes/note! rt target "unqualified actor"
+                                           {:by-identity "alice"})))
+        (testing "a decorating identity still obeys attribution validation"
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank"
+                                (notes/note! rt target "decorated actor"
+                                             {"identity/by-identity" "   "}))))))))
 
 (deftest notes-orders-by-note-at-across-writers-and-filters-by-round
   (with-runtime
@@ -56,17 +124,17 @@
         ;; order (B, C, A), so a green read proves the sort keys on note/at and
         ;; the walk ignores decorating attrs rather than filtering on note/for.
         (set-time! rt (Instant/parse "2026-01-01T00:00:00.300Z"))
-        (notes/note! rt target "third by at" {:by "alice"})
+        (notes/note! rt target "third by at" {:identity/by-identity "alice"})
         (set-time! rt (Instant/parse "2026-01-01T00:00:00.100Z"))
-        (notes/note! rt target "first by at" {:by "bob" :round 2})
+        (notes/note! rt target "first by at" {:identity/by-identity "bob" :round 2})
         (set-time! rt (Instant/parse "2026-01-01T00:00:00.200Z"))
         (notes/note! rt target "second by at" {:kanban/card "true"})
         (testing "every writer's note returns, ordered by note/at"
           (is (= ["first by at" "second by at" "third by at"]
                  (mapv :note (notes/notes rt target {}))))
-          (is (= [{:note "first by at" :by "bob" :round 2}
+          (is (= [{:note "first by at" :by-identity "bob" :round 2}
                   {:note "second by at"}
-                  {:note "third by at" :by "alice"}]
+                  {:note "third by at" :by-identity "alice"}]
                  (mapv #(dissoc % :id :at) (notes/notes rt target {})))))
         (testing ":round filters to one writer's notes"
           (is (= ["first by at"] (mapv :note (notes/notes rt target {:round 2})))))))))
@@ -114,14 +182,45 @@
   (with-runtime
     (fn [rt _config-dir]
       (let [target (target! rt)
-            fragment (notes/writer-ref->prompt {:target target
-                                                :decoration {"note/kind" "decision"
-                                                             "kanban/card" "true"}
-                                                :by "alice"})]
+            fragment (notes/writer-ref->prompt
+                      {:target target
+                       :decoration {"note/kind" "decision"
+                                    "kanban/card" "true"}
+                       :identity/by-identity "alice"})]
         (testing "the fragment is the write instruction with a text placeholder"
-          (is (= (str "agent note " target
-                      " \"<text>\" --by alice --attr kanban/card=true --attr note/kind=decision")
+          (is (= (str "strand note '" target
+                      "' \"<text>\" --by-identity 'alice'"
+                      " --attr 'kanban/card=true' --attr 'note/kind=decision'")
                  fragment)))
+        (testing "the identity remains one shell word with spaces and flag syntax"
+          (is (= (str "strand note '" target
+                      "' \"<text>\" --by-identity 'young crane --reviewer'")
+                 (notes/writer-ref->prompt
+                  {:target target :identity/by-identity "young crane --reviewer"}))))
+        (testing "unsafe target text remains one shell word"
+          (is (= "strand note 'target; echo pwned' \"<text>\""
+                 (notes/writer-ref->prompt
+                  {:target "target; echo pwned"}))))
+        (testing "unsafe decoration key-value text remains one shell word"
+          (is (= (str "strand note 'target' \"<text>\""
+                      " --attr 'note/kind=decision; echo pwned'"
+                      " --attr 'unsafe key=value'")
+                 (notes/writer-ref->prompt
+                  {:target "target"
+                   :decoration {"note/kind" "decision; echo pwned"
+                                "unsafe key" "value"}}))))
+        (testing "embedded single quotes in the target are POSIX escaped"
+          (is (= "strand note 'target'\"'\"'s' \"<text>\""
+                 (notes/writer-ref->prompt {:target "target's"}))))
+        (testing "embedded single quotes in the identity are POSIX escaped"
+          (is (= "strand note 'target' \"<text>\" --by-identity 'O'\"'\"'Reilly'"
+                 (notes/writer-ref->prompt
+                  {:target "target" :identity/by-identity "O'Reilly"}))))
+        (testing "embedded single quotes in decoration values are POSIX escaped"
+          (is (= "strand note 'target' \"<text>\" --attr 'note/kind=writer'\"'\"'s'"
+                 (notes/writer-ref->prompt
+                  {:target "target"
+                   :decoration {"note/kind" "writer's"}}))))
         (testing "no read/agent notes string leaks into the fragment"
           (is (not (str/includes? fragment "agent notes")))))
       (testing "a malformed ref fails loudly naming the offending field"
@@ -130,6 +229,10 @@
                         (catch clojure.lang.ExceptionInfo e e))]
             (is (= :root (:field (ex-data ex))))))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"target"
-                              (notes/writer-ref->prompt {:decoration {} :by "x"})))
+                              (notes/writer-ref->prompt {:decoration {}
+                                                         :identity/by-identity "x"})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"decoration"
-                              (notes/writer-ref->prompt {:target "t" :decoration [:bad]})))))))
+                              (notes/writer-ref->prompt {:target "t" :decoration [:bad]}))))
+      (testing "the removed :by writer field fails loudly"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unsupported"
+                              (notes/writer-ref->prompt {:target "t" :by "x"})))))))

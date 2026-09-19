@@ -475,15 +475,15 @@
 
 (def ^:private note-arg-spec
   {:op "note"
-   :doc "Append a note to a target strand's memory; its note/text/note/at content is write-once."
+   :doc "Append a note to a target strand's memory; note/text and note/at are write-once, and note/text, note/at, and note/round are reserved from decorations."
    :hook-class :mutating
    :deadline-class :standard
-   :flags {:by {:type :string
-                :doc "Author attribution recorded on the note."}
+   :flags {:by-identity {:type :string
+                         :doc "Friendly actor stored as identity/by-identity on the note."}
            :round {:type :int
-                   :doc "Review round the note belongs to."}
+                   :doc "Review round the note belongs to; do not use --attr note/round."}
            :attr {:type :map
-                  :doc "Decorating attribute key=value on the note strand (e.g. note/kind); repeatable. Values may be payload references."}}
+                  :doc "Caller decoration key=value; repeatable; payload refs allowed; identity/by-identity must be non-blank; note/text, note/at, and note/round are reserved."}}
    :positionals [{:name :id :type :string :required? true :doc "Target strand id."}
                  {:name :text :type :string :required? true :doc "Note text."}]})
 
@@ -592,7 +592,7 @@
    'notes {:type :collection
            :items {:type :map
                    :required {:id :string :note :string :at :string}
-                   :optional {:by :string :round :integer}}}
+                   :optional {:by-identity :string :round :integer}}}
    'runbook {:type :map :required {:runbook :string}}})
 
 ;; --- op-level about/prime prose ---------------------------------------------
@@ -1049,14 +1049,20 @@
                     (patterns/explain rt nm)))))
 
 (millstrand/defop! note
-  "Append a note to a target strand's memory via the note primitive."
+  "Append a note to a target strand's memory via the note primitive.
+
+  The primitive-owned note/text, note/at, and note/round keys are reserved and
+  rejected as --attr decorations, including keyword-keyed trusted API input."
   (op-options 'note note-arg-spec)
   [ctx]
-  (let [{:keys [id text by round attr]} (:op/args ctx)]
+  (let [{:keys [id text by-identity round attr]} (:op/args ctx)]
     (check-attr-duplicates! (:op/argv ctx))
-    ;; note! folds every non-:by/:round opt into decorating attrs, so the
-    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
-    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
+    ;; note! folds every non-:identity/by-identity/:round opt into decorating
+    ;; attrs, so the string-keyed --attr map lands as ordinary strand attrs on
+    ;; the note.
+    (notes/note! (:op/runtime ctx) id text
+                 (merge (or attr {}) {:identity/by-identity by-identity
+                                      :round round}))))
 
 (millstrand/defop! notes
   "Return a target strand's notes in note/at order."

@@ -5,10 +5,10 @@
         ct.spools/harnesses {:git/url "https://github.com/codethread/harnesses.spool.git" :git/sha "d6bbcfa8633c0c6966c4cac386751157ad0b7063" :deps/root "."}
         millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/land"}
         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/workflow"}
-        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/kanban"}
+        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f17ad387b2825887b736cab597b33af84cff13cb" :deps/root "spools/kanban"}
         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/chime"}
         millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/cron"}
-        millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6" :deps/root "spools/identity"}}
+        millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "f17ad387b2825887b736cab597b33af84cff13cb" :deps/root "spools/identity"}}
  :aliases
  {:dev
   {:extra-paths ["."]
