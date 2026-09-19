@@ -14,12 +14,19 @@ The dispatcher accepts these optional card attributes:
 
 The repository allows only `auto-full-land`. Invalid overrides are recorded as a card error; they do not fall back to the defaults.
 
-For an eligible feature card, label it and place it in `pending`; add overrides only when the repository default is not the intended receipt:
+For the default receipt, make the card pending and label it last:
 
 ```text
-strand kanban label add FEATURE_ID auto-run
 strand update FEATURE_ID --attr kanban/lane=pending
-strand update FEATURE_ID --attr auto-run/seat=sol-high --attr auto-run/effort=high
+strand kanban label add FEATURE_ID auto-run
+```
+
+For a non-default receipt, set valid overrides before making the card eligible:
+
+```text
+strand update FEATURE_ID --attr auto-run/seat=SEAT --attr auto-run/effort=EFFORT
+strand update FEATURE_ID --attr kanban/lane=pending
+strand kanban label add FEATURE_ID auto-run
 strand workflow show auto-full-land
 ```
 
