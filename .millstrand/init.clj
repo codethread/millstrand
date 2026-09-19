@@ -83,13 +83,29 @@
                           :codethread/config-reviewers]
                   :required? true})
 
+;; --- repository automatic delivery ----------------------------------------
+;; The workflow and its dispatcher are repository policy. Keep the dispatcher
+;; after its workflow and shared Harnesses aliases, so configuration validates
+;; a fully registered delivery surface before it admits a card.
+(runtime/module! runtime :me/auto-run-workflows
+                 {:file "me/auto_run_workflows.clj"
+                  :after [:me/config
+                          :millhouse/spools-land]
+                  :required? true})
+(runtime/module! runtime :me/auto-run
+                 {:file "me/auto_run.clj"
+                  :after [:me/auto-run-workflows
+                          :millstrand/spools-harnesses]
+                  :required? true})
+
 ;; Activate the consolidated providers after every workflow definition so the
 ;; executor's initial scan can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
                   :after [:millhouse/spools-workflow
                           :millhouse/spools-land
-                          :me/config]
+                          :me/config
+                          :me/auto-run-workflows]
                   :required? true})
 
 ;; Activate the sole Harnesses agent executor after all shared and local
@@ -99,4 +115,5 @@
           :codethread/config
           :me/config
           :me/reviewers
+          :me/auto-run
           :millhouse/spools-workflow-providers])
