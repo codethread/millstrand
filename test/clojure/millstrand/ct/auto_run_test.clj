@@ -72,7 +72,7 @@
 
 (defn- ready-pr-gate-result
   "Run a materialized ready-PR gate against deterministic local command stubs."
-  [argv]
+  [argv state]
   (let [root (test-support/temp-dir "millstrand-auto-run-pr-gate")
         bin (io/file root "bin")
         head "0123456789012345678901234567890123456789"]
@@ -93,7 +93,7 @@
        (str "#!/bin/sh\n"
             "case \"$*\" in\n"
             "  *'--json body'*) printf '%s\\n' '## Summary\n## Walkthrough\n## Verification' ;;\n"
-            "  *) printf 'false\\tmain\\tauto/fixture-card\\t" head "\\n' ;;\n"
+            "  *) printf 'false\\t" state "\\tmain\\tauto/fixture-card\\t" head "\\n' ;;\n"
             "esac\n"))
       (run-command root bin argv)
       (finally
@@ -130,9 +130,12 @@
               review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
-              ready-pr-result (ready-pr-gate-result verify-pr-argv)
-              handoff (workflow/step-view (role-step strands "handoff-worker"))
-              finisher (workflow/step-view (role-step strands "finisher"))]
+              ready-pr-result (ready-pr-gate-result verify-pr-argv "OPEN")
+              closed-pr-result (ready-pr-gate-result verify-pr-argv "CLOSED")
+              handoff-step (role-step strands "handoff-worker")
+              finisher-step (role-step strands "finisher")
+              handoff (workflow/step-view handoff-step)
+              finisher (workflow/step-view finisher-step)]
           (testing "delivery sequences implementation, quality, PR CI, review, and landing"
             (is (= ["Implement and verify the assigned feature"]
                    (mapv :title (:ready result))))
@@ -150,13 +153,18 @@
                          (graph/outgoing-edges runtime [(:id verify-pr)] "depends-on"))))
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
             (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
+            (is (str/includes? (nth verify-pr-argv 2) "state"))
             (is (str/includes? (nth verify-pr-argv 2) "baseRefName"))
             (is (str/includes? (nth verify-pr-argv 2) "headRefOid"))
             (is (str/includes? (nth verify-pr-argv 2) "## Summary"))
             (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty"))
-            (is (zero? (:exit ready-pr-result)) (:output ready-pr-result)))
+            (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
+            (is (not (zero? (:exit closed-pr-result))) (:output closed-pr-result)))
           (testing "the landing finisher is a separate, initially blocked target"
             (is (not= (:id handoff) (:id finisher)))
+            (is (= [(:id handoff-step)]
+                   (mapv :to_strand_id
+                         (graph/outgoing-edges runtime [(:id finisher-step)] "depends-on"))))
             (is (= "step" (:role handoff) (:role finisher)))
             (is (str/includes? (:instruction handoff) "FINISHER STEP ID"))
             (is (str/includes? (:instruction handoff) "auto-land-finisher/FINISHER_STEP_ID"))
