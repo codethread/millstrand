@@ -109,10 +109,11 @@
                        (every? (fn [[k v]] (and (string? k) (string? v))) decoration)))
       (throw (ex-info "writer-ref decoration must be a map of strings"
                       {:field :decoration :value decoration})))
-    (str "strand note " target " \"<text>\""
+    (str "strand note " (shell-quote target) " \"<text>\""
          (when by-identity (str " --by-identity " (shell-quote by-identity)))
          ;; sort keeps the rendered flags deterministic across map orderings
-         (str/join (for [[k v] (sort decoration)] (str " --attr " k "=" v))))))
+         (str/join (for [[k v] (sort decoration)]
+                     (str " --attr " (shell-quote (str k "=" v))))))))
 
 ;; --- seam specs ---------------------------------------------------------------
 

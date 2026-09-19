@@ -173,14 +173,27 @@
                                     "kanban/card" "true"}
                        :identity/by-identity "alice"})]
         (testing "the fragment is the write instruction with a text placeholder"
-          (is (= (str "strand note " target
-                      " \"<text>\" --by-identity 'alice' --attr kanban/card=true --attr note/kind=decision")
+          (is (= (str "strand note '" target
+                      "' \"<text>\" --by-identity 'alice'"
+                      " --attr 'kanban/card=true' --attr 'note/kind=decision'")
                  fragment)))
         (testing "the identity remains one shell word with spaces and flag syntax"
-          (is (= (str "strand note " target
-                      " \"<text>\" --by-identity 'young crane --reviewer'")
+          (is (= (str "strand note '" target
+                      "' \"<text>\" --by-identity 'young crane --reviewer'")
                  (notes/writer-ref->prompt
                   {:target target :identity/by-identity "young crane --reviewer"}))))
+        (testing "unsafe target text remains one shell word"
+          (is (= "strand note 'target; echo pwned' \"<text>\""
+                 (notes/writer-ref->prompt
+                  {:target "target; echo pwned"}))))
+        (testing "unsafe decoration key-value text remains one shell word"
+          (is (= (str "strand note 'target' \"<text>\""
+                      " --attr 'note/kind=decision; echo pwned'"
+                      " --attr 'unsafe key=value'")
+                 (notes/writer-ref->prompt
+                  {:target "target"
+                   :decoration {"note/kind" "decision; echo pwned"
+                                "unsafe key" "value"}}))))
         (testing "no read/agent notes string leaks into the fragment"
           (is (not (str/includes? fragment "agent notes")))))
       (testing "a malformed ref fails loudly naming the offending field"
