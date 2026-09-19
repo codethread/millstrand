@@ -90,10 +90,10 @@ Physically deletes one strand and its incident edges. Returns `{:burned [<id>] :
 #### `note` — BAT-C9
 
 ```
-strand note <id> <text> [--by writer-id] [--round round]
+strand note <id> <text> [--by-identity actor] [--round round]
 ```
 
-Appends a closed note strand to an existing target strand. The target id and note text are required positionals. `--by` records the writer id when present, and `--round` records the writer's round or pass tag when present. The handler stores note data on the note strand and attaches it to the target with an outgoing `notes` edge from the note to the target. It returns `{"id": <note-id>, "target": <target-id>}`. `target` is an output projection from that edge, not a stored note attribute.
+Appends a closed note strand to an existing target strand. The target id and note text are required positionals. `--by-identity` stores a non-blank friendly actor string as `identity/by-identity` when present. It does not look up or require an active Identity spool. `--round` records the writer's round or pass tag when present. The handler stores note data on the note strand and attaches it to the target with an outgoing `notes` edge from the note to the target. It returns `{"id": <note-id>, "target": <target-id>}`. `target` is an output projection from that edge, not a stored note attribute. The removed `--by` flag is rejected.
 
 #### `weave` — BAT-C10
 
@@ -162,7 +162,7 @@ The cookbook shows the matching `await` command for each query. Attribute-condit
 strand notes <id> [--round round]
 ```
 
-Returns note entries attached to one target strand, ordered by the primitive's note order. The read walks incoming `notes` edges to the target, so it returns notes from every writer that used the primitive for that target. `--round` filters the returned notes to entries whose recorded round matches the flag value. Each entry is `{"id": <note-id>, "note": <text>, "at": <timestamp>, "by": <writer-id>?, "round": <round>?}`; `by` and `round` are omitted when absent.
+Returns note entries attached to one target strand, ordered by the primitive's note order. The read walks incoming `notes` edges to the target, so it returns notes from every writer that used the primitive for that target. `--round` filters the returned notes to entries whose recorded round matches the flag value. Each entry is `{"id": <note-id>, "note": <text>, "at": <timestamp>, "by-identity": <actor>?, "round": <round>?}`; `by-identity` and `round` are omitted when absent.
 
 #### `subgraph` — BAT-C15
 

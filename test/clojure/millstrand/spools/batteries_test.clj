@@ -172,7 +172,9 @@
             first-row (check! 'add (weaver/op! rt 'add ["First"]))
             replacement (weaver/add! rt {:title "Replacement" :attributes {}})
             burnable (weaver/add! rt {:title "Burnable" :attributes {}})
-            note (check! 'note (weaver/op! rt 'note [(:id first-row) "covered" "--by" "inuli"]))]
+            note (check! 'note
+                         (weaver/op! rt 'note [(:id first-row) "covered"
+                                               "--by-identity" "inuli"]))]
         (check! 'update (weaver/op! rt 'update [(:id first-row) "--title" "Updated"]))
         (check! 'show (weaver/op! rt 'show [(:id first-row)]))
         (check! 'list (weaver/op! rt 'list []))
@@ -641,7 +643,8 @@
   (with-batteries
     (fn [rt]
       (let [target (weaver/add! rt {:title "Design" :attributes {}})
-            written (weaver/op! rt 'note [(:id target) "first pass looks solid" "--by" "gpt"])]
+            written (weaver/op! rt 'note [(:id target) "first pass looks solid"
+                                          "--by-identity" "gpt"])]
         (testing "note returns the primitive's id/target shape"
           (is (match? {:id string? :target (:id target)} written))
           (is (= #{:id :target} (set (keys written)))))
@@ -656,13 +659,22 @@
         (testing "blank text fails loudly in the primitive"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank"
                                 (weaver/op! rt 'note [(:id target) "   "]))))
+        (testing "an omitted actor leaves the canonical attribute absent"
+          (let [anonymous (weaver/op! rt 'note [(:id target) "anonymous"])]
+            (is (nil? (get-in (weaver/show rt (:id anonymous))
+                              [:attributes :identity/by-identity])))))
         (testing "--attr decoration round-trips as ordinary attrs on the note strand"
           (let [written (weaver/op! rt 'note [(:id target) "decision text"
-                                              "--by" "gpt" "--attr" "note/kind=decision"])
+                                              "--by-identity" "gpt"
+                                              "--attr" "note/kind=decision"])
                 stored (:attributes (weaver/show rt (:id written)))]
             (is (= "decision" (:note/kind stored)))
-            (is (= "gpt" (:note/by stored)))
+            (is (= "gpt" (:identity/by-identity stored)))
             (is (= "decision text" (:note/text stored)))))
+        (testing "the removed --by flag fails in the parser"
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown flag --by"
+                                (weaver/op! rt 'note [(:id target) "legacy"
+                                                      "--by" "gpt"]))))
         (testing "duplicate --attr key fails loudly"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Duplicate attribute key"
                                 (weaver/op! rt 'note [(:id target) "t"
@@ -674,17 +686,22 @@
       (let [target (weaver/add! rt {:title "Reviewed" :attributes {}})]
         ;; two writers: the CLI verb and a direct primitive caller with its own
         ;; decorating attrs — the read walks the edge regardless of writer.
-        (weaver/op! rt 'note [(:id target) "verb note" "--by" "opus" "--round" "1"])
+        (weaver/op! rt 'note [(:id target) "verb note"
+                              "--by-identity" "opus" "--round" "1"])
         (notes/note! rt (:id target) "primitive note"
-                     {:by "gpt" :round 2 "reviewer/seat" "panel"})
+                     {:identity/by-identity "gpt" :round 2 "reviewer/seat" "panel"})
         (let [rows (weaver/op! rt 'notes [(:id target)])]
           (testing "both writers' notes come back, in note/at order"
             ;; rounds are integers from both surfaces (change-review-1a1d1cc7):
             ;; the CLI flag parses to int and the primitive rejects strings.
-            (is (match? [{:id string? :note "verb note" :at string? :by "opus" :round 1}
-                         {:id string? :note "primitive note" :at string? :by "gpt" :round 2}]
+            (is (match? [{:id string? :note "verb note" :at string?
+                          :by-identity "opus" :round 1}
+                         {:id string? :note "primitive note" :at string?
+                          :by-identity "gpt" :round 2}]
                         rows))
-            (is (every? #(= #{:id :note :at :by :round} (set (keys %))) rows)))
+            (is (every? #(= #{:id :note :at :by-identity :round}
+                            (set (keys %)))
+                        rows)))
           (testing "--round filters to one review round"
             (is (= ["primitive note"] (mapv :note (weaver/op! rt 'notes [(:id target) "--round" "2"]))))))
         (testing "missing required id fails in the parser"

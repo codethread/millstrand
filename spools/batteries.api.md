@@ -43,7 +43,7 @@ Block until a named query's result count is inside the requested band.
 ## <a name="millstrand.spools.batteries/batteries-glossary-seed">`batteries-glossary-seed`</a>
 
 Seed the process-lifetime Batteries failure glossary.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1108-L1110">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1111-L1113">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/blockers-active">`blockers-active`</a>
 
@@ -112,7 +112,7 @@ Append a note to a target strand's memory via the note primitive.
 Function.
 
 Return a target strand's notes in note/at order.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1063-L1063">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1066-L1066">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/pattern">`pattern`</a>
 
@@ -167,7 +167,7 @@ List lean-projected ready strands, optionally from a named query result set.
 Function.
 
 Return the batteries strand-tracking runbook.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1082-L1082">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1085-L1085">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/seed-batteries-glossary!">`seed-batteries-glossary!`</a>
 
@@ -180,7 +180,7 @@ Function.
 Seed Batteries' process-lifetime failure glossary.
 
 Input conforms to `::seed-context`; the result conforms to `::seed-result`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1095-L1106">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1098-L1109">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/set-read-limit!">`set-read-limit!`</a>
 

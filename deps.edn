@@ -31,7 +31,7 @@
                                                      :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
                                                      :deps/root "spools/workflow"}
                          millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                   :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
+                                                   :git/sha "f17ad387b2825887b736cab597b33af84cff13cb"
                                                    :deps/root "spools/kanban"}
                          millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git"
                                                   :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
@@ -40,7 +40,7 @@
                                                  :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
                                                  :deps/root "spools/cron"}
                          millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                     :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
+                                                     :git/sha "f17ad387b2825887b736cab597b33af84cff13cb"
                                                      :deps/root "spools/identity"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}

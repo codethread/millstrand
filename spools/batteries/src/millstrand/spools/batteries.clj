@@ -478,8 +478,8 @@
    :doc "Append a note to a target strand's memory; its note/text/note/at content is write-once."
    :hook-class :mutating
    :deadline-class :standard
-   :flags {:by {:type :string
-                :doc "Author attribution recorded on the note."}
+   :flags {:by-identity {:type :string
+                         :doc "Friendly actor stored as identity/by-identity on the note."}
            :round {:type :int
                    :doc "Review round the note belongs to."}
            :attr {:type :map
@@ -592,7 +592,7 @@
    'notes {:type :collection
            :items {:type :map
                    :required {:id :string :note :string :at :string}
-                   :optional {:by :string :round :integer}}}
+                   :optional {:by-identity :string :round :integer}}}
    'runbook {:type :map :required {:runbook :string}}})
 
 ;; --- op-level about/prime prose ---------------------------------------------
@@ -1052,11 +1052,14 @@
   "Append a note to a target strand's memory via the note primitive."
   (op-options 'note note-arg-spec)
   [ctx]
-  (let [{:keys [id text by round attr]} (:op/args ctx)]
+  (let [{:keys [id text by-identity round attr]} (:op/args ctx)]
     (check-attr-duplicates! (:op/argv ctx))
-    ;; note! folds every non-:by/:round opt into decorating attrs, so the
-    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
-    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
+    ;; note! folds every non-:identity/by-identity/:round opt into decorating
+    ;; attrs, so the string-keyed --attr map lands as ordinary strand attrs on
+    ;; the note.
+    (notes/note! (:op/runtime ctx) id text
+                 (merge (or attr {}) {:identity/by-identity by-identity
+                                      :round round}))))
 
 (millstrand/defop! notes
   "Return a target strand's notes in note/at order."
