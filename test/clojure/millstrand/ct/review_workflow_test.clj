@@ -20,9 +20,13 @@
 (def ^:private workspace-deps
   (:deps (edn/read-string (slurp ".millstrand/deps.edn"))))
 (def ^:private review-world-deps
-  (pr-str
-   {:deps
-    {'codethread/config (get workspace-deps 'codethread/config)}}))
+  (let [config (get workspace-deps 'codethread/config)
+        identity-coordinate (get workspace-deps 'millhouse.spools/identity)]
+    (pr-str
+     {:deps
+      {'codethread/config (assoc config
+                                 :exclusions ['millhouse.spools/identity])
+       'millhouse.spools/identity identity-coordinate}})))
 (def ^:private review-world-init
   (str
    "(require '[ct.spools.codethread.bootstrap :as codethread]\n"
