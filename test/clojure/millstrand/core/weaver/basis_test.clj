@@ -8,19 +8,24 @@
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.pool-basis :as pool-basis]))
 
-(defn- inspect-basis!
-  [workspace & arguments]
-  (let [command (into ["clojure" "-Srepro" "-X:deps" "basis"
-                       ":user" "nil" ":project" "\"deps.edn\""]
-                      arguments)
-        process (-> (ProcessBuilder. ^java.util.List command)
+(defn- read-edn-process!
+  [workspace command]
+  (let [process (-> (ProcessBuilder. ^java.util.List command)
                     (.directory workspace)
-                    (.redirectErrorStream true)
+                    (.redirectError java.lang.ProcessBuilder$Redirect/INHERIT)
                     (.start))
         output (slurp (.getInputStream process))
         exit (.waitFor process)]
     (is (zero? exit) (str "basis inspection failed: " output))
     (edn/read-string output)))
+
+(defn- inspect-basis!
+  [workspace & arguments]
+  (read-edn-process!
+   workspace
+   (into ["clojure" "-Srepro" "-X:deps" "basis"
+          ":user" "nil" ":project" "\"deps.edn\""]
+         arguments)))
 
 (defn- workspace!
   ([project extra]
@@ -63,6 +68,12 @@
     (spit (io/file root "deps.edn") "{:paths [\"src\"]}\n")
     (spit source (str "(ns " namespace-name ")\n"))
     root))
+
+(deftest child-process-stderr-does-not-corrupt-edn-stdout
+  (is (= {:basis "ok"}
+         (read-edn-process! (io/file ".")
+                            ["sh" "-c"
+                             "printf 'basis diagnostic\\n' >&2; printf '{:basis \"ok\"}'"]))))
 
 (deftest dns-s9-01-and-02-compose-workspace-sources-without-user-deps
   (let [workspace (workspace!

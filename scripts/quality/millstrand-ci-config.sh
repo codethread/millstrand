@@ -20,8 +20,18 @@ if ! awk '
     next
   }
 
-  in_on && /^  (pull_request|push):[[:space:]]*$/ {
-    forbidden_triggers++
+  in_on && /^  pull_request:[[:space:]]*$/ {
+    pull_request_triggers++
+    next
+  }
+
+  in_on && /^    branches:[[:space:]]*$/ {
+    pull_request_branch_blocks++
+    next
+  }
+
+  in_on && /^      - main[[:space:]]*$/ {
+    pull_request_main_branches++
     next
   }
 
@@ -31,10 +41,11 @@ if ! awk '
 
   END {
     exit !(on_blocks == 1 && dispatch_triggers == 1 &&
-           forbidden_triggers == 0 && unexpected_triggers == 0)
+           pull_request_triggers == 1 && pull_request_branch_blocks == 1 &&
+           pull_request_main_branches == 1 && unexpected_triggers == 0)
   }
 ' "$quality_workflow"; then
-  echo "millstrand CI config: Quality Gates must be workflow_dispatch-only" >&2
+  echo "millstrand CI config: Quality Gates must run on pull requests to main and workflow dispatch" >&2
   exit 1
 fi
 
