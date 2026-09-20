@@ -25,10 +25,10 @@
          ;; Keep the test classpath aligned with the workspace's direct
          ;; Millhouse consumer contract.
          :override-deps {millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                 :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
+                                                 :git/sha "bd96f5357a335bd17cd22042da1be5bd2200f807"
                                                  :deps/root "spools/land"}
                          millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                     :git/sha "d86740a5bc8a99ee1637df995d85ff725be31dc6"
+                                                     :git/sha "bd96f5357a335bd17cd22042da1be5bd2200f807"
                                                      :deps/root "spools/workflow"}
                          millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
                                                    :git/sha "f17ad387b2825887b736cab597b33af84cff13cb"

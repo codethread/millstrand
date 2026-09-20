@@ -165,7 +165,7 @@
                                               (str/join (repeat 40 "b")))
                            :files ["src/example.clj"]})
             run-id "millstrand-review"
-            advance #(workflow/complete! run-id {:by "test-agent"})]
+            advance #(workflow/complete! run-id {:by-identity "test-agent"})]
         (workflow/start! run-id
                          (workflow-definition 'me.workflows.review/millstrand-review)
                          params)
@@ -213,7 +213,7 @@
           (is (= [(:id review-gate)]
                  (mapv :id (workflow/ready run-id)))))
         (workflow/complete! run-id
-                            {:by "coordinator-run"
+                            {:by-identity "coordinator-run"
                              :attributes {"harness/result" successful-review}})
         (let [verification-gate (first (workflow/ready run-id))
               gate-strand (weaver/show rt (:id verification-gate))]
@@ -353,10 +353,10 @@
           (workflow/start! run-id
                            (workflow-definition 'me.workflows.review/millstrand-review)
                            params)
-          (workflow/complete! run-id {:by "test-agent"})
-          (workflow/complete! run-id {:by "test-agent"})
+          (workflow/complete! run-id {:by-identity "test-agent"})
+          (workflow/complete! run-id {:by-identity "test-agent"})
           (workflow/complete! run-id
-                              {:by "coordinator-run"
+                              {:by-identity "coordinator-run"
                                :attributes {"harness/result" result}})
           (let [verification-gate (first (workflow/ready run-id))
                 verify! #(review/verify-automatic-review!
@@ -388,11 +388,11 @@
                              (get evidence "selection")))
                       (workflow/complete!
                        run-id
-                       {:by "code-executor"
+                       {:by-identity "code-executor"
                         :attributes {"code/result" evidence}})
                       (is (= "Record the automatic review outcome"
                              (:title (first (workflow/ready run-id)))))
-                      (workflow/complete! run-id {:by "test-agent"})
+                      (workflow/complete! run-id {:by-identity "test-agent"})
                       (is (= "Validate the resulting branch HEAD"
                              (:title (first (workflow/ready run-id))))))))
                 (let [failure (try
