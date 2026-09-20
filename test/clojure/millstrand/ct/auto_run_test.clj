@@ -144,6 +144,7 @@
               verify-pr (titled-strand strands "Verify the ready PR and review package")
               review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
+              ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
               ready-pr-result (ready-pr-gate-result verify-pr-argv {})
               rejected-pr-results
@@ -188,6 +189,8 @@
                    (mapv :to_strand_id
                          (graph/outgoing-edges runtime [(:id prepare-pr)] "depends-on"))))
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
+            (is (= ["pr-checks" "allow-empty" "auto/fixture-card" "120" "5"]
+                   (subvec ci-argv (- (count ci-argv) 5))))
             (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
             (is (str/includes? (nth verify-pr-argv 2) "state"))
             (is (str/includes? (nth verify-pr-argv 2) "baseRefName"))
