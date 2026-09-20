@@ -102,7 +102,7 @@
        5400 failure-instruction)
       (land-support/shell-gate :ci "Wait for the PR checks" [:quality]
                                (fn [{:keys [branch]}]
-                                 (land-support/pr-checks-argv "allow-empty" branch))
+                                 (land-support/pr-checks-argv "required" branch))
                                2100 failure-instruction)
       (land-support/shell-gate
        :verify-pr "Verify the ready PR and review package" [:ci]

@@ -189,7 +189,7 @@
                    (mapv :to_strand_id
                          (graph/outgoing-edges runtime [(:id prepare-pr)] "depends-on"))))
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
-            (is (= ["pr-checks" "allow-empty" "auto/fixture-card" "120" "5"]
+            (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
             (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
             (is (str/includes? (nth verify-pr-argv 2) "state"))
