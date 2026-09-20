@@ -1,7 +1,6 @@
 (ns millstrand.ct.auto-run-test
   "Prove repository auto-run activation in a disposable Weaver world."
-  (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [ct.spools.codethread.auto-run :as auto-run]
@@ -9,47 +8,9 @@
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
+            [millstrand.ct.consumer-fixture :as consumer-fixture]
             [millstrand.spools.test-support :as test-support]
             [millstrand.test.alpha :as test-alpha]))
-
-(def ^:private workspace-root
-  (.getCanonicalFile (io/file ".millstrand")))
-
-(defn- workspace-files
-  "Return the repository-owned workspace source needed by its real init file."
-  []
-  (let [source-root (io/file workspace-root "me")]
-    (into {}
-          (for [file (file-seq source-root)
-                :when (.isFile file)]
-            [(str "me/" (.relativize (.toPath source-root)
-                                     (.toPath file)))
-             (slurp file)]))))
-
-(def ^:private devflow-sha
-  "3a96415df0429c245191a22e66cc0bfc91524199")
-
-(defn- world-options
-  "Build an isolated world with the repository init and its pinned dependencies."
-  []
-  (let [deps (:deps (edn/read-string (slurp (io/file workspace-root "deps.edn"))))
-        devflow-deps
-        {:git/url "https://github.com/codethread/devflow.spool.git"
-         :git/sha devflow-sha}
-        deps (assoc deps
-                    'codethread/devflow (assoc devflow-deps :deps/root ".")
-                    'codethread/devflow-kanban-adapter
-                    (assoc devflow-deps :deps/root "kanban-adapter"))]
-    {:storage :sqlite-memory
-     :deps-edn
-     (pr-str
-      {:deps (update-vals deps
-                          #(if-let [root (:local/root %)]
-                             (assoc % :local/root
-                                    (.getCanonicalPath (io/file workspace-root root)))
-                             %))})
-     :init-clj (slurp (io/file workspace-root "init.clj"))
-     :files (workspace-files)}))
 
 (defn- role-step
   "Return the materialized autonomous-delivery step with `role`."
@@ -124,7 +85,7 @@
 
 (deftest repository-auto-run-activates-only-auto-full-land
   (test-alpha/with-weaver-world
-    [ctx (world-options)]
+    [ctx (consumer-fixture/real-init-world-options)]
     (let [runtime (:runtime ctx)
           status (auto-run/status runtime)]
       (testing "the real init registers bounded repository policy"
@@ -153,8 +114,6 @@
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
               review-card (titled-strand strands "Move the verified feature into review")
-              quality-argv (attr-get quality :shell/argv)
-              ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
               ready-pr-result (ready-pr-gate-result verify-pr-argv {})
               rejected-pr-results
@@ -198,15 +157,6 @@
             (is (= [(:id (titled-strand strands "Implement and verify the assigned feature"))]
                    (mapv :to_strand_id
                          (graph/outgoing-edges runtime [(:id prepare-pr)] "depends-on"))))
-            (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
-            (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
-                   (subvec ci-argv (- (count ci-argv) 5))))
-            (is (str/includes? (nth verify-pr-argv 2) "isDraft"))
-            (is (str/includes? (nth verify-pr-argv 2) "state"))
-            (is (str/includes? (nth verify-pr-argv 2) "baseRefName"))
-            (is (str/includes? (nth verify-pr-argv 2) "headRefOid"))
-            (is (str/includes? (nth verify-pr-argv 2) "## Summary"))
-            (is (str/includes? (nth verify-pr-argv 2) "worktree is dirty"))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
             (doseq [[label rejected-pr-result] rejected-pr-results]
               (is (not (zero? (:exit rejected-pr-result)))

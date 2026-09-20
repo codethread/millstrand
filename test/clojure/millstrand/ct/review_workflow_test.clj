@@ -1,7 +1,6 @@
 (ns millstrand.ct.review-workflow-test
   "Exercise Millstrand's full review and development-workflow handoffs."
   (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
@@ -11,22 +10,13 @@
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.ct.consumer-fixture :as consumer-fixture]
             [millstrand.spools.test-support :as test-support :refer [with-runtime]]
             [millstrand.test.alpha :as test-alpha]))
 
 (def ^:private work
   {:feature "feature-task" :branch "feature/review" :worktree "/tmp/review-fixture"})
 
-(def ^:private workspace-deps
-  (:deps (edn/read-string (slurp ".millstrand/deps.edn"))))
-(def ^:private review-world-deps
-  (let [config (get workspace-deps 'codethread/config)
-        identity-coordinate (get workspace-deps 'millhouse.spools/identity)]
-    (pr-str
-     {:deps
-      {'codethread/config (assoc config
-                                 :exclusions ['millhouse.spools/identity])
-       'millhouse.spools/identity identity-coordinate}})))
 (def ^:private review-world-init
   (str
    "(require '[ct.spools.codethread.bootstrap :as codethread]\n"
@@ -408,12 +398,10 @@
                   (is (str/includes? (ex-message failure)
                                      error-fragment)))))))))))
 
-(deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "6b5ad39d8711a033dc7f33fd52c78901393ea44e"
-         (get-in workspace-deps ['ct.spools/harnesses :git/sha])))
+(deftest current-harnesses-review-policy-selects-in-a-disposable-world
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
-          :deps-edn review-world-deps
+          :deps-edn (consumer-fixture/deps-edn)
           :init-clj review-world-init
           :files
           {"me/agents/reviewers.clj" reviewer-source
