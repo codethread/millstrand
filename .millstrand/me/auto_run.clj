@@ -9,13 +9,13 @@
 (millstrand/use-op! auto-run/auto-run)
 
 (defn open!
-  "Configure two Sol-high automatic delivery slots for this repository."
+  "Configure two Sol automatic delivery slots for this repository."
   [{:keys [runtime]}]
   (auto-run/configure!
    runtime
    {:repo (.getCanonicalPath
            (.getParentFile (io/file (get-in runtime [:metadata :config-dir]))))
-    :seat "sol-high"
+    :seat "sol"
     :effort "high"
     :workflow "auto-full-land"
     :workflows #{"auto-full-land"}

@@ -1,6 +1,6 @@
 # Automatic delivery
 
-This repository can admit eligible feature cards into the repository-owned `auto-full-land` workflow. The dispatcher is activated by `.millstrand/init.clj`. It starts at most two workers and uses the `sol-high` seat at high effort.
+This repository can admit eligible feature cards into the repository-owned `auto-full-land` workflow. The dispatcher is activated by `.millstrand/init.clj`. It starts at most two workers and uses the `sol` seat at high effort.
 
 ## Opt in a card
 
