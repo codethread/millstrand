@@ -1,7 +1,7 @@
 {:paths ["."]
  :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
-        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ef277fc06768c9a842ed6d6313fc85f950855852" :deps/root "spools/config"}
+        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "45ebeb292e11ffcd32f390788d4f85c66becb307" :deps/root "spools/config"}
         ct.spools/harnesses {:git/url "https://github.com/codethread/harnesses.spool.git" :git/sha "6b5ad39d8711a033dc7f33fd52c78901393ea44e" :deps/root "."}
         millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "bd96f5357a335bd17cd22042da1be5bd2200f807" :deps/root "spools/land"}
         millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "bd96f5357a335bd17cd22042da1be5bd2200f807" :deps/root "spools/workflow"}

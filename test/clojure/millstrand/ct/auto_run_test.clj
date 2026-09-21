@@ -129,7 +129,7 @@
           status (auto-run/status runtime)]
       (testing "the real init registers bounded repository policy"
         (is (:enabled status))
-        (is (= "sol-high" (get-in status [:config :seat])))
+        (is (= "sol" (get-in status [:config :seat])))
         (is (= "high" (get-in status [:config :effort])))
         (is (= "auto-full-land" (get-in status [:config :workflow])))
         (is (= ["auto-full-land"] (get-in status [:config :workflows])))
@@ -143,7 +143,7 @@
                                        :feature "Disposable feature"
                                        :branch "auto/fixture-card"
                                        :worktree (:config-dir ctx)
-                                       :seat "sol-high"
+                                       :seat "sol"
                                        :effort "high"})
               root (workflow/current-root run-id)
               strands (:strands (graph/subgraph runtime [(:id root)]))
