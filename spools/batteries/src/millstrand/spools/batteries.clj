@@ -2,7 +2,7 @@
   "Shipped core strand command surface as parser-backed weaver ops.
 
   Batteries declares the everyday strand operations — add/update/show/supersede/
-  burn/list/ready/subgraph, the create-only `weave` op, and the read-only
+  burn/list/ready/subgraph, the transactional `weave` op, and the read-only
   `query`/`pattern` registry-introspection ops — through
   `millstrand.api.millstrand.alpha/defop!`. Their
   `:arg-spec` is parsed by `millstrand.api.cli.alpha`. Each op delegates to the same
