@@ -42,7 +42,7 @@
                     'codethread/devflow (assoc devflow-deps :deps/root ".")
                     'codethread/devflow-kanban-adapter
                     (assoc devflow-deps :deps/root "kanban-adapter"))]
-    {:storage :sqlite-memory
+    {:storage :sqlite-file
      :deps-edn
      (pr-str
       {:deps (update-vals deps
