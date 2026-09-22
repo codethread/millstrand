@@ -259,5 +259,5 @@ Patch one strand's title, state, attributes, and outgoing edges.
 
 Function.
 
-Apply a registered create-only weave pattern to one JSON input value.
+Apply a registered weave pattern atomically to one JSON input value.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1018-L1018">Source</a></sub></p>

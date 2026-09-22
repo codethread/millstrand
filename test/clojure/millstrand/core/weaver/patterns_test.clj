@@ -604,6 +604,48 @@
           (is (map? (:contract data)))
           (is (map? (:template data))))))))
 
+(s/def ::target string?)
+(s/def ::update-input (s/keys :req-un [::title ::target]))
+
+(defn update-pattern
+  "Create evidence and update its existing target in one pattern."
+  [{:keys [input]}]
+  {:refs {:target (:target input)}
+   :strands [{:ref :evidence :title (:title input)}
+             {:ref :target :title (:title input) :attributes {"storyPoints" "8"}}]
+   :edges [{:op :upsert :from :evidence :to :target :type "references"}]})
+
+(deftest weave-updates-existing-strands-atomically
+  (with-runtime
+    (fn [rt _]
+      (weaver/init rt)
+      (patterns/register-pattern! rt :update
+                                  'millstrand.core.weaver.patterns-test/update-pattern
+                                  ::update-input)
+      (let [target (weaver/add! rt {:title "Work"})]
+        (hooks/register-hook! rt :parse #{:attributes/normalize}
+                              'millstrand.core.weaver.patterns-test/parse-story-points-hook {})
+        (hooks/register-hook! rt :capture #{:batch/apply-before-commit}
+                              'millstrand.core.weaver.patterns-test/capture-hook {})
+        (reset! hook-contexts [])
+        (let [result (patterns/weave! rt :update {:title "Evidence" :target (:id target)})
+              gate (first (filter #(= :batch/apply-before-commit (:hook/type %)) @hook-contexts))]
+          (is (= 1 (count (:created result)) (count (:updated result))))
+          (is (= (:id target) (get-in result [:refs :target])))
+          (is (= {:storyPoints 8} (:attributes (weaver/show rt (:id target)))))
+          (is (= (:id target) (get-in result [:edges 0 :after :to_strand_id])))
+          (is (= :weave (:request/operation gate)))
+          (is (= (:updated result) (:batch/updated gate))))
+        (let [before (weaver/list rt)]
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (patterns/weave! rt :update {:title "Missing target" :target "absent"})))
+          (is (= before (weaver/list rt)))
+          (hooks/register-hook! rt :reject #{:batch/apply-before-commit}
+                                'millstrand.core.weaver.patterns-test/rejecting-hook {})
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (patterns/weave! rt :update {:title "Rejected" :target (:id target)})))
+          (is (= before (weaver/list rt))))))))
+
 (deftest weaver-weave-create-only-contract-remains-compatible
   (with-runtime
     (fn [rt _]

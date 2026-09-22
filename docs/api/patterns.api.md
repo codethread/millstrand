@@ -4,7 +4,7 @@
 
 Explicit-runtime API for registering, inspecting, and invoking weave patterns.
 
-Callers own runtime selection and pass the target weaver runtime as the first argument. This namespace owns pattern validation, function resolution, input spec validation and caller guidance, and the transactional create-only batch a weave produces. The SQL batch engine lives in `millstrand.core.db`; the shared lifecycle and dispatch plumbing in `millstrand.core.weaver.*`.
+Callers own runtime selection and pass the target weaver runtime as the first argument. This namespace owns pattern validation, function resolution, input spec validation and caller guidance, and the transactional batch a weave produces. The SQL batch engine lives in `millstrand.core.db`; the shared lifecycle and dispatch plumbing in `millstrand.core.weaver.*`.
 
 ## <a name="millstrand.api.patterns.alpha/explain">`explain`</a>
 
@@ -100,7 +100,9 @@ Removal reaches only into the calling owner's partition, so it is the counterpar
 
 Function.
 
-Validate pattern input, invoke the pattern, and apply its create-only batch.
+Validate pattern input, invoke the pattern, and apply its batch atomically.
+
+A pattern returns either a vector of new strands with local symbolic refs, or a `millstrand.api.batch.alpha/apply!` payload map. The map form supports updates to existing strands through pre-bound `:refs`, alongside creation and edge changes. It returns the full batch result, including `:updated`; the vector form returns `:created` and `:refs`.
 
 The four-argument arity threads an explicit request-context map for trusted callers (the connected-client tier); the three-argument arity derives its own weave context. A caller-supplied context conforms to `::millstrand.core.specs/request-context`; the pre-commit hook context conforms to `::millstrand.core.specs/batch-hook-context`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/patterns/alpha.clj#L172-L214">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/patterns/alpha.clj#L173-L220">Source</a></sub></p>

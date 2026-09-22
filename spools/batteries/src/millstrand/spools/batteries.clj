@@ -429,7 +429,7 @@
 
 (def ^:private weave-arg-spec
   {:op "weave"
-   :doc "Apply a registered create-only weave pattern to one JSON input value."
+   :doc "Apply a registered weave pattern atomically to one JSON input value."
    :hook-class :mutating
    :deadline-class :standard
    :flags {:pattern {:type :string
@@ -438,7 +438,7 @@
            :input {:type :string
                    :required? true
                    :doc "Payload reference (e.g. :stdin) to exactly one JSON value for the pattern."}}
-   :annotations {:use-when ["Applying a registered create-only pattern to bulk-mint a coordinated strand set from one JSON value."]
+   :annotations {:use-when ["Applying a registered pattern to create or update coordinated strands from one JSON value."]
                  :failure-modes ["batteries/weave-input-invalid" "batteries/pattern-unknown"]}})
 
 (def ^:private query-arg-spec
@@ -614,13 +614,12 @@
 (def ^:private weave-meta
   "Cross-verb narrative for `weave` (DELTA-Dtf-002.CC4)."
   {:about (format-alpha/reflow
-           "|weave applies a registered create-only pattern to one JSON value,
-            |minting a coordinated set of strands and returning their refs. It is
-            |the bulk-creation counterpart to add's single-strand mint, and the
-            |pattern op explains which patterns a runtime exposes.")
+           "|weave applies a registered transactional pattern to one JSON value,
+            |creating or updating coordinated strands. The pattern owns the
+            |mutation shape; the pattern op explains its checked input contract.")
    :prime (format-alpha/reflow
-           "|Reach for weave when one input should fan out into several linked
-            |strands under a reviewed pattern. Run `strand pattern list` first to
+           "|Reach for weave to create or update strands through a registered
+            |pattern. Run `strand pattern list` first to
             |see the registered patterns and their input specs.")})
 
 ;; --- batteries-owned glossary outcomes --------------------------------------
@@ -1014,7 +1013,7 @@
      "edges" edges}))
 
 (millstrand/defop! weave
-  "Apply a registered create-only weave pattern to one JSON input value."
+  "Apply a registered weave pattern atomically to one JSON input value."
   (op-options 'weave weave-arg-spec weave-meta)
   [ctx]
   (let [rt (:op/runtime ctx)

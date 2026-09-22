@@ -3,7 +3,7 @@
 
   Callers own runtime selection and pass the target weaver runtime as the first
   argument. This namespace owns pattern validation, function resolution, input
-  spec validation and caller guidance, and the transactional create-only batch a
+  spec validation and caller guidance, and the transactional batch a
   weave produces. The SQL batch engine lives in `millstrand.core.db`; the shared
   lifecycle and dispatch plumbing in `millstrand.core.weaver.*`."
   (:require [clojure.spec.alpha :as s]
@@ -165,12 +165,19 @@
 (s/def :millstrand.pattern-weave/ref-key (s/and string? #(not (str/blank? %))))
 (s/def :millstrand.pattern-weave/refs
   (s/map-of :millstrand.pattern-weave/ref-key ::specs/id))
-(s/def ::weave-result
+(s/def ::create-result
   (s/and (s/keys :req-un [::batch-api/created :millstrand.pattern-weave/refs])
          #(every? #{:created :refs} (keys %))))
+(s/def ::weave-result (s/or :create ::create-result :mutation ::batch-api/result))
 
 (defn weave!
-  "Validate pattern input, invoke the pattern, and apply its create-only batch.
+  "Validate pattern input, invoke the pattern, and apply its batch atomically.
+
+  A pattern returns either a vector of new strands with local symbolic refs,
+  or a `millstrand.api.batch.alpha/apply!` payload map. The map form supports
+  updates to existing strands through pre-bound `:refs`, alongside creation
+  and edge changes. It returns the full batch result, including `:updated`;
+  the vector form returns `:created` and `:refs`.
 
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
@@ -188,30 +195,29 @@
      (validate-pattern-input! canonical-name input-spec input)
      (let [batch (with-generation-classloader
                    runtime
-                   #((requiring-resolve fn-sym) {:input input}))
-           normalized-batch (normalize-weave-strand-attributes
-                             runtime req-ctx canonical-name input batch)
-           normalized-payload (weave-payload normalized-batch)
-           result (jdbc/with-transaction [tx (ds runtime)]
-                    (let [result (normalize
-                                  (db/add-strand-batch-in-transaction! tx normalized-batch))]
-                      (run-validation-hooks! runtime
-                                             :batch/apply-before-commit
-                                             (weave-batch-context req-ctx canonical-name input
-                                                                  normalized-payload result))
-                      result))
-           weave-result (spool/require-valid! ::weave-result
-                                              (select-keys result [:created :refs])
-                                              "Pattern weave result is invalid")]
-       ;; a weave is a create-only batch apply; without this event, event-driven
-       ;; spools (agent-run, the subagent executor) never see pattern-created
-       ;; strands until an unrelated mutation happens to trigger their next scan
-       (dispatch/enqueue! runtime (assoc (event-base :batch/applied)
-                                         :batch/id (str (UUID/randomUUID))
-                                         :pattern/name canonical-name
-                                         :batch/refs (:refs result)
-                                         :batch/created (:created result)))
-       weave-result))))
+                   #((requiring-resolve fn-sym) {:input input}))]
+       (if (map? batch)
+         (batch-api/apply! runtime batch req-ctx)
+         (let [normalized-batch (normalize-weave-strand-attributes
+                                 runtime req-ctx canonical-name input batch)
+               normalized-payload (weave-payload normalized-batch)
+               result (jdbc/with-transaction [tx (ds runtime)]
+                        (let [result (normalize
+                                      (db/add-strand-batch-in-transaction! tx normalized-batch))]
+                          (run-validation-hooks! runtime
+                                                 :batch/apply-before-commit
+                                                 (weave-batch-context req-ctx canonical-name input
+                                                                      normalized-payload result))
+                          result))
+               weave-result (spool/require-valid! ::create-result
+                                                  (select-keys result [:created :refs])
+                                                  "Pattern weave result is invalid")]
+           (dispatch/enqueue! runtime (assoc (event-base :batch/applied)
+                                             :batch/id (str (UUID/randomUUID))
+                                             :pattern/name canonical-name
+                                             :batch/refs (:refs result)
+                                             :batch/created (:created result)))
+           weave-result))))))
 
 (s/fdef weave!
   :args (s/or :default (s/cat :runtime map?
