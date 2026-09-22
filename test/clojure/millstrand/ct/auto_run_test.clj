@@ -5,7 +5,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [ct.spools.codethread.auto-run :as auto-run]
+            [millhouse.spools.auto-run :as auto-run]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
