@@ -164,9 +164,12 @@
                                        :effort "high"})
               root (workflow/current-root run-id)
               strands (:strands (graph/subgraph runtime [(:id root)]))
+              implement (titled-strand strands "Implement and verify the assigned feature")
+              prepare-pr (titled-strand strands "Publish the exact change with its review package")
               quality (titled-strand strands "Pass repository quality checks")
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
+              review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
               ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
@@ -186,8 +189,14 @@
                      ["incomplete review package" {:body "## Summary"}]])
               handoff-step (role-step strands "handoff-worker")
               finisher-step (role-step strands "finisher")]
-          (testing "repository-owned quality and PR boundaries remain effective"
+          (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
+            (doseq [[prerequisite step]
+                    (partition 2 1 [implement prepare-pr quality ci verify-pr review-card])]
+              (is (= [(:id prerequisite)]
+                     (mapv :to_strand_id
+                           (graph/outgoing-edges runtime [(:id step)] "depends-on"))))))
+          (testing "repository-owned quality and PR boundaries remain effective"
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
             (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
