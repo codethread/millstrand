@@ -24,23 +24,26 @@
                       clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
          ;; Keep the test classpath aligned with the workspace's direct
          ;; Millhouse consumer contract.
-         :override-deps {millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                 :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+         :override-deps {millhouse.spools/auto-run {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                     :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
+                                                     :deps/root "spools/auto-run"}
+                         millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                                 :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                  :deps/root "spools/land"}
                          millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                     :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+                                                     :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                      :deps/root "spools/workflow"}
                          millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                   :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+                                                   :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                    :deps/root "spools/kanban"}
                          millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                  :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+                                                  :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                   :deps/root "spools/chime"}
                          millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                 :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+                                                 :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                  :deps/root "spools/cron"}
                          millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                     :git/sha "373238a56fbed90852e9fe8d90635d848c3faeea"
+                                                     :git/sha "62723b7b1820c7e1723de4a2ff985b069871159e"
                                                      :deps/root "spools/identity"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
