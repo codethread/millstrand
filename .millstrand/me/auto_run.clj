@@ -2,11 +2,16 @@
   "Activate bounded automatic pickup using this repository's delivery workflow."
   (:require [clojure.java.io :as io]
             [ct.spools.codethread.auto-run :as auto-run]
+            [ct.spools.codethread.auto-run-reporting :as reporting]
             [ct.spools.codethread.auto-run-worktree]
             [millstrand.api.lifecycle.alpha :as lifecycle]
             [millstrand.api.millstrand.alpha :as millstrand]))
 
 (millstrand/use-op! auto-run/auto-run)
+(millstrand/use-hook! reporting/derive-labels)
+(millstrand/use-pattern! reporting/auto-run-needs-decision
+                         reporting/auto-run-unknown-failure
+                         reporting/auto-run-unblock)
 
 (defn open!
   "Configure two Sol automatic delivery slots for this repository."

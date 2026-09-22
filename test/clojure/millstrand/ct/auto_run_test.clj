@@ -1,6 +1,7 @@
 (ns millstrand.ct.auto-run-test
   "Prove repository auto-run activation in a disposable Weaver world."
-  (:require [clojure.edn :as edn]
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -9,6 +10,7 @@
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
+            [millstrand.api.weaver.alpha :as weaver]
             [millstrand.spools.test-support :as test-support]
             [millstrand.test.alpha :as test-alpha]))
 
@@ -135,7 +137,21 @@
         (is (= ["auto-full-land"] (get-in status [:config :workflows])))
         (is (= 2 (get-in status [:config :max-running])))
         (is (empty? (:cards status)))
-        (is (empty? (:dispatched (auto-run/scan! runtime)))))
+        (is (empty? (:dispatched (auto-run/scan! runtime))))
+        (let [card (weaver/add! runtime {:title "Blocked work"})
+              evidence (weaver/add! runtime {:title "Decision context"})]
+          (weaver/op! runtime 'weave
+                      ["--pattern" "auto-run-needs-decision" "--input"
+                       (json/write-str {:strand (:id card)
+                                        :evidence (:id evidence)})])
+          (let [reported (weaver/show runtime (:id card))]
+            (is (= "true" (attr-get reported :auto-run/agent-blocked)))
+            (is (= "needs-decision"
+                   (attr-get reported :auto-run/agent-blocked-status)))
+            (is (= (:id evidence)
+                   (attr-get reported :auto-run/agent-evidence)))
+            (is (= "true" (attr-get reported :kanban.label/agent-blocked)))
+            (is (= "true" (attr-get reported :kanban.label/needs-decision))))))
       (current/with-runtime runtime
         (let [run-id "auto-run-disposable"
               result (workflow/start! run-id :auto-full-land
@@ -221,4 +237,10 @@
             (is (str/includes? (:instruction handoff) "auto-land-finisher/FINISHER_STEP_ID"))
             (is (str/includes? (:instruction handoff) "auto-run/worker-run-id"))
             (is (str/includes? (:instruction finisher) "This step is finisher-only"))
-            (is (str/includes? (:instruction finisher) "Do not finish the card early"))))))))
+            (is (str/includes? (:instruction finisher) "Do not finish the card early"))
+            (is (str/includes? (:instruction finisher)
+                               "auto-run-needs-decision"))
+            (is (str/includes? (:instruction finisher)
+                               "auto-run-unknown-failure"))
+            (is (str/includes? (:instruction finisher)
+                               "Leave card fixture-card open"))))))))
