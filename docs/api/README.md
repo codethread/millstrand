@@ -47,7 +47,7 @@ Native work that must continue while Mill replaces a Weaver uses the trusted `mi
 
 | Namespace | Reach for it when |
 | --- | --- |
-| [`patterns`](./patterns.api.md) | Agents should submit intent and your config decides the graph shape: spec-checked, create-only weave patterns invokable from the CLI. |
+| [`patterns`](./patterns.api.md) | Agents should submit intent and your config decides the graph shape: spec-checked, transactional weave patterns invokable from the CLI. |
 | [`authoring`](./authoring.api.md) | Defining domain-specific authoring families with a shared declaration and typed-selection contract. |
 | [`millstrand`](./millstrand.api.md) | Defining, selecting, or defining-and-selecting core registry entries with the `def<kind>`, `use-<kind>!`, and `def<kind>!` families. |
 | [`registry`](./registry.api.md) | Your domain owns a family of replaceable declarations and needs a registry kind of its own for other modules to contribute to. |
