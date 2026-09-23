@@ -8,13 +8,17 @@ Extend the lifecycle coordinator with a module-owned collection of file-backed r
 
 ## DELTA-Cff-002.P2 Contract changes
 
-### DELTA-Cff-002.CC1 Workspace discovery and Markdown parsing
+### DELTA-Cff-002.CC1 Workspace discovery and format parsing
 
 Resolve `:location :path` relative to the explicitly selected workspace, never the process cwd, Git root, or library checkout. The authored path is relative and may not lexically escape the workspace. This resolution rule is not a security sandbox. `:filename` is a basename glob, not another directory traversal expression. With `:recursive? false`, match immediate regular-file children; with true, include nested grouping directories. Do not follow directory symlinks during traversal; a file symlink resolving to a regular file may be read. Sort matched relative paths lexically using `/` separators before opening any file.
 
 A missing root, unreadable root, non-directory root, or failed traversal is a collection-level error, never an empty default. A readable existing root with no matches is an empty configuration. Read matched files as UTF-8 and close directory streams/readers within discovery/loading; neither callbacks nor retained resource state receive lazy filesystem iterators or open file descriptors.
 
-A frontmatter block starts with a first-line `---` delimiter and ends with a subsequent standalone `---` line. Without an opening delimiter, frontmatter is `{}` and the entire file is body. An opening delimiter without a closing delimiter is malformed. An empty block is `{}`; a present non-empty block must decode to one YAML mapping. Preserve the body text after the closing delimiter line, including its remaining whitespace and line endings. Reject duplicate mapping keys, non-string mapping keys, unsupported tagged values, and structures that cannot become the data shape in DELTA-Cff-001.CC3. YAML is parsed as data, never as executable Clojure or custom object construction. Tokens are ordinary text; frontmatter authors quote values where YAML syntax requires it.
+For `:markdown`, a frontmatter block starts with a first-line `---` delimiter and ends with a subsequent standalone `---` line. Without an opening delimiter, frontmatter is `{}` and the entire file is body. An opening delimiter without a closing delimiter is malformed. An empty block is `{}`; a present non-empty block must decode to one YAML mapping. Preserve the body text after the closing delimiter line, including its remaining whitespace and line endings, and place it in `:config :doc` as specified by DELTA-Cff-001.CC3.
+
+For `:yaml`, parse the entire file as one YAML mapping and use it directly as `:config`. An empty file, scalar, sequence, or multiple-document stream is an error; an explicit `{}` is an empty configuration. YAML block strings use normal YAML parsing semantics rather than Markdown's raw-body preservation. No prose field is added or required; `doc` is only the recommended naming convention.
+
+Both paths share the same YAML parser and data mapping. Reject duplicate mapping keys, non-string mapping keys, unsupported tagged values, and structures that cannot become DELTA-Cff-001.CC3's data shape. YAML is parsed as data, never as executable Clojure or custom object construction. Tokens are ordinary text; authors quote values where YAML syntax requires it.
 
 ### DELTA-Cff-002.CC2 Startup, refresh, and passive operations
 
@@ -68,4 +72,4 @@ TEN-003 requires errors to stay visible. Explicit refresh already permits partia
 
 ## DELTA-Cff-002.P4 Open questions
 
-None blocking proposal review. Parser choice and the exact internal retention representation belong to implementation; they must satisfy these contracts without adding fallback behaviour.
+None blocking proposal review. Parser choice and the exact internal retention representation belong to implementation; use established Clojure/Java libraries wherever possible rather than writing replacement YAML or Markdown parsers. The chosen libraries must satisfy these contracts without adding fallback behaviour.
