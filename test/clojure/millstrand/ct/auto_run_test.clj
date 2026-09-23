@@ -28,20 +28,10 @@
                                      (.toPath file)))
              (slurp file)]))))
 
-(def ^:private devflow-sha
-  "3a96415df0429c245191a22e66cc0bfc91524199")
-
 (defn- world-options
   "Build an isolated world with the repository init and its pinned dependencies."
   []
-  (let [deps (:deps (edn/read-string (slurp (io/file workspace-root "deps.edn"))))
-        devflow-deps
-        {:git/url "https://github.com/codethread/devflow.spool.git"
-         :git/sha devflow-sha}
-        deps (assoc deps
-                    'codethread/devflow (assoc devflow-deps :deps/root ".")
-                    'codethread/devflow-kanban-adapter
-                    (assoc devflow-deps :deps/root "kanban-adapter"))]
+  (let [deps (:deps (edn/read-string (slurp (io/file workspace-root "deps.edn"))))]
     {:storage :sqlite-file
      :deps-edn
      (pr-str
