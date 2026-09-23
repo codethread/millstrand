@@ -23,13 +23,12 @@
 (def ^:private workspace-deps
   (:deps (edn/read-string (slurp ".millstrand/deps.edn"))))
 (def ^:private review-world-deps
-  (let [config (get workspace-deps 'codethread/config)
-        identity-coordinate (get workspace-deps 'millhouse.spools/identity)]
-    (pr-str
-     {:deps
-      {'codethread/config (assoc config
-                                 :exclusions ['millhouse.spools/identity])
-       'millhouse.spools/identity identity-coordinate}})))
+  (pr-str
+   {:deps (update-vals workspace-deps
+                       #(if-let [root (:local/root %)]
+                          (assoc % :local/root
+                                 (.getCanonicalPath (io/file ".millstrand" root)))
+                          %))}))
 (def ^:private review-world-init
   (str
    "(require '[ct.spools.codethread.bootstrap :as codethread]\n"
@@ -104,7 +103,7 @@
      (pr-str (assoc request :git patch)) ")))"))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "6b5ad39d8711a033dc7f33fd52c78901393ea44e"
+  (is (= "4ac638d679bc238fd8a373d52c3dbf2a7f682be0"
          (get-in workspace-deps ['ct.spools/harnesses :git/sha])))
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
