@@ -18,7 +18,10 @@ version=${1-}
 [ -n "$version" ] || die "expected the release version as the only argument"
 
 branch=$(git branch --show-current) || die "cannot read the checked-out branch"
-expect_equal "checked-out branch" "$branch" main
+expected_branch=${2-}
+[ -n "$expected_branch" ] || die "expected candidate branch argument"
+[ "$expected_branch" != main ] || die "release identity must run on a candidate branch"
+expect_equal "checked-out branch" "$branch" "$expected_branch"
 
 actual_version=$(cat VERSION) || die "cannot read VERSION"
 expect_equal "VERSION" "$actual_version" "$version"

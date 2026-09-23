@@ -22,6 +22,7 @@
    'millstrand.ct.auto-run-test
    'millstrand.ct.release-workflow-test
    'millstrand.ct.review-workflow-test
+   'millstrand.ct.workflow-delivery-test
    'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test

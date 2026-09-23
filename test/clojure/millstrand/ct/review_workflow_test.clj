@@ -1,13 +1,16 @@
 (ns millstrand.ct.review-workflow-test
   "Exercise Millstrand's full review and development-workflow handoffs."
-  (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
+  (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [ct.spools.harnesses.reviewers :as reviewers]
-            [me.workflows.review :as review]
+            [me.workflows.review]
+            [me.workflows.review-evidence :as review]
+            [me.workflows.evidence :as evidence]
+            [me.workflows.handoff :as handoff]
+            [me.workflows.story-review :as story-review]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
@@ -55,63 +58,6 @@
    :runs [{:id "reviewer-1" :reviewer "correctness" :seat "reviewer"}]
    :skips [{:reviewer "test-sleeps" :reason "glob-mismatch"}]})
 
-(defn- successful-result
-  ([selection successful-reviewers]
-   (successful-result selection successful-reviewers
-                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
-  ([selection successful-reviewers base head]
-   (str "AUTOMATIC_REVIEW_SUCCESS "
-        (json/write-str
-         {:status "success"
-          :base base
-          :head head
-          :selection selection
-          :reviewers successful-reviewers
-          :verdict "no-findings"})
-        "\n\nNo findings.")))
-
-(def ^:private successful-review
-  (successful-result successful-review-selection
-                     [{:name "correctness" :run-id "reviewer-1"}]))
-
-(def ^:private two-reviewer-selection
-  (assoc successful-review-selection
-         :runs [{:id "reviewer-1"
-                 :reviewer "correctness"
-                 :seat "reviewer"}
-                {:id "reviewer-2"
-                 :reviewer "docs-and-tests"
-                 :seat "luna"}]
-         :skips []))
-
-(def ^:private no-applicable-selection
-  {:status "skipped"
-   :reason "no-matching-reviewers"
-   :change {:source "branch"
-            :repo-root "/tmp/review-fixture"
-            :base "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            :base-sha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            :merge-base "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            :tip "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            :tip-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            :paths ["Makefile"]}
-   :runs []
-   :skips [{:reviewer "workspace-runtime-policy"
-            :reason "glob-mismatch"}]})
-
-(defn- no-applicable-result
-  [selection]
-  (str "AUTOMATIC_REVIEW_NO_APPLICABLE_REVIEWER "
-       (json/write-str
-        {:base "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-         :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-         :selection selection})
-       "\n\nNo configured reviewer applies to this change."))
-
-(def ^:private no-applicable-reviewer
-  (no-applicable-result no-applicable-selection))
-
 (defn- workflow-definition
   "Resolve a workspace workflow declaration without teaching clj-kondo its
   Vars."
@@ -156,257 +102,6 @@
      "               (fn [_ plan] {:id (str (:title plan) \"-fixture\")})]"
      "   (reviewers/start! (current/runtime) "
      (pr-str (assoc request :git patch)) ")))"))))
-
-(deftest millstrand-review-fans-in-resolves-and-validates-before-handoff
-  (with-runtime
-    (fn [rt _]
-      (test-support/activate-spool! rt :millhouse/spools-workflow
-                                    'millhouse.spools.workflow)
-      (let [task (:id (weaver/add! rt {:title "Review task" :attributes {:kind "task"}}))
-            params (assoc work :review-target task :review-id "review-pass"
-                          :change-context
-                          {:commit-range (str (str/join (repeat 40 "a")) ".."
-                                              (str/join (repeat 40 "b")))
-                           :files ["src/example.clj"]})
-            run-id "millstrand-review"
-            advance #(workflow/complete! run-id {:by-identity "test-agent"})]
-        (workflow/start! run-id
-                         (workflow-definition 'me.workflows.review/millstrand-review)
-                         params)
-        (advance)
-        (is (= "shell" (:gate (first (workflow/ready run-id)))))
-        (advance)
-        (let [review-gate (first (workflow/ready run-id))
-              gate-strand (weaver/show rt (:id review-gate))
-              prompt (attr-get gate-strand :harness/prompt)]
-          (is (= "agent" (:gate review-gate)))
-          (is (= "Run and synthesize the frozen Harnesses review"
-                 (:title review-gate)))
-          (is (= "coordinator" (attr-get gate-strand :harness/alias)))
-          (is (= (:worktree work) (attr-get gate-strand :harness/cwd)))
-          (is (str/includes? prompt "review_head=$(git rev-parse"))
-          (is (str/includes? prompt "--base \"$review_base\""))
-          (is (str/includes?
-               prompt
-               (str "strand --timeout 60s --workspace "
-                    "\"$MILLSTRAND_WORKSPACE\" agent review")))
-          (is (str/includes? prompt "--branch \"$review_head\""))
-          (is (str/includes? prompt "complete structured JSON response"))
-          (is (str/includes? prompt "unchanged as `selection`"))
-          (is (str/includes? prompt "successful reviewer identities"))
-          (is (str/includes? prompt "Every active reviewer must appear"))
-          (is (str/includes? prompt "agent-run-settled"))
-          (is (str/includes? prompt "status=stopped"))
-          (is (str/includes? prompt "substatus=completed"))
-          (is (str/includes? prompt "settled=true"))
-          (is (str/includes? prompt "non-blank"))
-          (is (str/includes? prompt "--timeout 60s"))
-          (is (str/includes? prompt "--timeout-secs 40"))
-          (is (not (str/includes? prompt "agent stop")))
-          (is (str/includes? prompt "AUTOMATIC_REVIEW_FAILURE"))
-          (is (str/includes? prompt "new unique `review-id`"))
-          (is (str/includes? prompt "AUTOMATIC_REVIEW_SUCCESS"))
-          (is (str/includes? prompt
-                             "AUTOMATIC_REVIEW_NO_APPLICABLE_REVIEWER"))
-          (is (str/includes? prompt "reason=no-changes"))
-          (is (str/includes? prompt "seat-unavailable"))
-          (is (str/includes? prompt "glob-mismatch"))
-          (is (every? #(str/includes?
-                        % "--workspace \"$MILLSTRAND_WORKSPACE\"")
-                      (re-seq #"(?m)^\s*strand .+$" prompt)))
-          (is (= [(:id review-gate)]
-                 (mapv :id (workflow/ready run-id)))))
-        (workflow/complete! run-id
-                            {:by-identity "coordinator-run"
-                             :attributes {"harness/result" successful-review}})
-        (let [verification-gate (first (workflow/ready run-id))
-              gate-strand (weaver/show rt (:id verification-gate))]
-          (is (= "Verify automatic review completion evidence"
-                 (:title verification-gate)))
-          (is (= "code" (:gate verification-gate)))
-          (is (= "me.workflows.review/verify-automatic-review!"
-                 (attr-get gate-strand :code/fn)))
-          (with-redefs [reviewers/reviewers
-                        (fn [_]
-                          [{:name "correctness"}
-                           {:name "test-sleeps"}])]
-            (let [evidence ((requiring-resolve
-                             'me.workflows.review/verify-automatic-review!)
-                            (attr-get gate-strand :code/params))]
-              (is (= "reviewed" (get evidence "status")))
-              (is (= successful-review-selection
-                     (get evidence "selection"))))))
-        (advance)
-        (is (= "Record the automatic review outcome"
-               (:title (first (workflow/ready run-id)))))
-        (advance)
-        (is (= "Validate the resulting branch HEAD"
-               (:title (first (workflow/ready run-id)))))
-        (advance)
-        (let [handoff (first (workflow/ready run-id))
-              instruction (attr-get (weaver/show rt (:id handoff))
-                                    :workflow/instruction)]
-          (is (= "Hand the validated work to landing" (:title handoff)))
-          (is (str/includes? instruction "--workflow land"))
-          (is (str/includes? instruction "strand workflow show land"))
-          (is (str/includes? instruction "status=no-applicable-reviewer"))
-          (is (str/includes? instruction
-                             "selection` object from either"))
-          (is (str/includes? instruction "validated work"))
-          (is (= work (json/read-str (last (str/split instruction #"\n\n"))
-                                     :key-fn keyword))))
-        (advance)
-        (is (workflow/done? run-id))
-        (is (empty? (weaver/list rt [:= [:attr "kind"] "merge-queue-entry"] {})))))))
-
-(deftest automatic-review-verification-keeps-review-outcomes-distinct
-  (doseq [[run-id result active-reviewers expected-status error-fragment]
-          [["failed-review"
-            "AUTOMATIC_REVIEW_FAILURE reviewer process failed"
-            ["workspace-runtime-policy"]
-            nil "missing a valid completion sentinel"]
-           ["successful-review" successful-review
-            ["correctness" "test-sleeps"] "reviewed" nil]
-           ["success-without-selection"
-            (str "AUTOMATIC_REVIEW_SUCCESS "
-                 "{\"status\":\"success\","
-                 "\"base\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
-                 "\"head\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
-                 "\"reviewers\":[{\"name\":\"correctness\","
-                 "\"run-id\":\"reviewer-1\"}],"
-                 "\"verdict\":\"no-findings\"}")
-            ["correctness" "test-sleeps"] nil "success evidence is invalid"]
-           ["success-range-mismatch"
-            (successful-result
-             successful-review-selection
-             [{:name "correctness" :run-id "reviewer-1"}]
-             "cccccccccccccccccccccccccccccccccccccccc"
-             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-            ["correctness" "test-sleeps"] nil "success evidence is invalid"]
-           ["success-incomplete-roster" successful-review
-            ["correctness" "test-sleeps" "workspace-runtime-policy"]
-            nil "does not match the active roster"]
-           ["success-duplicate-selected-run-id"
-            (successful-result
-             (assoc-in two-reviewer-selection [:runs 1 :id] "reviewer-1")
-             [{:name "correctness" :run-id "reviewer-1"}
-              {:name "docs-and-tests" :run-id "reviewer-1"}])
-            ["correctness" "docs-and-tests"]
-            nil "selection contains duplicate run IDs"]
-           ["success-duplicate-successful-run-id"
-            (successful-result
-             two-reviewer-selection
-             [{:name "correctness" :run-id "reviewer-1"}
-              {:name "docs-and-tests" :run-id "reviewer-1"}])
-            ["correctness" "docs-and-tests"]
-            nil "evidence contains duplicate run IDs or names"]
-           ["success-duplicate-successful-reviewer"
-            (successful-result
-             two-reviewer-selection
-             [{:name "correctness" :run-id "reviewer-1"}
-              {:name "correctness" :run-id "reviewer-2"}])
-            ["correctness" "docs-and-tests"]
-            nil "evidence contains duplicate run IDs or names"]
-           ["success-run-identity-mismatch"
-            (successful-result
-             successful-review-selection
-             [{:name "correctness" :run-id "different-run"}])
-            ["correctness" "test-sleeps"]
-            nil "do not match the scheduled selection"]
-           ["success-invalid-skip-reason"
-            (successful-result
-             (assoc-in successful-review-selection [:skips 0 :reason]
-                       "seat-unavailable")
-             [{:name "correctness" :run-id "reviewer-1"}])
-            ["correctness" "test-sleeps"]
-            nil "success evidence is invalid"]
-           ["no-applicable-reviewer" no-applicable-reviewer
-            ["workspace-runtime-policy"] "no-applicable-reviewer" nil]
-           ["incomplete-roster" no-applicable-reviewer
-            ["workspace-runtime-policy" "test-sleeps"]
-            nil "does not match the active roster"]
-           ["nonzero-runs"
-            (no-applicable-result
-             (assoc no-applicable-selection
-                    :runs [{:id "unexpected-run"
-                            :reviewer "workspace-runtime-policy"}]))
-            ["workspace-runtime-policy"]
-            nil "no-applicable-reviewer evidence is invalid"]
-           ["unavailable-reviewer"
-            (str/replace no-applicable-reviewer
-                         "glob-mismatch" "seat-unavailable")
-            ["workspace-runtime-policy"]
-            nil "no-applicable-reviewer evidence is invalid"]
-           ["empty-review-input"
-            (str/replace no-applicable-reviewer
-                         "no-matching-reviewers" "no-changes")
-            ["workspace-runtime-policy"]
-            nil "no-applicable-reviewer evidence is invalid"]
-           ["invalid-review-result"
-            "AUTOMATIC_REVIEW_NO_APPLICABLE_REVIEWER {"
-            ["workspace-runtime-policy"]
-            nil "sentinel is not valid JSON"]]]
-    (with-runtime
-      (fn [rt _]
-        (test-support/activate-spool! rt :millhouse/spools-workflow
-                                      'millhouse.spools.workflow)
-        (let [target (:id (weaver/add! rt {:title run-id
-                                           :attributes {:kind "task"}}))
-              params (assoc work :feature run-id :review-target target
-                            :review-id run-id)]
-          (workflow/start! run-id
-                           (workflow-definition 'me.workflows.review/millstrand-review)
-                           params)
-          (workflow/complete! run-id {:by-identity "test-agent"})
-          (workflow/complete! run-id {:by-identity "test-agent"})
-          (workflow/complete! run-id
-                              {:by-identity "coordinator-run"
-                               :attributes {"harness/result" result}})
-          (let [verification-gate (first (workflow/ready run-id))
-                verify! #(review/verify-automatic-review!
-                          (attr-get (weaver/show rt (:id verification-gate))
-                                    :code/params))]
-            (with-redefs [reviewers/reviewers
-                          (fn [_]
-                            (mapv (fn [name] {:name name})
-                                  active-reviewers))]
-              (if expected-status
-                (let [evidence (verify!)]
-                  (is (= expected-status (get evidence "status")))
-                  (is (= (if (= "reviewed" expected-status) 1 0)
-                         (get evidence "reviewers")))
-                  (if (= "reviewed" expected-status)
-                    (do
-                      (is (= successful-review-selection
-                             (get evidence "selection")))
-                      (is (= [{:id "reviewer-1"
-                               :reviewer "correctness"}]
-                             (get evidence "selected-runs")))
-                      (is (= [{:name "correctness"
-                               :run-id "reviewer-1"}]
-                             (get evidence "successful-reviewers")))
-                      (is (= ["test-sleeps"]
-                             (get evidence "skipped-reviewers"))))
-                    (do
-                      (is (= no-applicable-selection
-                             (get evidence "selection")))
-                      (workflow/complete!
-                       run-id
-                       {:by-identity "code-executor"
-                        :attributes {"code/result" evidence}})
-                      (is (= "Record the automatic review outcome"
-                             (:title (first (workflow/ready run-id)))))
-                      (workflow/complete! run-id {:by-identity "test-agent"})
-                      (is (= "Validate the resulting branch HEAD"
-                             (:title (first (workflow/ready run-id))))))))
-                (let [failure (try
-                                (verify!)
-                                nil
-                                (catch clojure.lang.ExceptionInfo exception
-                                  exception))]
-                  (is (some? failure))
-                  (is (str/includes? (ex-message failure)
-                                     error-fragment)))))))))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
   (is (= "6b5ad39d8711a033dc7f33fd52c78901393ea44e"
@@ -607,23 +302,157 @@
         (is (= :workflow/params-invalid (:reason (ex-data failure))))
         (is (str/includes? (:explain (ex-data failure)) ":review-id"))))))
 
-(deftest review-handoff-preserves-identity-and-defers-parameter-discovery
-  (let [instruction (review/handoff-instruction
-                     (assoc work :card "card-id" :module "example"))]
-    (is (str/includes? instruction "strand workflow show millstrand-review"))
-    (is (= (assoc work :card "card-id")
-           (json/read-str (last (str/split instruction #"\n\n")) :key-fn keyword)))))
+(defn- code-params [rt run-id]
+  (attr-get (weaver/show rt (:id (first (workflow/ready run-id)))) :code/params))
 
-(deftest development-workflows-hand-off-to-millstrand-review
-  (doseq [[definition params]
-          [[(workflow-definition 'me.workflows.story/story-fold)
-            (assoc work :module "example")]
-           [(workflow-definition 'me.workflows.story/story-keep)
-            (assoc work :module "example")]
-           [(workflow-definition 'me.workflows.fix/fix)
-            (assoc work :subject "Fix the behavior" :card "card-id")]]]
-    (let [compiled (workflow/compile definition params {:run-id "review-handoff"})
-          instructions (keep #(get-in % [:attributes "workflow/instruction"])
-                             (:strands compiled))]
-      (is (some #(str/includes? % "--workflow millstrand-review") instructions))
-      (is (not-any? #(str/includes? % "--workflow land") instructions)))))
+(deftest verification-reads-real-runs-not-sentinels-or-current-roster
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (workflow/start! "verify-real" (workflow-definition 'me.workflows.review/millstrand-review)
+                       (assoc work :review-target "external" :review-id "real"))
+      (workflow/complete! "verify-real" {:by-identity "fixture"})
+      (let [dispatch (:id (first (workflow/ready "verify-real")))
+            change (:change successful-review-selection)
+            child (weaver/add! rt {:title "Durable reviewer fixture"
+                                   :attributes {"harness/run" "true"
+                                                "harness/status" "running"
+                                                "harness/context" {"review/reviewer" "correctness"
+                                                                   "review/seat" "reviewer"
+                                                                   "review/change" (assoc change :diff "actual diff")}}})
+            selection (assoc-in successful-review-selection [:runs 0 :id] (:id child))
+            frozen (merge work {:base (:base change) :head (:tip change)})
+            snapshot {:frozen frozen :roster [{:name "correctness"} {:name "test-sleeps"}]
+                      :selection selection}]
+        (weaver/update! rt dispatch {:attributes {:review/dispatch snapshot}})
+        (workflow/complete! "verify-real" {:by-identity "fixture"})
+        (is (= "Await the dispatched reviewer runs" (:title (first (workflow/ready "verify-real")))))
+        (workflow/complete! "verify-real" {})
+        (with-redefs [evidence/unchanged! identity
+                      reviewers/reviewers (fn [_] (throw (ex-info "Must not read current roster" {})))]
+          (let [verify! #(review/verify! (code-params rt "verify-real"))]
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo #"successful settled evidence" (verify!)))
+            (doseq [patch [{:harness/status "stopped" :harness/substatus "completed"
+                            :harness/result "No findings" :harness/settled "false"}
+                           {:harness/settled "true" :harness/substatus "requested"}
+                           {:harness/substatus "completed" :harness/result "  "}]]
+              (weaver/update! rt (:id child) {:attributes patch})
+              (is (thrown? clojure.lang.ExceptionInfo (verify!))))
+            (weaver/update! rt (:id child) {:attributes {:harness/result "No findings"}})
+            (let [verified (verify!)]
+              (is (= "reviewed" (:status verified)))
+              (is (= [{:run-id (:id child) :reviewer "correctness" :result "No findings"}]
+                     (:results verified))))
+            (weaver/update! rt (:id child)
+                            {:attributes {:harness/context {"review/reviewer" "correctness"
+                                                            "review/seat" "reviewer"
+                                                            "review/change" (assoc change :tip "wrong")}}})
+            (is (thrown? clojure.lang.ExceptionInfo (verify!)))
+            (weaver/update! rt dispatch
+                            {:attributes {:review/dispatch (assoc-in snapshot [:selection :runs 0 :id] "missing")}})
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not found" (verify!)))))))))
+
+(deftest dispatch-reuses-persisted-selection-and-refuses-uncertain-fanout
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (workflow/start! "dispatch" (workflow-definition 'me.workflows.review/millstrand-review)
+                       (assoc work :review-target "external" :review-id "dispatch"))
+      (workflow/complete! "dispatch" {:by-identity "fixture"})
+      (let [gate (:id (first (workflow/ready "dispatch")))
+            params (code-params rt "dispatch")
+            snapshot {:frozen (merge work {:base (get-in successful-review-selection [:change :base])
+                                           :head (get-in successful-review-selection [:change :tip])})
+                      :roster [{:name "correctness"} {:name "test-sleeps"}]
+                      :selection successful-review-selection}]
+        (weaver/update! rt gate {:attributes {:review/dispatch-intent {:frozen "interrupted"}}})
+        (with-redefs [reviewers/start! (fn [& _] (throw (ex-info "Must not relaunch" {})))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires reconciliation"
+                                (review/dispatch! params)))
+          (weaver/update! rt gate {:attributes {:review/dispatch snapshot}})
+          (is (= (update snapshot :selection dissoc :reason) (review/dispatch! params)))
+          (weaver/update! rt gate
+                          {:attributes {:review/dispatch
+                                        (assoc-in snapshot [:selection :skips 0 :reason] "seat-unavailable")}})
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid dispatch selection"
+                                (review/dispatch! params))))))))
+
+(def handoff-child
+  "Fixture workflow resolved by the disposable registry. Public for symbol lookup."
+  (workflow/static-definition
+   "Fixture accepted child." {:entrypoints #{:start} :defaults {}}
+   (workflow/workflow "Child" (workflow/step :work "Child work" :self "Perform the fixture task."))))
+
+(deftest accepted-handoff-reuses-even-a-completed-child-and-rejects-drift
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (workflow/register-workflow! :handoff-child 'millstrand.ct.review-workflow-test/handoff-child)
+      (let [parent (workflow/workflow
+                    "Parent" (handoff/prepare :prepare [] "handoff-child" "Prepare.")
+                    (handoff/launch-gate :accept :prepare "handoff-child" "fixture"))]
+        (workflow/start! "parent" parent work)
+        (let [prepare (:id (first (workflow/ready "parent")))
+              request {:workflow "handoff-child" :params work :owner "fixture-coordinator"}]
+          (workflow/complete! "parent" {:attributes {"handoff/request" request}})
+          (let [params (code-params rt "parent")
+                receipt (handoff/launch! params)]
+            (is (= "accepted" (:status receipt)))
+            (is (= (str "handoff-" prepare) (:run-id receipt)))
+            (is (= receipt (handoff/launch! params)))
+            (workflow/complete! (:run-id receipt) {})
+            (is (= receipt (handoff/launch! params)))
+            (is (= receipt (evidence/data (attr-get (weaver/show rt prepare) :handoff/receipt))))
+            (weaver/update! rt prepare {:attributes {:handoff/request (assoc-in request [:params :branch] "other")}})
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo #"changed the recorded work identity"
+                                  (handoff/launch! params)))))))))
+
+(deftest story-freeze-rejects-uncommitted-and-stale-revisions
+  (let [root (test-support/temp-dir "story-freeze")]
+    (try
+      (test-support/run-git! root "init" "-b" "feature/story")
+      (test-support/run-git! root "config" "user.name" "Fixture")
+      (test-support/run-git! root "config" "user.email" "fixture@example.invalid")
+      (spit (io/file root "file") "base")
+      (test-support/run-git! root "add" ".")
+      (test-support/run-git! root "commit" "-m" "base")
+      (test-support/run-git! root "update-ref" "refs/remotes/origin/main" "HEAD")
+      (let [params {:worktree (.getPath root) :branch "feature/story"}
+            frozen (evidence/freeze! params)]
+        (spit (io/file root "file") "dirty")
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Commit all changes"
+                              (story-review/verify-revision! frozen)))
+        (test-support/run-git! root "commit" "-am" "change")
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"HEAD changed"
+                              (story-review/verify-revision! frozen)))
+        (is (= (evidence/freeze! params)
+               (story-review/verify-revision! (evidence/freeze! params)))))
+      (finally (test-support/delete-tree! root)))))
+
+(deftest no-applicable-selection-remains-distinct-from-review-success
+  (doseq [[status reason skips paths pass?]
+          [["skipped" "no-matching-reviewers" [{:reviewer "one" :reason "glob-mismatch"}] ["Makefile"] true]
+           ["skipped" "no-changes" [] [] false]
+           ["skipped" "no-matching-reviewers" [{:reviewer "one" :reason "seat-unavailable"}] ["Makefile"] false]
+           ["skipped" "no-matching-reviewers" [] ["Makefile"] false]]]
+    (with-runtime
+      (fn [rt _]
+        (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+        (workflow/start! "no-applicable" (workflow-definition 'me.workflows.review/millstrand-review)
+                         (assoc work :review-target "external" :review-id "no-applicable"))
+        (workflow/complete! "no-applicable" {:by-identity "fixture"})
+        (let [gate (:id (first (workflow/ready "no-applicable")))
+              change (assoc (:change successful-review-selection) :paths paths)
+              snapshot {:roster [{:name "one"}]
+                        :frozen (merge work {:base (:base change) :head (:tip change)})
+                        :selection {:status status :reason reason :change change :runs [] :skips skips}}]
+          (weaver/update! rt gate {:attributes {:review/dispatch snapshot}})
+          (workflow/complete! "no-applicable" {:by-identity "fixture"})
+          (workflow/complete! "no-applicable" {})
+          (with-redefs [evidence/unchanged! identity]
+            (if pass?
+              (let [receipt (review/verify! (code-params rt "no-applicable"))]
+                (is (= "no-applicable-reviewer" (:status receipt)))
+                (is (empty? (:results receipt))))
+              (is (thrown? clojure.lang.ExceptionInfo
+                           (review/verify! (code-params rt "no-applicable")))))))))))

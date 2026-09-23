@@ -4,7 +4,9 @@
             [millhouse.spools.land.support :as land-support]
             [millhouse.spools.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]
-            [me.workflows.support :as support]))
+            [me.workflows.support :as support]
+            [me.workflows.release-evidence]
+            [me.workflows.handoff :as handoff]))
 
 (defn- semantic-version?
   "Return true when v is a MAJOR.MINOR.PATCH version string."
@@ -20,7 +22,8 @@
 
 (s/def ::version semantic-version?)
 (s/def ::worktree absolute-path?)
-(s/def ::release-params (s/keys :req-un [::version ::worktree]))
+(s/def ::branch (s/and support/non-blank-string? #(not= "main" %)))
+(s/def ::release-params (s/keys :req-un [::version ::worktree ::branch]))
 
 (def ^:private release-preflight-script
   (support/script "release-preflight.sh"))
@@ -29,19 +32,13 @@
   (support/script "release-identity.sh"))
 
 (workflow/defworkflow release
-  "Prepare, verify, tag, and publish one Millstrand release.
-
-  The caller supplies the semantic `version` and the absolute `worktree` for
-  clean-main checks and shell gates. The workflow makes the two-commit
-  release shape explicit: VERSION and changelog first, then a Homebrew formula
-  pinned to that release commit. Full quality and identity checks run before a
-  human publish checkpoint. Publication uses one atomic push for main and the
-  annotated version tag."
+  "Prepare a two-commit candidate; publish only after accepted landing and approval."
   {:entrypoints #{:start}
    :param-spec ::release-params
    :defaults {}
    :example {:version "0.5.2"
-             :worktree "/abs/path/to/millstrand"}}
+             :worktree "/abs/path/to/millstrand"
+             :branch "release/0.5.2"}}
   (workflow/workflow
    (fn [{:keys [version]}] (str "Release Millstrand " version))
    {:attributes {"workflow/family" "release"}}
@@ -51,12 +48,13 @@
                   :attributes
                   {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                    "shell/timeout-secs" 120
-                   "shell/argv" (land-support/sh-gate release-preflight-script
-                                                      "release-preflight")}
+                   "shell/argv" (fn [{:keys [branch]}]
+                                  (land-support/sh-gate release-preflight-script
+                                                        "release-preflight" branch))}
                   (format-alpha/prose
                    "
-                   Require a clean worktree on `main` with no remote commits
-                   missing locally before changing release files.
+                   Require a clean ordinary candidate branch containing current origin/main.
+                   Never edit or push main. Use the card's claimed branch/worktree.
                    "))
    (workflow/step :bump-version
                   (fn [{:keys [version]}] (str "Bump VERSION to " version))
@@ -65,7 +63,7 @@
                   (fn [{:keys [version]}]
                     (format-alpha/prose
                      "
-                     On clean, current `main`, write `{version}` plus a trailing
+                     On the clean candidate branch, write `{version}` plus a trailing
                      newline to `VERSION`. Leave the change uncommitted for the
                      changelog step.
                      "
@@ -94,7 +92,7 @@
                   :depends-on [:update-changelog]
                   :attributes {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 7200
-                               "shell/argv" ["make" "land-quality"]}
+                               "shell/argv" ["sh" ".millstrand/land-quality.sh"]}
                   (format-alpha/prose
                    "
                    Run the repository-owned release quality contract. Fix and
@@ -125,34 +123,59 @@
                   {"shell/cwd" (fn [{:keys [worktree]}] worktree)
                    "shell/timeout-secs" 1200
                    "shell/argv"
-                   (fn [{:keys [version]}]
+                   (fn [{:keys [version branch]}]
                      (land-support/sh-gate release-identity-script
                                            "release-identity"
-                                           version))}
+                                           version branch))}
                   (format-alpha/prose
                    "
                    Build both CLIs and require their reported versions to match
                    the release. The worktree must remain clean.
                    "))
-   (workflow/gate :publish
-                  (fn [{:keys [version]}] (str "Publish v" version))
-                  :human
-                  :depends-on [:build-identity]
-                  (fn [{:keys [version]}]
-                    (format-alpha/prose
-                     "
-                     Confirm the worktree is clean. Run `git fetch origin` and
-                     require `git rev-list --left-right --count
-                     origin/main...HEAD` to report zero remote-only commits.
-
-                     Create annotated tag `v{version}` at HEAD with message
-                     `Millstrand {version}`, then publish branch and tag together:
-
-                     ```sh
-                     git push --atomic origin main v{version}
-                     ```
-
-                     Verify both remote refs resolve to HEAD before completing.
-                     Never move an existing release tag.
-                     "
-                     {:version version})))))
+   (workflow/gate
+    :freeze-candidate "Record the exact candidate" :code :depends-on [:build-identity]
+    :attributes {"code/fn" "me.workflows.release-evidence/candidate!"
+                 "code/params" #(select-keys % [:version :branch :worktree])}
+    "Record version, release commit and formula commit before any landing or approval.")
+   (workflow/gate
+    :landing-policy "Resolve candidate-preserving shared landing" :human
+    :depends-on [:freeze-candidate]
+    (format-alpha/prose
+     "
+       STOP for the repository owner: shared Land currently squashes, whereas
+       this release must preserve the adjacent release and formula commits and
+       the formula's exact pin. Do not invent a direct-main push exception.
+       Record the policy decision and accepted shared landing run/PR receipt
+       here. Leave this boundary open until an authorized shared path preserves
+       the candidate on origin/main. No publication or cleanup while unresolved.
+     "))
+   (workflow/gate
+    :approve "Approve the exact landed release candidate" :human
+    :depends-on [:landing-policy]
+    (format-alpha/prose
+     "
+       Read freeze-candidate's code/result. Ask the user to approve that exact
+       version and candidate SHA for publication. Record release/approval here
+       with version, head and authorization (the actual conversation reference).
+       A human gate label or actor string is not authorization. A changed
+       candidate needs new validation and approval; do not carry approval forward.
+     "))
+   (workflow/gate
+    :publish "Publish the approved annotated tag" :code :depends-on [:approve]
+    :attributes {"code/fn" "me.workflows.release-evidence/publish!"
+                 "delivery/key" #(handoff/key-for "release" %)
+                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                                       :key (handoff/key-for "release" %))}
+    (format-alpha/prose
+     "
+       Verify exact approval and candidate ancestry on origin/main, then push
+       only the annotated version tag. Never push main or move an existing tag.
+       An uncertain push requires inspecting the remote receipt, not blind replay.
+     "))
+   (workflow/gate
+    :verify-remote "Verify the remote release receipt" :code :depends-on [:publish]
+    :attributes {"code/fn" "me.workflows.release-evidence/verify-remote!"
+                 "delivery/key" #(handoff/key-for "release" %)
+                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                                       :key (handoff/key-for "release" %))}
+    "Require the remote annotated tag object and peeled candidate SHA to match the publication receipt.")))

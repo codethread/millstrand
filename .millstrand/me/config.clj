@@ -10,6 +10,7 @@
             [me.workflows.review :as review]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
+            [me.workflows.story-review :as story-review]
             [millhouse.spools.chime :as chime]
             [millhouse.spools.cron :as cron]
             [millhouse.spools.workflow :as workflow]
@@ -27,8 +28,10 @@
 (millstrand/use-pattern! common/delegate-pipeline)
 
 (workflow/use-workflow! review/millstrand-review)
+(workflow/use-workflow! story-review/story-review)
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
+(workflow/use-workflow! story/story-wave)
 (workflow/use-workflow! story/story)
 (workflow/use-workflow! explore/explore)
 (workflow/use-workflow! fix/fix)

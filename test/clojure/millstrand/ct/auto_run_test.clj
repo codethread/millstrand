@@ -169,7 +169,6 @@
               quality (titled-strand strands "Pass repository quality checks")
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
-              review-card (titled-strand strands "Move the verified feature into review")
               quality-argv (attr-get quality :shell/argv)
               ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
@@ -192,7 +191,7 @@
           (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
             (doseq [[prerequisite step]
-                    (partition 2 1 [implement prepare-pr quality ci verify-pr review-card])]
+                    (partition 2 1 [implement prepare-pr quality ci verify-pr])]
               (is (= [(:id prerequisite)]
                      (mapv :to_strand_id
                            (graph/outgoing-edges runtime [(:id step)] "depends-on"))))))
@@ -204,6 +203,8 @@
             (doseq [[label rejected-pr-result] rejected-pr-results]
               (is (not (zero? (:exit rejected-pr-result)))
                   (str label ": " (:output rejected-pr-result)))))
+          (is (not-any? #(= "millhouse.spools.land.card-actions/review-card!"
+                            (attr-get % :code/fn)) strands))
           (testing "repository policy delegates landing to separate shared roles"
             (is (some? handoff-step))
             (is (some? finisher-step))
