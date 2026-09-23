@@ -95,8 +95,17 @@
                                "shell/argv" ["sh" ".millstrand/land-quality.sh"]}
                   (format-alpha/prose
                    "
-                   Run the repository-owned release quality contract. Fix and
-                   commit any failure, then clear `gate/error` to retry.
+                   Run the repository-owned release quality contract. Resolve
+                   any quality repairs before rebuilding the candidate: a commit
+                   containing only VERSION and CHANGELOG.md, immediately followed
+                   by a formula-only commit pinned to that release commit. Do not
+                   leave repair commits between them.
+
+                   Re-run quality and identity validation for the rebuilt pair,
+                   refresh the recorded release SHA, and refreeze both candidate
+                   identities before approval. Clear `gate/error` only when the
+                   corrected candidate is ready for its check; old receipts do
+                   not validate rebuilt commits.
                    "))
    (workflow/step :pin-homebrew
                   (fn [{:keys [version]}] (str "Pin Homebrew to " version))
@@ -148,6 +157,11 @@
        Record the policy decision and accepted shared landing run/PR receipt
        here. Leave this boundary open until an authorized shared path preserves
        the candidate on origin/main. No publication or cleanup while unresolved.
+
+       The authorized route must retain custody of the candidate checkout through
+       publication and remote verification: publish! reads Git there. Ordinary
+       shared Land cleanup must not delete it. Shared Land does not yet provide
+       this candidate-preserving landing and checkout-retention contract.
      "))
    (workflow/gate
     :approve "Approve the exact landed release candidate" :human
