@@ -1,8 +1,6 @@
 (ns me.workflows.review-evidence
   "Dispatch and verify full-roster reviews against durable Harnesses evidence."
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [ct.spools.harnesses :as harnesses]
+  (:require [ct.spools.harnesses :as harnesses]
             [ct.spools.harnesses.reviewers :as reviewers]
             [me.workflows.evidence :as evidence]
             [me.workflows.support :as support]
@@ -45,19 +43,10 @@
         (when (attr-get gate :review/dispatch-intent)
           (fail! "Interrupted reviewer dispatch requires reconciliation; do not relaunch"
                  {:gate (:id gate)}))
-        (let [frozen (evidence/freeze! params)
+        (let [frozen (evidence/quality-head! params)
               head (:head frozen)
-              marker (evidence/git! (:worktree params) "rev-parse" "--git-path"
-                                    "millstrand-land-quality-head")
-              marker-file (io/file marker)
-              marker-file (if (.isAbsolute marker-file) marker-file
-                              (io/file (:worktree params) marker))
               roster (reviewers/reviewers rt)
               intent {:frozen frozen :roster roster}]
-          (when-not (= head
-                       (evidence/git! (:worktree params) "rev-parse" "@{upstream}^{commit}")
-                       (str/trim (slurp marker-file)))
-            (fail! "Review must use the quality-marked pushed HEAD" {:frozen frozen}))
           (weaver/update! rt (:id gate) {:attributes {:review/dispatch-intent intent}})
           (let [selection (reviewers/start! rt {:cwd (:worktree params)
                                                 :base (:base frozen) :branch head})

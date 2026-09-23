@@ -74,7 +74,6 @@
     (fn [{:keys [module]}] (str "Story wave: " module))
     (workflow/step
      :split "Write the per-concern split" :self
-     :attributes {"story/entry" "true"}
      (format-alpha/prose
       "
         Write the split first so the compiler exposes coupling. Public bodies in
@@ -138,27 +137,26 @@
      (format-alpha/prose
       "
         Read the module inventory and record the large-change modules as
-        story/modules, a distinct vector. Small churn earns no wave. The launch gate
-        reads this vector, including an empty vector when none
+        story/modules, a distinct vector. Small churn earns no wave. Pass this
+        vector explicitly to the next defer, including an empty vector when none
         qualify. Do not launch extra Story runs: durable receipts name each
         serial child, and the join verifies their actual completion.
       "))
-    (workflow/gate
-     :launch-waves "Launch or reuse recorded module waves" :code :depends-on [:classify]
-     :attributes {"code/fn" "me.workflows.story-waves/launch!"
-                  "delivery/key" #(handoff/key-for "story-waves" %)
-                  "code/params" #(hash-map :key (handoff/key-for "story-waves" %)
-                                           :params (select-keys % [:feature :branch :worktree :reviewer-harness :card]))}
-     "Persist child ids and serialized entry bonds. Do not independently start waves.")
-    (workflow/step
-     :wait-waves "Drive and await the recorded waves" :self :depends-on [:launch-waves]
-     "Read story/children on launch-waves. Drive only the ready child, in order. Record each final revision and result; complete after every child finishes.")
-    (workflow/gate
-     :waves "Join completed module waves" :code :depends-on [:wait-waves]
-     :attributes {"code/fn" "me.workflows.story-waves/join!"
-                  "delivery/key" #(handoff/key-for "story-waves" %)
-                  "code/params" #(hash-map :key (handoff/key-for "story-waves" %))}
-     "Check actual recorded child roots are closed before validating the complete Story.")
+    (workflow/defer
+     :waves "Supply the finite module waves" :depends-on [:classify]
+     :attributes {"workflow/instruction"
+                  (format-alpha/prose
+                   "
+                     Read story/modules on classify. Fill this defer with
+                     story-waves and explicit modules, feature, branch, worktree,
+                     reviewer-harness and optional card. No params are inherited.
+
+                     Drive the child named by each launch slot's story/child
+                     receipt. The next child is materialized only after that child
+                     completes; do not launch waves separately. When waiting,
+                     inspect these receipts in the parent subgraph and await the
+                     recorded child run. The final join returns all receipts.
+                   ")})
     (workflow/step
      :validate "Validate the complete Story" :self :depends-on [:waves]
      (format-alpha/prose
@@ -170,4 +168,4 @@
     (handoff/prepare :prepare-review [:validate] "millstrand-review"
                      "Carry the exact branch and completed module-wave receipts into full review.")
     (handoff/launch-gate :accept-review :prepare-review "millstrand-review" "story-review"))
-   {:intent-review #{:story-review}}))
+   {:intent-review #{:story-review} :waves #{:story-waves}}))

@@ -1,6 +1,7 @@
 (ns me.workflows.evidence
   "Durable step lookup and Git evidence for repository workflows."
-  (:require [clojure.java.shell :as shell]
+  (:require [clojure.java.io :as io]
+            [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.walk :as walk]
             [millstrand.api.current.alpha :as current]
@@ -56,6 +57,21 @@
   (let [head (git! worktree "rev-parse" "HEAD^{commit}")
         base (git! worktree "merge-base" "origin/main" head)]
     {:base base :head head :worktree worktree :branch branch}))
+
+(defn quality-head!
+  "Require clean HEAD, its quality marker and the named origin branch to agree."
+  [{:keys [worktree branch] :as params}]
+  (let [{:keys [head] :as frozen} (freeze! params)
+        marker-path (git! worktree "rev-parse" "--git-path" "millstrand-land-quality-head")
+        marker (io/file marker-path)
+        marker (if (.isAbsolute marker) marker (io/file worktree marker-path))
+        remote-ref (str "refs/heads/" branch)
+        remote (git! worktree "ls-remote" "--exit-code" "origin" remote-ref)]
+    (when-not (and (= head (str/trim (slurp marker)))
+                   (= (str head "\t" remote-ref) remote))
+      (fail! "Quality-marked HEAD must match the named origin branch"
+             {:frozen frozen :remote-ref remote-ref :remote remote}))
+    frozen))
 
 (defn unchanged!
   "Require the frozen branch and HEAD still describe a clean worktree."

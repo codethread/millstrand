@@ -11,6 +11,7 @@
             [me.workflows.release :as release]
             [me.workflows.story :as story]
             [me.workflows.story-review :as story-review]
+            [me.workflows.story-waves :as story-waves]
             [millhouse.spools.chime :as chime]
             [millhouse.spools.cron :as cron]
             [millhouse.spools.workflow :as workflow]
@@ -32,6 +33,7 @@
 (workflow/use-workflow! story/story-fold)
 (workflow/use-workflow! story/story-keep)
 (workflow/use-workflow! story/story-wave)
+(workflow/use-workflow! story-waves/story-waves)
 (workflow/use-workflow! story/story)
 (workflow/use-workflow! explore/explore)
 (workflow/use-workflow! fix/fix)

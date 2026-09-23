@@ -72,7 +72,12 @@
                                    ((juxt :owner :evidence :head) receipt))
                    (fail! "Terminal report needs acknowledged custody and exact HEAD"
                           {:source (:id source)}))
-                 (assoc receipt :status "reported"))
+                 (let [candidate (evidence/quality-head!
+                                  (evidence/data (attr-get source :handoff/identity)))]
+                   (when-not (= (:head receipt) (:head candidate))
+                     (fail! "Report HEAD does not match the validated candidate"
+                            {:reported (:head receipt) :candidate candidate}))
+                   (assoc receipt :status "reported")))
       (fail! "Unknown delivery outcome" {:choice choice}))))
 
 (defn prepare
