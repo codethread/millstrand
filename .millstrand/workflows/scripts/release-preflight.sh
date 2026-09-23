@@ -11,7 +11,10 @@ status=$(git status --short) || die "cannot inspect the worktree status"
 $status"
 
 branch=$(git branch --show-current) || die "cannot read the checked-out branch"
-[ "$branch" = main ] || die "expected checked-out branch main; found $branch"
+expected=${1-}
+[ -n "$expected" ] || die "expected the candidate branch argument"
+[ "$expected" != main ] || die "release preparation must not edit main"
+[ "$branch" = "$expected" ] || die "expected candidate branch $expected; found $branch"
 
 git fetch origin || die "cannot fetch origin"
 missing=$(git rev-list --count HEAD..origin/main) \

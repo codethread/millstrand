@@ -4,4 +4,4 @@
 # after this file runs. The Make target builds and runs the repository-owned DAG.
 set -eu
 
-exec make land-quality
+exec flock -w 180 /tmp/millstrand-test.lock make land-quality

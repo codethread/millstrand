@@ -109,14 +109,8 @@
        (fn [{:keys [branch]}]
          (land-support/sh-gate verify-pr-script "auto-run-verify-pr" branch))
        300 failure-instruction)
-      (workflow/gate
-       :review-card "Move the verified feature into review" :code
-       :depends-on [:verify-pr]
-       :attributes {"code/fn" "millhouse.spools.land.card-actions/review-card!"
-                    "code/params" (fn [{:keys [card]}] {:card card})}
-       failure-instruction)
       (workflow/call :land #'autonomous/autonomous-land {}
-                     :depends-on [:review-card]
+                     :depends-on [:verify-pr]
                      :title "Review and hand off autonomous landing")])))
 
 (workflow/defworkflow! auto-full-land

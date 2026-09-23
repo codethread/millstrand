@@ -21,7 +21,6 @@
    'millstrand.ct.attention-test
    'millstrand.ct.auto-run-test
    'millstrand.ct.release-workflow-test
-   'millstrand.ct.review-workflow-test
    'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
@@ -108,7 +107,10 @@
    ;; parallel parent with runtime consumers.
    'millstrand.core.weaver.startup-test
    'millstrand.runtime-deps-test
-   'millstrand.core.weaver.modules-test])
+   'millstrand.core.weaver.modules-test
+   ;; Workflow evidence fixtures redefine shared reviewer and workflow Vars.
+   'millstrand.ct.review-workflow-test
+   'millstrand.ct.workflow-delivery-test])
 
 (defn- summary-zero [] test/*initial-report-counters*)
 (defn- merge-summaries [& summaries] (apply merge-with + (summary-zero) (map #(dissoc % :type) summaries)))

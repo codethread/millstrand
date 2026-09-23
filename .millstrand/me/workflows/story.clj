@@ -1,278 +1,171 @@
 (ns me.workflows.story
-  "The module-form story workflow and its continuations (family `story`)."
+  "Story refactoring with frozen reviews and returning module-wave joins."
   (:require [clojure.spec.alpha :as s]
-            [millstrand.api.format.alpha :as format-alpha]
-            [millhouse.spools.workflow :as workflow]
+            [me.workflows.handoff :as handoff]
+            [me.workflows.story-review :as review]
+            [me.workflows.story-waves]
             [me.workflows.support :as support]
-            [me.workflows.review :as review]))
+            [millhouse.spools.workflow :as workflow]
+            [millstrand.api.format.alpha :as format-alpha]))
 
-(defn- non-blank-string?
-  "Return true when v is a non-blank string."
-  [v]
-  (support/non-blank-string? v))
+(s/def ::feature support/non-blank-string?)
+(s/def ::branch support/non-blank-string?)
+(s/def ::worktree support/non-blank-string?)
+(s/def ::card support/non-blank-string?)
+(s/def ::module support/non-blank-string?)
+(s/def ::reviewer-harness support/non-blank-string?)
+(s/def ::params
+  (s/keys :req-un [::feature ::branch ::worktree ::module ::reviewer-harness]
+          :opt-un [::card]))
+(defn- resolve-review [id dependency]
+  (workflow/step
+   id "Resolve the adversarial findings" :self :depends-on [dependency]
+   (format-alpha/prose
+    "
+      Read this returning review's child gate harness/result in the run subgraph.
+      Require an actual result naming the frozen base/head. Resolve or explicitly
+      adjudicate every finding and record that resolution on this step. A reviewer
+      reporting findings is not a failed process, but unresolved findings block
+      progress. Commit repairs and obtain fresh review for material changes.
+    ")))
 
-(s/def ::non-blank-string non-blank-string?)
-
-(s/def ::feature ::non-blank-string)
-(s/def ::worktree ::non-blank-string)
-(s/def ::card ::non-blank-string)
-
-(s/def ::module ::non-blank-string)
-(s/def ::reviewer-harness ::non-blank-string)
-
-(def ^:private story-param-docs
-  {:feature "Feature or card scope this story wave changes."
-   :module "One large module covered by this refactor wave."
-   :worktree "Absolute worktree path for the review gates."
-   :card "Optional existing kanban card id."
-   :reviewer-harness
-   "Harness outside the driver's model family for adversarial review gates."})
-
-(s/def ::story-params (s/keys :req-un [::feature ::module ::worktree]
-                              :opt-un [::card ::reviewer-harness]))
-(s/def ::story-continuation-params (s/keys :req-un [::feature ::module ::worktree]
-                                           :opt-un [::card ::reviewer-harness]))
-
-(workflow/defworkflow story-fold
-  "Fold a story split back into one story-ordered file."
-  {:entrypoints #{:continue}
-   :param-spec ::story-continuation-params
-   :defaults {}
-   :param-docs story-param-docs}
-  (workflow/workflow
-   (fn [{:keys [module]}] (str "Story fold: " module))
-   {:attributes {"workflow/family" "story"}}
-   (workflow/step :fold
-                  (fn [{:keys [module]}] (str "Fold " module " into one story-ordered file"))
-                  :self
-                  :attributes {"workflow/action-ref" "story.fold"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Merge the concern files back into a single story-ordered
-                      |alpha.clj: publics with real bodies first, section-commented
-                      |private clusters in story order, leaf mechanics last, one
-                      |declare block up top. The public-surface tests must pass
-                      |unchanged through the fold. Then re-run the swift adversarial
-                      |pass: folding loses namespace aliases, so hunt name
-                      |collisions, misleading now-local names, surplus or stale
-                      |declare entries, and section comments that no longer match
-                      |their contents. Fix findings before completing.")))
-   (workflow/step :finish-validate
-                  (fn [{:keys [module]}] (str "Validate and hand " module " to review"))
-                  :self
-                  :depends-on [:fold]
-                  :attributes {"workflow/action-ref" "story.finish"}
-                  (fn [{:keys [module] :as params}]
-                    (format-alpha/prose
-                     "
-                       Delete `{module:json}` from quality.api-form/pending for an API
-                       conversion. Run focused cold tests and `make fmt-check lint
-                       reflect-check docs-check`; run `make api-docs` on docstring changes.
-                       Finish this wave before handing the whole change to review.
-
-                       {handoff}
-                     " {:module module
-                        :handoff (review/handoff-instruction
-                                  (assoc params :branch "<branch>"))})))))
+(defn- validate-wave [dependencies]
+  (workflow/step
+   :validate "Validate this module wave" :self :depends-on dependencies
+   (format-alpha/prose
+    "
+      Remove this module from quality.api-form/pending for an API conversion.
+      Run focused cold tests. Regenerate API docs after docstring changes.
+      Commit and record the final revision and verification receipt here.
+      This child returns to the parent join; it does not launch full review
+      or take custody of the branch, card, landing or cleanup.
+    ")))
 
 (workflow/defworkflow story-keep
-  "Keep a module's per-concern split."
-  {:entrypoints #{:continue}
-   :param-spec ::story-continuation-params
-   :defaults {}
-   :param-docs story-param-docs}
-  (workflow/workflow
-   (fn [{:keys [module]}] (str "Story keep-split: " module))
-   {:attributes {"workflow/family" "story"}}
-   (workflow/step :finish-validate
-                  (fn [{:keys [module]}] (str "Validate the split and hand " module " to review"))
-                  :self
-                  :attributes {"workflow/action-ref" "story.finish"}
-                  (fn [{:keys [module] :as params}]
-                    (format-alpha/prose
-                     "
-                       Keep internal/<concern> files named by meaning. Internal never
-                       requires alpha; only its own alpha, internal siblings, and tests
-                       reach internal. Delete `{module:json}` from quality.api-form/pending
-                       for an API conversion. Run focused cold tests and `make fmt-check
-                       lint reflect-check docs-check`; run `make api-docs` on docstring
-                       changes. Finish this wave before handing the whole change to review.
+  "Validate the accepted concern split without repeating its review."
+  {:entrypoints #{:call} :param-spec ::params :defaults {}}
+  (workflow/workflow "Keep the reviewed split" (validate-wave [])))
 
-                       {handoff}
-                     " {:module module
-                        :handoff (review/handoff-instruction
-                                  (assoc params :branch "<branch>"))})))))
+(workflow/defworkflow story-fold
+  "Fold a reviewed split, freeze the changed revision and review the fold."
+  {:entrypoints #{:call} :param-spec ::params :defaults {}}
+  (workflow/bind-defers
+   (workflow/workflow
+    "Fold the reviewed split"
+    (workflow/step
+     :fold "Fold into one story-ordered file" :self
+     (format-alpha/prose
+      "
+        Merge into one file: real public bodies first, private clusters in reading
+        order, leaf mechanics last. Remove stale aliases and declarations; check
+        name collisions. Public-surface tests must pass unchanged through the fold.
+      "))
+    (review/freeze-step :freeze-fold [:fold] "fold")
+    (review/review-defer :fold-review :freeze-fold)
+    (resolve-review :resolve-fold :fold-review)
+    (validate-wave [:resolve-fold]))
+   {:fold-review #{:story-review}}))
+
+(workflow/defworkflow story-wave
+  "Refactor one module, review the split, then choose and validate its final form."
+  {:entrypoints #{:start} :param-spec ::params :defaults {}}
+  (workflow/bind-defers
+   (workflow/workflow
+    (fn [{:keys [module]}] (str "Story wave: " module))
+    (workflow/step
+     :split "Write the per-concern split" :self
+     (format-alpha/prose
+      "
+        Write the split first so the compiler exposes coupling. Public bodies in
+        alpha show sequencing, fan-out and joins; internal/<concern> files own
+        mechanics. Follow the Clojure story-file guidance and SPEC-003.C19a.
+        Change only this wave's module. Other modules have their own serial child.
+      "))
+    (workflow/step
+     :tests "Test through the public surface" :self :depends-on [:split]
+     "Keep the public-surface behavior lock, not tests of extracted internals. Run focused cold tests and record the command/result.")
+    (review/freeze-step :freeze-split [:tests] "split")
+    (review/review-defer :split-review :freeze-split)
+    (resolve-review :resolve-split :split-review)
+    (workflow/step
+     :measure "Measure the possible single-file fold" :self :depends-on [:resolve-split]
+     "Record total content lines minus namespace overhead. Around 500 lines is the tipping point; measure before choosing.")
+    (workflow/checkpoint
+     :fold-decision "Fold back or keep the split?" :depends-on [:measure] :kind :agent
+     :choices [{:key :fold-back :label "Fold into a story-ordered file"}
+               {:key :keep-split :label "Keep concern modules"}]
+     :attributes {"workflow/instruction"
+                  "Choose using the recorded measurement. The next step performs the choice; choosing does not finish the wave."})
+    (workflow/defer
+     :final-form "Complete the chosen module form" :depends-on [:fold-decision]
+     :attributes {"workflow/instruction"
+                  (format-alpha/prose
+                   "
+                     Read fold-decision's workflow/outcome. For fold-back fill
+                     with story-fold; for keep-split fill with story-keep.
+                     Pass feature, module, branch, worktree and reviewer-harness
+                     explicitly. The fold changes code and earns a fresh frozen
+                     review; keeping the accepted split does not repeat it.
+                     This returning procedure must finish before the wave closes.
+                   ")}))
+   {:split-review #{:story-review} :final-form #{:story-fold :story-keep}}))
 
 (workflow/defworkflow story
-  "Run one module-form refactor wave through validation and review handoff."
-  {:entrypoints #{:start}
-   :param-spec ::story-params
-   :param-docs story-param-docs
-   ;; The engine cannot know which agent is driving, so the cross-vendor
-   ;; invariant lives here: the pourer names a review seat OUTSIDE its own
-   ;; model family, and this default is the one it overrides.
-   :defaults {:reviewer-harness "sol-med"}}
-  (workflow/workflow
-   (fn [{:keys [module]}] (str "Story: " module))
-   {:attributes {"workflow/family" "story"
-                 "story/module" (fn [{:keys [module]}] module)}}
-   (workflow/step :identify-modules
-                  (fn [{:keys [feature]}] (str "Identify modules " feature " changes"))
-                  :self
-                  :attributes {"workflow/action-ref" "story.identify"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Name every module this feature touches and record the list
-                      |as a note on this step. For a form-conversion card this is
-                      |the card's module; for feature work it is the modules the
-                      |change will land in.")))
-   (workflow/step :overall-changes
-                  (fn [{:keys [feature]}] (str "Make the overall changes for " feature))
-                  :self
-                  :depends-on [:identify-modules]
-                  :attributes {"workflow/action-ref" "story.changes"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Make the feature's behavior changes first - the refactor
-                      |wave comes after, over the changed result. A pure form
-                      |conversion records that there are none and completes.")))
-   (workflow/gate :intent-review
-                  (fn [{:keys [feature]}] (str "Adversarial intent review for " feature))
-                  :agent
-                  :depends-on [:overall-changes]
-                  :attributes {"workflow/action-ref" "story.intent-review"
-                               "harness/alias" (fn [{:keys [reviewer-harness]}]
-                                                 reviewer-harness)
-                               "harness/cwd" (fn [{:keys [worktree]}] worktree)
-                               "harness/prompt"
-                               (fn [{:keys [feature module]}]
-                                 (str "Adversarial intent review for " feature ". "
-                                      (format-alpha/reflow
-                                       "|Read the diff (`git fetch origin && git diff
-                                        |origin/main...HEAD` — three-dot merge-base
-                                        |semantics, never two-dot) and the
-                                        |feature intent (kanban card, proposal, or step
-                                        |notes on this run). Challenge the INTENT, not
-                                        |style: is the change the right change, does the
-                                        |approach fit the specs it cites, what will age
-                                        |badly for module")
-                                      " `" module "`. "
-                                      (format-alpha/reflow
-                                       "|Your FINAL MESSAGE becomes the gate's outcome
-                                        |notes: put the full findings there, verdict
-                                        |first. Do not write to workflow strands. Never
-                                        |the full roster lens - that runs in the
-                                        |Millstrand review workflow.")))})
-   (workflow/step :resolve-intent
-                  (fn [_] "Resolve intent-review findings")
-                  :self
-                  :depends-on [:intent-review]
-                  :attributes {"workflow/action-ref" "story.resolve-intent"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Read the gate's review note and verdict. Fix or explicitly
-                      |adjudicate every finding - a reviewer run succeeds even
-                      |when it finds problems, so this step is where the findings
-                      |get faced. Record the resolution before completing.")))
-   (workflow/step :identify-large
-                  (fn [_] "Identify large-change modules for refactor waves")
-                  :self
-                  :depends-on [:resolve-intent]
-                  :attributes {"workflow/action-ref" "story.identify-large"}
-                  (fn [{:keys [module]}]
-                    (str (format-alpha/reflow
-                          "|Separate LARGE module changes from small churn - only
-                           |large ones earn a wave. This run's wave covers")
-                         " `" module "`; "
-                         (format-alpha/reflow
-                          "|start one further `strand workflow start <id>
-                           |--workflow story` run per additional large module.
-                           |Record the classification."))))
-   (workflow/step :split-refactor
-                  (fn [{:keys [module]}] (str "Write the per-concern split for " module))
-                  :self
-                  :depends-on [:identify-large]
-                  :attributes {"workflow/action-ref" "story.split"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Write the split FIRST - the compiler exposes coupling that
-                      |imagination fudges. alpha.clj public bodies compose the
-                      |story (sequencing, fan-out, blocking joins visible; no
-                      |forwarding husks) over internal/<concern>.clj files named by
-                      |meaning. Follow the clojure skill's story-file section and
-                      |SPEC-003.C19a. Delegating this step to a tracked worker run
-                      |is encouraged; size it to one worker context.")))
-   (workflow/step :public-tests
-                  (fn [{:keys [module]}] (str "Test " module " through its public surface"))
-                  :self
-                  :depends-on [:split-refactor]
-                  :attributes {"workflow/action-ref" "story.tests"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Write or keep tests against the public surface only - they
-                      |are the behavior lock that survives any later fold. Cold
-                      |run green before completing.")))
-   (workflow/gate :split-review
-                  (fn [{:keys [module]}] (str "Swift adversarial review of the " module " split"))
-                  :agent
-                  :depends-on [:public-tests]
-                  :attributes {"workflow/action-ref" "story.split-review"
-                               "harness/alias" (fn [{:keys [reviewer-harness]}]
-                                                 reviewer-harness)
-                               "harness/cwd" (fn [{:keys [worktree]}] worktree)
-                               "harness/prompt"
-                               (fn [{:keys [module]}]
-                                 (str "Adversarial review of the fresh per-concern split"
-                                      " of module `" module "` "
-                                      (format-alpha/reflow
-                                       "|(diff: `git fetch origin && git diff
-                                        |origin/main...HEAD`, three-dot merge-base
-                                        |semantics, never two-dot), while the concern
-                                        |boundaries are still visible: bad or arbitrary
-                                        |boundaries, forwarding husks in alpha, story
-                                        |helpers exiled from reading reach, tests leaning
-                                        |on internals instead of the public surface,
-                                        |dependency-rule breaches. Your FINAL MESSAGE
-                                        |becomes the gate's outcome notes: full findings
-                                        |there, verdict first. Do not write to workflow
-                                        |strands.")))})
-   (workflow/step :resolve-split
-                  (fn [_] "Resolve split-review findings")
-                  :self
-                  :depends-on [:split-review]
-                  :attributes {"workflow/action-ref" "story.resolve-split"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Read the gate's review note and verdict; fix or explicitly
-                      |adjudicate every finding and record the resolution before
-                      |completing.")))
-   (workflow/step :measure
-                  (fn [{:keys [module]}] (str "Measure the folded size of " module))
-                  :self
-                  :depends-on [:resolve-split]
-                  :attributes {"workflow/action-ref" "story.measure"}
-                  (fn [_]
-                    (format-alpha/reflow
-                     "|Approximate the single-file fold: total content lines across
-                      |alpha and concern files minus per-file ns overhead. Record
-                      |the number in notes; roughly 500 lines is the tipping
-                      |point.")))
-   (workflow/checkpoint :fold-decision
-                        (fn [{:keys [module]}] (str "Fold " module " back, or keep the split?"))
-                        :depends-on [:measure]
-                        :kind :agent
-                        :choices [{:key :fold-back
-                                   :label "Fold back to one file"
-                                   :description
-                                   (format-alpha/reflow
-                                    "|The measured fold fits the rough 500-line budget: merge
-                                     |back into a single story-ordered alpha.clj and re-verify.")
-                                   :next :story-fold}
-                                  {:key :keep-split
-                                   :label "Keep the split"
-                                   :description
-                                   (format-alpha/reflow
-                                    "|The module outgrows the budget: the per-concern
-                                     |internal/<concern> files are the deliverable.")
-                                   :next :story-keep}]
-                        :attributes {"workflow/decision-point" "story-fold-decided"})))
+  "Implement a Story, join its module waves, then hand off full review."
+  {:entrypoints #{:start} :param-spec ::params :defaults {}
+   :param-docs {:feature "Feature intent and work identity."
+                :module "Initial module scope for intent review."
+                :branch "Actual feature branch, never a placeholder."
+                :worktree "Absolute branch worktree."
+                :card "Optional existing work card."
+                :reviewer-harness "Explicit review seat outside the driver's model family."}}
+  (workflow/bind-defers
+   (workflow/workflow
+    (fn [{:keys [feature]}] (str "Story: " feature))
+    {:attributes {"workflow/family" "story"}}
+    (workflow/step
+     :identify-modules "Record the modules this feature touches" :self
+     "Record the finite module inventory and feature intent on this step before implementation.")
+    (workflow/step
+     :overall-changes "Implement the feature behavior" :self :depends-on [:identify-modules]
+     "Make the behavior changes before refactor waves. For a pure form conversion, record that no behavior change is needed.")
+    (review/freeze-step :freeze-intent [:overall-changes] "intent")
+    (review/review-defer :intent-review :freeze-intent)
+    (resolve-review :resolve-intent :intent-review)
+    (workflow/step
+     :classify "Classify the finite module-wave collection" :self :depends-on [:resolve-intent]
+     (format-alpha/prose
+      "
+        Read the module inventory and record the large-change modules as
+        story/modules, a distinct vector. Small churn earns no wave. Pass this
+        vector explicitly to the next defer, including an empty vector when none
+        qualify. Do not launch extra Story runs: durable receipts name each
+        serial child, and the join verifies their actual completion.
+      "))
+    (workflow/defer
+     :waves "Supply the finite module waves" :depends-on [:classify]
+     :attributes {"workflow/instruction"
+                  (format-alpha/prose
+                   "
+                     Read story/modules on classify. Fill this defer with
+                     story-waves and explicit modules, feature, branch, worktree,
+                     reviewer-harness and optional card. No params are inherited.
+
+                     Drive the child named by each launch slot's story/child
+                     receipt. The next child is materialized only after that child
+                     completes; do not launch waves separately. When waiting,
+                     inspect these receipts in the parent subgraph and await the
+                     recorded child run. The final join returns all receipts.
+                   ")})
+    (workflow/step
+     :validate "Validate the complete Story" :self :depends-on [:waves]
+     (format-alpha/prose
+      "
+        Read the module-wave children and joins from the run subgraph. Record their
+        ids, final revisions and test receipts on the work task. Run the relevant
+        checks under the shared lock, commit and push the complete branch.
+      "))
+    (handoff/prepare :prepare-review [:validate] "millstrand-review"
+                     "Carry the exact branch and completed module-wave receipts into full review.")
+    (handoff/launch-gate :accept-review :prepare-review "millstrand-review" "story-review"))
+   {:intent-review #{:story-review} :waves #{:story-waves}}))
