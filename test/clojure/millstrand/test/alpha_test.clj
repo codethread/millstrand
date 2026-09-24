@@ -186,14 +186,17 @@
 
 (deftest with-weaver-world-runs-file-backed-world-and-cleans-up
   (let [captured (atom nil)
-        result (t/with-weaver-world [ctx {}]
+        result (t/with-weaver-world [ctx {:files {".bootstrap/deps.edn" "sentinel\n"}}]
                  (reset! captured ctx)
                  (is (= :sqlite-file (:storage ctx)))
                  (is (.isFile (io/file (:db-path ctx))))
                  (is (map? (:metadata ctx)))
                  (is (= (:config-dir ctx) (get-in ctx [:metadata :config-dir])))
-                 (testing "bootstrap classpath cache belongs to this disposable world"
-                   (is (.isDirectory (io/file (:config-dir ctx) ".bootstrap/.cpcache"))))
+                 (testing "bootstrap preserves caller files and owns a world-local cache"
+                   (is (= "sentinel\n"
+                          (slurp (io/file (:config-dir ctx) ".bootstrap/deps.edn"))))
+                   (is (some #(.isDirectory (io/file % ".cpcache"))
+                             (.listFiles (io/file (:config-dir ctx))))))
                  (testing "quoted forms are rendered and evaluated in the weaver"
                    (let [strand (t/repl! ctx
                                          '(do

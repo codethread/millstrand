@@ -318,7 +318,11 @@
         ;; The CLI rewrites its classpath cache without coordinating readers.
         ;; Give each world its own project/cache, separate from fixture deps.edn
         ;; so malformed dependency fixtures still reach the basis diagnostics.
-        bootstrap-file (write-fixture! (io/file workspace) ".bootstrap/deps.edn"
+        bootstrap-dir (.toFile
+                       (Files/createTempDirectory
+                        (.toPath (io/file workspace)) ".bootstrap-"
+                        (make-array FileAttribute 0)))
+        bootstrap-file (write-fixture! bootstrap-dir "deps.edn"
                                        (pr-str bootstrap-deps))
         form (pr-str
               `(spit ~(.getPath result-file)
