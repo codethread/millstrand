@@ -523,7 +523,7 @@
 (deftest json-where-preserves-lean-reads-and-result-caps
   (with-batteries
     (fn [rt]
-      (let [payload (apply str (repeat 1100 "x"))
+      (let [payload (str/join (repeat 1100 "x"))
             large (weaver/add! rt {:title "Large" :attributes {:payload payload}})
             _small (weaver/add! rt {:title "Small" :attributes {:payload "small"}})]
         (batteries/set-read-limit! rt 1)
