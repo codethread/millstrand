@@ -20,7 +20,7 @@ Every recipe has the same four parts, so you can skim to the one that matches yo
 
 Each recipe cites the honest source it was distilled from — the batteries source, the test suite, or this repo's own `.millstrand` config — so you can read the load-bearing version.
 
-One thing to internalise before the recipes: `strand` splits its flags into two groups. **Op flags** (`--attr`, `--edge`, `--state`, `--query`, `--param`, `--pattern`, `--input`) come _after_ the op name and are parsed by that op's arg-spec. **Dispatcher flags** (`--workspace`, `--stdin`, `--payload name=path`, `--dry-run`) select context and attach payloads, so they come _before_ the op name. Put a dispatcher flag after the op and the op's parser rejects it as unknown.
+One thing to internalise before the recipes: `strand` splits its flags into two groups. **Op flags** (`--attr`, `--edge`, `--state`, `--query`, `--where`, `--param`, `--pattern`, `--input`) come _after_ the op name and are parsed by that op's arg-spec. **Dispatcher flags** (`--workspace`, `--stdin`, `--payload name=path`, `--dry-run`) select context and attach payloads, so they come _before_ the op name. Put a dispatcher flag after the op and the op's parser rejects it as unknown.
 
 ---
 
@@ -127,6 +127,34 @@ strand --dry-run add "Preview me" --attr owner=agent
 - **It shows argv verbatim, which is where the parsing happens.** The dispatcher ships argv untouched; the op's arg-spec parses it weaver-side. Seeing the exact `argv` and `payloads` the envelope carries is the fastest way to catch a misplaced dispatcher flag or an unattached payload before it fails for real.
 
 Honest source: the `--dry-run` dispatcher flag documented in [`cli.md`](../devflow/specs/cli.md), verified by running it against `add` in a disposable workspace (envelope printed, no strand created).
+
+---
+
+## Recipe: Query without registering a name
+
+**Situation.** You need a one-off selection by attributes or edges, without changing workspace config.
+
+**Composition.** Pass a JSON predicate to `list --where`, or to `ready --where` when you only want active, unblocked matches. A named `--query` can supply a reusable starting selection; `--where` narrows it further.
+
+```nu
+strand list --state active --where '["=", ["attr", "owner"], "agent"]'
+strand ready --where '["and", ["exists", ["attr", "owner"]], [">=", ["attr", "priority"], 3]]'
+strand list --where '["edge/out", "depends-on", ["=", "id", "abc12"]]'
+
+# An existing named query, narrowed for this request.
+strand list --query work --where '["=", ["attr", "owner"], "agent"]'
+
+# Build typed JSON in Nushell and send it through the existing payload slot.
+let owner = "agent"
+["=" ["attr" "owner"] $owner] | to json --raw | strand --stdin list --where :stdin
+
+# Or keep a larger expression in a JSON file.
+strand --payload filter=filter.json list --where :payload/filter
+```
+
+**Why this shape.** The weaver uses the same query engine as named queries. Nothing is registered or persisted, and named query, state, and readiness constraints still apply. JSON values keep their types: use `3` for a numeric attribute and `"3"` for a string written through `--attr`. Use `missing` for absent or null values; equality to `null` does not match them. Large attributes remain queryable even when lean output replaces their values with omission descriptors.
+
+The grammar and error rules are in [BAT-C27](./batteries.md#ad-hoc-predicates-bat-c27). Reusable definitions and parameterized waits still belong in config or the REPL.
 
 ---
 

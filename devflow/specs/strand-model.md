@@ -2,7 +2,7 @@
 
 - **Document ID:** `SPEC-001`
 - **Status:** Implemented
-- **Last Updated:** 2026-08-06
+- **Last Updated:** 2026-09-24
 - **Code:** `src/millstrand/core/db.clj`
 
 ## SPEC-001.P1 Purpose
@@ -89,6 +89,8 @@ Queryable core fields include `:id`, `:title`, `:state`, `:created_at`, `:update
 Attribute predicates operate on the candidate strand's non-archived value for the requested key. Comparison and membership predicates, and `:exists`, do not match an absent or archived attribute row, JSON `null`, or a missing nested path. `:missing` matches all four cases. Attribute `:not` distributes through `:and` and `:or`; it negates comparison and membership within a present value, while presence and edge predicates negate existence.
 
 Every attribute key has the same predicate capability: `:=`, `:!=`, `:<`/`:<=`/`:>`/`:>=`, `:in`, `:exists`, `:missing`, and logical composition. The grammar also supports parameters, edge predicates, and conjunction with `ready`. It selects strands but does not shape or aggregate results or order by an attribute. Trusted Clojure callers may instead compose read operations with `millstrand.api.graph.alpha` helpers.
+
+Batteries `list` and `ready` also accept request-local JSON expressions through `--where` (BAT-C27). The weaver decodes these into the same query grammar; named-query registration is not required. JSON operators and core field names are strings, attribute paths are `["attr", "key", ...]`, and literal scalar types are preserved. Ad hoc predicates intersect with named selections and lifecycle/readiness constraints without changing the registry. SQL null and attribute-presence semantics remain those above; use `missing` to select absent or null values rather than equality to `null`.
 
 ## SPEC-001.P10 Deferred
 

@@ -2,7 +2,7 @@
 
 - **Document ID:** `SPEC-002`
 - **Status:** Implemented
-- **Last Updated:** 2026-09-11
+- **Last Updated:** 2026-09-24
 - **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md)
 - **Code:** `cli/`, `src/millstrand/core/weaver`, `src/millstrand/api/weaver/alpha.clj`, `.millstrand/workflows.clj` (this repository's coordination workspace; application workspaces use `.millstrand` or `.ms`)
 
@@ -108,6 +108,7 @@ SPEC-002.C56-C59 are shipped. Mill owns the restart transition, admission gate, 
 
 - **SPEC-002.C41:** Dispatcher requests carry one bounded envelope. Bounded bulk input is an explicit payload parsed and applied op-side in one transaction; unbounded live ingestion belongs inside the Weaver, not in a dispatcher flag.
 - **SPEC-002.C42:** No public CLI surface bypasses lifecycle hooks.
+- **SPEC-002.C65 (ad hoc read predicates):** Batteries `list` and `ready` accept request-local JSON `--where` expressions under BAT-C27. The dispatcher transports argv and payloads unchanged; the weaver decodes and validates the predicate, then selects through the existing query engine. This read surface does not register runtime behavior and exposes no SQL or executable Clojure. Named queries remain optional reusable selections; `--where` intersects with them and with lifecycle/readiness constraints (TEN-006@2).
 
 ## SPEC-002.P6 Deferred
 

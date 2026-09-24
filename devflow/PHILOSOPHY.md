@@ -9,7 +9,7 @@ The CLI is a convenience surface for common, scriptable operations. It should st
 Design implications:
 
 - Runtime customization belongs in trusted startup files and REPL workflows.
-- CLI commands should cover common strand operations and safe consumption of existing weaver state.
+- CLI commands should cover common strand operations and safe consumption of existing weaver state. Request-local JSON read predicates are ordinary consumption; they do not require registration or install executable behavior (TEN-006@2).
 - Prefer weaver-owned in-memory runtime state over ad hoc per-client state when multiple clients need to share behavior during one weaver lifetime.
 - Do not persist runtime behavior unless the feature explicitly calls for durable storage.
 - Keep user-authored behavior data-first where possible, and fail loudly when a CLI worker references weaver state that has not been loaded.

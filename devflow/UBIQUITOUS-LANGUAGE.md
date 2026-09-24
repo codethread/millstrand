@@ -78,7 +78,8 @@ What a module may contribute once it is active.
 | **Arg-spec** | An op's declared parser spec: its flags, positionals, and subcommands. The blessed parser runs before the handler. | Schema, validator, CLI spec, signature |
 | **Hook-class** | An op leaf's `:read` or `:mutating` marking. Mutating leaves run `:payload/received` hooks; read leaves skip them. | Permission, ACL, access level, mode |
 | **Deadline-class** | An op leaf's request budget: `:standard` is ten seconds, `:unbounded` has none. | Timeout, TTL, SLA |
-| **Named query** | A query definition registered under a name and invoked by it, keeping rich query structures out of shell argv (TEN-006). | View, filter, saved search, report |
+| **Named query** | A reusable query definition registered under a name and invoked by it. Registration is optional for selection (TEN-006@2). | View, filter, saved search, report |
+| **Ad hoc predicate** | A request-local JSON query expression supplied through `--where` on `list` or `ready`, interpreted by the weaver without changing the query registry. | Query registration, executable expression |
 | **Weave pattern** | A registered create-only template applied to one JSON input value, so common graph shapes are poured rather than hand-authored. | Template, macro, generator, recipe, scaffold |
 | **Event handler** | A registered async reaction dispatched by the weaver's event worker. | Hook, listener, trigger, callback |
 | **Lifecycle hook** | A registered synchronous gate that may reject an operation but not transform it. | Event handler, middleware, interceptor, filter |
