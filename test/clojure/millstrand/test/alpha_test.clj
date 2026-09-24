@@ -192,6 +192,8 @@
                  (is (.isFile (io/file (:db-path ctx))))
                  (is (map? (:metadata ctx)))
                  (is (= (:config-dir ctx) (get-in ctx [:metadata :config-dir])))
+                 (testing "bootstrap classpath cache belongs to this disposable world"
+                   (is (.isDirectory (io/file (:config-dir ctx) ".bootstrap/.cpcache"))))
                  (testing "quoted forms are rendered and evaluated in the weaver"
                    (let [strand (t/repl! ctx
                                          '(do
