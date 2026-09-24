@@ -17,11 +17,13 @@ TEN ids use `@N` versions. A bare TEN id means its latest version. Bump `@N` onl
     - We expose the minimum possible surface area over api, and what we expose, we make reliable. Everything else we delegate to userland via our attributes and query language
 - **TEN-005**: Declared structural relations are DAGs.
     - The engine guarantees each declared acyclic relation is independently acyclic, and every engine traversal walks exactly one such relation or is explicitly cycle-aware. Annotation edges carry no acyclicity guarantee and may form cycles; consumers must not assume whole-graph acyclicity.
-- **TEN-006**: The CLI is a thin JSON control surface; the weaver/REPL is the rich semantic surface.
+- **TEN-006@1**: Superseded by TEN-006@2, which permits request-local declarative read predicates from the CLI.
+- **TEN-006@2**: The CLI is a thin JSON control surface; the weaver/REPL is the rich semantic surface.
     - The scripted CLI should expose simple commands, string flags, JSON machine output, and named handles to weaver-owned behavior. It should not parse, author, or debug rich Clojure/EDN userland structures. A trusted transform registered in weaver config may render help output (SPEC-004.C106), but the machine schema — the versioned help envelope — stays the single contract, `--json` is the raw floor the CLI always relays, and the CLI itself still authors or debugs no userland structure.
-    - Complex query definitions, runtime customization, inspection, and debugging belong in trusted weaver config and REPL workflows. The CLI can invoke those capabilities by stable names and simple JSON-shaped params.
+    - Callers may submit request-local declarative read predicates as JSON. The weaver validates and interprets them through the existing query engine; registration is optional for selection.
+    - Executable behavior, query registration, runtime customization, and rich inspection and debugging belong in trusted weaver config and REPL workflows. The CLI can invoke registered capabilities by stable names and JSON-shaped params.
     - The engine may translate between JSON wire data and Clojure-native/EDN data internally, but that translation is hidden behind weaver APIs.
-    - Why we hold this over a richer generic CLI algebra: [`ADR-001`](./adrs/0001-thin-cli-over-generic-algebra.md).
+    - Why we hold this over a richer generic CLI algebra: [`ADR-001`](./adrs/0001-thin-cli-over-generic-algebra.md), amended for ad hoc reads by [`RFC-Dsq-001`](./rfcs/2026-09-24-ad-hoc-cli-queries.md).
 - **TEN-007**: Storage complexity is the core's burden; the attribute map is the contract.
     - A strand _has_ an attribute map. How those attributes are physically stored is an implementation detail owned entirely by `millstrand.core.*`. No consumer above `millstrand.core.*` — `millstrand.api.*`, spool authors, the CLI JSON wire format, the query language, events, or views — may depend on the physical shape of attribute storage.
     - This is deliberate deep-module discipline: a simple interface (a map) over an implementation free to absorb whatever complexity scale and performance demand. Keeping the storage representation hidden is what lets it change under a stable contract (TEN-000@1).

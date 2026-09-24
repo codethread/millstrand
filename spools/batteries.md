@@ -119,20 +119,42 @@ Returns one normalized strand by id, or JSON `null` when absent. `show` is the f
 #### `list` — BAT-C12
 
 ```
-strand list [--state active|closed|replaced] [--query name [--param key=value]…] [--limit N]
+strand list [--state active|closed|replaced] [--query name [--param key=value]…] [--where <json-expression-ref>] [--limit N]
 ```
 
-Lists strands. Optional `--state` filters lifecycle (`active|closed|replaced`; callers who care must pass it explicitly). Optional `--query` resolves a weaver-registered named query with repeatable string-valued `--param key=value`; `--state` overlays the query as an additional `[:= :state …]` clause. `--param` without `--query`, a blank `--query`, and unknown query params all fail loudly. Returns a JSON array of normalized strands. The result uses the lean read tier by default: any attribute value whose JSON-encoded UTF-8 length is above the fixed 1 KiB floor is replaced with `{"millstrand/omitted": true, "bytes": N}`; values at or below the floor pass through unchanged.
+Lists strands. Optional `--state` filters lifecycle (`active|closed|replaced`; callers who care must pass it explicitly). Optional `--query` resolves a weaver-registered named query with repeatable string-valued `--param key=value`. Optional `--where` supplies a request-local JSON predicate (BAT-C27), with no registration required. The named query, ad hoc predicate, and `--state` filter intersect when combined. `--param` without `--query`, a blank `--query`, and unknown query params all fail loudly. Returns a JSON array of normalized strands. The result uses the lean read tier by default: any attribute value whose JSON-encoded UTF-8 length is above the fixed 1 KiB floor is replaced with `{"millstrand/omitted": true, "bytes": N}`; values at or below the floor pass through unchanged.
 
-`list` is result-capped before attribute assembly. The default cap is 500 rows; trusted workspace config may set another cap with `millstrand.spools.batteries/set-read-limit!`, and one call may override it with `--limit N`. If more rows match, `list` fails with `read-limit-exceeded`, naming the total, the cap, and the remedies: narrow with `--query`/`--param`/`--state`, or pass explicit `--limit N`. Set `--limit` above the reported total for an intentional full read. Successful results are never truncated, and batteries has no pagination surface. There is no hydration flag; use `show <id>` to fetch a full row.
+`list` is result-capped before attribute assembly. The default cap is 500 rows; trusted workspace config may set another cap with `millstrand.spools.batteries/set-read-limit!`, and one call may override it with `--limit N`. If more rows match, `list` fails with `read-limit-exceeded`, naming the total, the cap, and the remedies: narrow with `--query`/`--param`/`--where`/`--state`, or pass explicit `--limit N`. Set `--limit` above the reported total for an intentional full read. Successful results are never truncated, and batteries has no pagination surface. There is no hydration flag; use `show <id>` to fetch a full row.
 
 #### `ready` — BAT-C13
 
 ```
-strand ready [--query name [--param key=value]…] [--limit N]
+strand ready [--query name [--param key=value]…] [--where <json-expression-ref>] [--limit N]
 ```
 
-Returns strands with `state="active"` and no active `depends-on` blocker, optionally scoped to a named query's result set exactly as `list`. `ready` takes no `--state`. Like `list`, `ready` uses the lean read tier by default for large attribute values above the fixed 1 KiB floor and has no hydration flag; use `show <id>` for full fidelity. It uses the same default cap, trusted config override, `--limit N` call override, and loud `read-limit-exceeded` behavior as `list`.
+Returns strands with `state="active"` and no active `depends-on` blocker, optionally scoped by `--query`, `--where`, or their intersection exactly as `list`. `ready` takes no `--state`. Like `list`, `ready` uses the lean read tier by default for large attribute values above the fixed 1 KiB floor and has no hydration flag; use `show <id>` for full fidelity. It uses the same default cap, trusted config override, `--limit N` call override, and loud `read-limit-exceeded` behavior as `list`.
+
+#### Ad hoc predicates — BAT-C27
+
+`list` and `ready` accept `--where` as exactly one JSON expression, either inline or through `:stdin` / `:payload/<name>` (BAT-C2). The expression exists only for this request and never changes the query registry. `--param` remains restricted to a named `--query`; ad hoc predicates use literal values.
+
+| Form | Meaning |
+| --- | --- |
+| `["=", field, value]` | Compare a field with a scalar JSON value; also `!=`, `<`, `<=`, `>`, `>=`. |
+| `["in", field, [value, ...]]` | Match one of a nonempty array of scalar values. |
+| `["exists", field]`, `["missing", field]` | Test for a non-null value or its absence. |
+| `["and", expression, ...]`, `["or", expression, ...]` | Combine one or more predicates. |
+| `["not", expression]` | Negate one predicate under the existing query semantics. |
+| `["edge/out", relation, expression]` | Match an outgoing edge whose target satisfies the endpoint predicate. |
+| `["edge/in", relation, expression]` | Match an incoming edge whose source satisfies the endpoint predicate. |
+
+A field is one of `"id"`, `"title"`, `"state"`, `"created_at"`, `"updated_at"`, or an attribute path such as `["attr", "owner"]`, `["attr", "kanban/lane"]`, or `["attr", "config", "priority"]`. Attribute path segments are non-blank strings; the first is the literal top-level key, and later segments descend into its JSON value. Relation names keep their existing spelling and validity rules. Endpoint predicates cannot contain further edge predicates, including beneath logical operators.
+
+Comparison values are strings, numbers, booleans, or `null`. Arrays and objects are not comparison values; `in` takes an array of scalars rather than an array-valued comparison. Numeric `3` and string `"3"` are passed to the existing compiler without string coercion. No value is interpreted as code, a parameter reference, or another predicate.
+
+Attribute predicates retain [SPEC-001.P9](../devflow/specs/strand-model.md#spec-001p9-query-fields) semantics. Comparisons, including negated comparisons, require a present non-null attribute value; `missing` includes absent, archived, null, and missing nested values. Equality to `null` is not a presence test. These predicates select against stored values before lean projection, so large values remain queryable.
+
+Malformed, empty, or trailing JSON and invalid expression structures fail before selection. Expression errors identify the input location and expected shape. Unknown fields/operators and incorrect arities are errors, not empty results. JSON decoding and grammar interpretation happen in the weaver; the Go dispatcher remains a byte transport. There is no SQL, Clojure evaluation, registration, sorting, projection, or aggregation through `--where`.
 
 #### `await` — BAT-C26
 
@@ -196,7 +218,7 @@ Read-only introspection of registered weave patterns. `pattern` declares `list` 
 Every batteries op is discoverable through the three built-in meta-verbs (see [cli.md](../devflow/specs/cli.md) SPEC-002.C39 and the discovery-tier deltas). The behavior batteries opts into:
 
 - **`strand help <op>`** projects the op's declared arg-spec into the canonical help envelope. Where it adds value, an op's arg-spec also declares a closed `:annotations` sub-map — `use-when` (when to reach for the op), `notes` (a subtlety the flag docs do not cover), and `failure-modes` (the named outcomes the op can produce). For a subcommand op, annotations sit on the routed child, so `strand help add` shows only that operation's failure modes. `--help` after an op (`strand add --help`) is sugar for the same projection.
-- **`strand about <op>`** returns the op's cross-verb narrative — how it relates to its sibling verbs — for the ops that declare `:about` prose (today `add` and `weave`). It is prose, not a flag list; reach for `help` for the invocation shape.
+- **`strand about <op>`** returns the op's cross-verb narrative — how it relates to its sibling verbs — for the ops that declare `:about` prose (`add`, `weave`, `list`, and `ready`). The selection manuals include the JSON predicate grammar and examples. Reach for `help` for the invocation shape.
 - **`strand prime <op>`** returns the op's orientation prose for the ops that declare `:prime` (today `add` and `weave`): what to run first, what to prefer.
 
 `failure-modes` carry glossary outcome **names** only; the envelope resolves each to its definition once, in its `glossary` map. Batteries owns and seeds these outcomes (for example, `batteries/state-invalid`, `batteries/query-unknown`, and `batteries/spool-release-unresolved`) through a process-lifetime `lifecycle/defseed` declaration, so the definitions travel with the spool.

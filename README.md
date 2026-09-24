@@ -189,9 +189,15 @@ sequenceDiagram
 
 ### Named queries
 
-So now a strand can finish without anyone at the keyboard. Failures are just more attributes on the same rows (`subagent-failed`, `subagent-response`). You could `strand list` and filter with jq every time — clunky, and every agent has to remember the shape.
+So now a strand can finish without anyone at the keyboard. Failures are just more attributes on the same rows (`subagent-failed`, `subagent-response`). Query them directly with a request-local JSON predicate:
 
-Register a live named query instead. The query is a small data expression, not SQL. For a durable query, use `defquery!` in a module source.
+```nu
+strand list --where '["=", ["attr", "subagent-failed"], true]'
+```
+
+No registration is needed. `ready --where` uses the same predicates and restricts matches to active, unblocked strands. The [Batteries cookbook](./spools/batteries.cookbook.md#recipe-query-without-registering-a-name) covers compound filters, edges, and payload input.
+
+When the selection is useful across callers, register a live named query. For a durable query, use `defquery!` in a module source.
 
 ```clojure
 (require '[millstrand.api.graph.alpha :as graph])

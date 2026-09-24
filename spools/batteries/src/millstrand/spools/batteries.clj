@@ -159,30 +159,30 @@
     (set? value) (mapv json-safe-value (sort-by pr-str value))
     :else (pr-str value)))
 
-;; The blessed parser's :parse :json uses clojure.data.json/read-str, which
-;; silently returns the first value and ignores trailing input, so it cannot
-;; enforce the retired builtin's "exactly one JSON value" contract. weave reads
-;; --input as a raw string and parses it strictly here instead: empty, malformed,
-;; and trailing-value inputs all fail loudly before any mutation.
+;; The generic :parse :json reads only the first value. These inputs require
+;; exactly one value, so both reads (including trailing garbage) are checked here.
 (defn- read-single-json
-  "Read exactly one JSON value from s, failing loudly on empty, malformed, or
-  trailing input. This preserves the retired builtin's strict stdin parsing."
-  [s]
+  [text label details]
   (let [eof (Object.)
-        ;; data.json/read unreads several characters of lookahead while parsing,
-        ;; so the reader needs a pushback buffer wider than the default of 1.
-        rdr (PushbackReader. (StringReader. s) 64)
-        value (try (json/read rdr :eof-error? false :eof-value eof)
-                   (catch Exception e
-                     (throw (ex-info (str "weave --input is not valid JSON: " (ex-message e))
-                                     {:code "pattern/input-invalid"}))))]
+        ;; data.json needs more than one character of pushback for lookahead.
+        rdr (PushbackReader. (StringReader. text) 64)
+        read-value (fn []
+                     (try
+                       (json/read rdr :eof-error? false :eof-value eof)
+                       (catch Exception e
+                         (throw (ex-info (str label " is not valid JSON: " (ex-message e))
+                                         details e)))))
+        value (read-value)]
     (when (identical? value eof)
-      (throw (ex-info "weave --input requires exactly one JSON value"
-                      {:code "pattern/input-invalid"})))
-    (when-not (identical? (json/read rdr :eof-error? false :eof-value eof) eof)
-      (throw (ex-info "weave --input must contain exactly one JSON value"
-                      {:code "pattern/input-invalid"})))
+      (throw (ex-info (str label " requires exactly one JSON value") details)))
+    (when-not (identical? (read-value) eof)
+      (throw (ex-info (str label " must contain exactly one JSON value") details)))
     value))
+
+(defn- read-where [text]
+  (graph/decode-json-where
+   (read-single-json text "--where"
+                     {:path [] :expected "exactly one JSON predicate array"})))
 
 ;; The blessed parser's :map flag silently collapses duplicate keys, but old
 ;; C6e requires duplicate keys within a single --attr priority to fail loudly.
@@ -221,20 +221,39 @@
             {:type (subs spec 0 idx) :to (subs spec (inc idx))}))
         edge-specs))
 
-(defn- run-named-query
-  "Resolve a named query, validate params, overlay an optional state filter, and
-  invoke the runtime list/ready fn exactly as the socket dispatch does."
-  [rt query-fn query-name raw-params state limit]
-  (let [query-def (graph/resolve-query rt query-name)
-        params (graph/coerce-declared-params query-def raw-params)
-        query-def (graph/conjoin-where query-def
-                                       (when state [:= :state state])
-                                       params)]
-    (query-fn rt lean-attribute-byte-floor query-def params limit)))
+(defn- selected-query
+  "Resolve the optional named query and conjoin request-local filters.
 
-(defn- run-named-ready-lean [rt query-name raw-params limit]
-  (let [query-def (graph/resolve-query rt query-name)
-        params (graph/coerce-declared-params query-def raw-params)]
+  Conjoin once so declared parameters are checked against the original named
+  definition, before composition produces a bare expression vector."
+  [rt query-name raw-params filters]
+  (let [query-def (if query-name
+                    (graph/resolve-query rt query-name)
+                    [:exists :id])
+        params (if query-name
+                 (graph/coerce-declared-params query-def raw-params)
+                 {})]
+    (when (and (nil? query-name) (seq raw-params))
+      (throw (ex-info "--param requires --query" {})))
+    [(graph/conjoin-where query-def
+                          (when-let [clauses (seq (remove nil? filters))]
+                            (into [:and] clauses))
+                          params)
+     params]))
+
+(defn- run-list-query
+  [rt query-name raw-params state where limit]
+  (let [[query-def params]
+        (selected-query rt query-name raw-params
+                        [(when state [:= :state state])
+                         (some-> where read-where)])]
+    (weaver/list-lean rt lean-attribute-byte-floor query-def params limit)))
+
+(defn- run-ready-query
+  [rt query-name raw-params where limit]
+  (let [[query-def params]
+        (selected-query rt query-name raw-params
+                        [(some-> where read-where)])]
     (weaver/ready-lean rt lean-attribute-byte-floor query-def params limit)))
 
 (defn- await-options
@@ -368,27 +387,31 @@
 
 (def ^:private list-arg-spec
   {:op "list"
-   :doc "List lean-projected strands, optionally filtered by state and/or a named query."
+   :doc "List lean-projected strands, filtered by state, a named query, or a JSON predicate."
    :hook-class :read
    :deadline-class :standard
    :flags {:state {:type :string
                    :doc "Filter by lifecycle state: active, closed, or replaced."}
            :query {:type :string
                    :doc "Weaver-registered named query."}
+           :where {:type :string
+                   :doc "JSON predicate array; inline or :stdin/:payload/name. See strand about list for grammar."}
            :param {:type :map
                    :doc "Named-query parameter key=value; repeatable."}
            :limit {:type :int
                    :doc "Explicit maximum result count; set above the total for an intentional full read."}}
-   :annotations {:use-when ["Browsing or filtering strands; combine --state and --query to narrow the set."]
+   :annotations {:use-when ["Browsing or filtering strands; --state, --query, and --where intersect."]
                  :failure-modes ["batteries/state-invalid" "batteries/query-unknown"]}})
 
 (def ^:private ready-arg-spec
   {:op "ready"
-   :doc "List lean-projected ready strands, optionally from a named query result set."
+   :doc "List lean-projected ready strands, filtered by a named query or a JSON predicate."
    :hook-class :read
    :deadline-class :standard
    :flags {:query {:type :string
                    :doc "Weaver-registered named query."}
+           :where {:type :string
+                   :doc "JSON predicate array; inline or :stdin/:payload/name. See strand about ready for grammar."}
            :param {:type :map
                    :doc "Named-query parameter key=value; repeatable."}
            :limit {:type :int
@@ -621,6 +644,46 @@
            "|Reach for weave to create or update strands through a registered
             |pattern. Run `strand pattern list` first to
             |see the registered patterns and their input specs.")})
+
+(def ^:private selection-meta
+  {:about
+   (format-alpha/prose
+    "
+      Use --where for a request-local JSON predicate; no registration is needed.
+      --query selects a registered definition. Both filters intersect, along
+      with --state on list. ready additionally requires active, unblocked strands.
+      --param binds only the named query; --where uses literal values.
+
+      ```nu
+      strand list --where '{owned:json}'
+      strand ready --where '{priority:json}'
+      strand list --where '{edge:json}'
+      strand --payload filter=filter.json list --where :payload/filter
+      ```
+
+      Fields are id, title, state, created_at, updated_at, or an attr array:
+      {attribute:json}. More path strings descend into the attribute value.
+      Qualified keys keep their spelling. Comparison values are JSON scalars.
+
+      Operators: =, !=, <, <=, >, >= take a field and scalar; in takes a field
+      and nonempty scalar array; exists/missing take a field; and/or take one
+      or more expressions; not takes one expression. edge/out and edge/in take
+      a relation string and a target/source expression without further edges.
+
+      Use missing for absent, archived, null, or missing nested attributes.
+      Comparisons (even negated ones) require a present non-null attribute.
+      Equality to null is not a presence test. Values retain JSON types.
+
+      --where accepts exactly one JSON expression, inline or through :stdin
+      or :payload/name. Invalid expressions report an indexed path and expected
+      shape; no input is evaluated as code. The query registry is unchanged.
+      Lean projection and result caps still apply; use --limit for an intentional
+      larger read and show for a full strand.
+      "
+    {:owned ["=" ["attr" "owner"] "agent"]
+     :priority [">=" ["attr" "priority"] 3]
+     :edge ["edge/out" "depends-on" ["=" "id" "abc12"]]
+     :attribute ["attr" "kanban/lane"]})})
 
 ;; --- batteries-owned glossary outcomes --------------------------------------
 
@@ -925,37 +988,29 @@
   (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
 
 (millstrand/defop! list
-  "List lean-projected strands, optionally filtered by lifecycle state or a named query."
-  (op-options 'list list-arg-spec)
+  "List lean-projected strands, intersecting state, named query, and JSON predicates."
+  (op-options 'list list-arg-spec selection-meta)
   [ctx]
   (let [rt (:op/runtime ctx)
-        {:keys [state query param limit]} (:op/args ctx)
+        {:keys [state query where param limit]} (:op/args ctx)
         params (or param {})
         limit (effective-read-limit rt limit)]
     (when state (validate-readable-state state))
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-query rt weaver/list-lean query params state limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
+    (when (and query (str/blank? query))
+      (throw (ex-info "--query requires a non-empty name" {})))
+    (run-list-query rt query params state where limit)))
 
 (millstrand/defop! ready
-  "List lean-projected ready strands, optionally from a named query result set."
-  (op-options 'ready ready-arg-spec)
+  "List lean-projected ready strands, intersecting named query and JSON predicates."
+  (op-options 'ready ready-arg-spec selection-meta)
   [ctx]
   (let [rt (:op/runtime ctx)
-        {:keys [query param limit]} (:op/args ctx)
+        {:keys [query where param limit]} (:op/args ctx)
         params (or param {})
         limit (effective-read-limit rt limit)]
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-ready-lean rt query params limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
+    (when (and query (str/blank? query))
+      (throw (ex-info "--query requires a non-empty name" {})))
+    (run-ready-query rt query params where limit)))
 
 (millstrand/defquery! strand-closed
   "Return the closed strand identified by `id`, when it exists."
@@ -1020,7 +1075,8 @@
         {:keys [pattern input]} (:op/args ctx)]
     (patterns/weave! rt
                      pattern
-                     (walk/keywordize-keys (read-single-json input))
+                     (walk/keywordize-keys
+                      (read-single-json input "weave --input" {:code "pattern/input-invalid"}))
                      (request-context :weave))))
 
 (millstrand/defop! query
