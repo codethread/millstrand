@@ -185,6 +185,35 @@
           (is (not (contains? ready-ids (:id inactive))))
           (is (= ready-ids where-ids)))))))
 
+(deftest decode-json-where-translates-only-grammar-positions
+  (is (= [:and
+          [:= :state "active"]
+          [:= [:attr "workflow/role" "name"] "attr"]
+          [:in :title ["One" 2 true nil]]]
+         (graph/decode-json-where
+          ["and"
+           ["=" "state" "active"]
+           ["=" ["attr" "workflow/role" "name"] "attr"]
+           ["in" "title" ["One" 2 true nil]]])))
+  (is (= [:edge/out "depends-on" [:= :id "target"]]
+         (graph/decode-json-where ["edge/out" "depends-on"
+                                   ["=" "id" "target"]])))
+  (doseq [[value expected]
+          [[[] "an array headed by an operator string"]
+           [["=" "unknown" true] "a core field string or [\"attr\", \"key\", ...]"]
+           [["in" "state" []] "a nonempty array of JSON scalars"]
+           [["=" "state" ["param" "who"]] "a JSON scalar"]
+           [["edge/out" "depends-on"
+             ["edge/in" "parent-of" ["=" "id" "x"]]]
+            "a non-edge endpoint expression"]]]
+    (let [error (try
+                  (graph/decode-json-where value)
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is error (str "expected decoder failure for " (pr-str value)))
+      (is (vector? (:path (ex-data error))))
+      (is (= expected (:expected (ex-data error)))))))
+
 (deftest conjoin-where-overlays-an-extra-clause
   (let [bare [:= [:attr :owner] "agent"]
         detailed {:where [:= [:attr :owner] [:param :owner]] :params [:owner]}]

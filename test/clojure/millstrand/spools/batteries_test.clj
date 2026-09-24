@@ -368,6 +368,177 @@
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires --query"
                                 (weaver/op! rt 'list ["--param" "who=agent"]))))))))
 
+(deftest list-and-ready-json-where-predicates
+  (with-batteries
+    (fn [rt]
+      (let [agent (weaver/add! rt {:title "Agent"
+                                   :attributes {:owner "agent"
+                                                :meta {:rank 2}
+                                                :workflow/role "worker"
+                                                :typed {:enabled true
+                                                        :number 2
+                                                        :nil nil}}})
+            other (weaver/add! rt {:title "Other"
+                                   :attributes {:owner "other" :meta {:rank 3}}})
+            closed-agent (weaver/add! rt {:title "Closed agent"
+                                          :state "closed"
+                                          :attributes {:owner "agent"}})
+            blocker (weaver/add! rt {:title "Blocker"})
+            blocked (weaver/add! rt {:title "Blocked agent"
+                                     :attributes {:owner "agent" :meta {:rank 2}}
+                                     :edges [{:type "depends-on" :to (:id blocker)}]})
+            edge-target (weaver/add! rt {:title "Edge target"})
+            edge-source (weaver/add! rt {:title "Edge source"
+                                         :edges [{:type "depends-on"
+                                                  :to (:id edge-target)}]})
+            where json/write-str
+            ids (fn [rows] (set (map :id rows)))
+            initial-queries (do
+                              (graph/register-query!
+                               rt 'owned
+                               {:params [:owner]
+                                :where [:= [:attr :owner] [:param :owner]]})
+                              (graph/queries rt))]
+        (testing "normal selectors, nested attributes, comparisons, membership, and logic"
+          (is (= #{(:id agent) (:id other) (:id blocker) (:id blocked)
+                   (:id edge-target) (:id edge-source)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where" (where ["=" "state" "active"])]))))
+          (is (= #{(:id agent) (:id blocked)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["=" ["attr" "meta" "rank"] 2])]))))
+          (is (= #{(:id agent)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["and"
+                                           ["=" ["attr" "owner"] "agent"]
+                                           ["not" ["=" "title" "Blocked agent"]]
+                                           ["in" ["attr" "meta" "rank"] [1 2]]])]))))
+          (is (= #{(:id agent) (:id blocked) (:id other) (:id closed-agent)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["in" ["attr" "owner"]
+                                           ["agent" "other"]])]))))
+          (is (= #{(:id agent)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["=" ["attr" "workflow/role"] "worker"])])))))
+        (is (= #{(:id agent)}
+               (ids (weaver/op! rt 'list
+                                ["--where"
+                                 (where ["=" ["attr" "typed" "enabled"] true])]))))
+        (is (= #{(:id agent) (:id closed-agent) (:id blocked) (:id other)}
+               (ids (weaver/op! rt 'list
+                                ["--where"
+                                 (where ["or"
+                                         ["=" ["attr" "owner"] "agent"]
+                                         ["=" "title" "Other"]])]))))
+        (testing "edge predicates preserve one-hop in/out semantics"
+          (is (= #{(:id edge-source)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["edge/out" "depends-on"
+                                           ["=" "id" (:id edge-target)]])]))))
+          (is (= #{(:id edge-target)}
+                 (ids (weaver/op! rt 'list
+                                  ["--where"
+                                   (where ["edge/in" "depends-on"
+                                           ["=" "id" (:id edge-source)]])])))))
+        (testing "state, readiness, and named query filters intersect"
+          (is (= #{(:id closed-agent)}
+                 (ids (weaver/op! rt 'list
+                                  ["--state" "closed"
+                                   "--where"
+                                   (where ["=" ["attr" "owner"] "agent"])]))))
+          (is (= #{(:id agent)}
+                 (ids (weaver/op! rt 'ready
+                                  ["--where"
+                                   (where ["=" ["attr" "owner"] "agent"])]))))
+          (is (= #{(:id agent) (:id blocked)}
+                 (ids (weaver/op! rt 'list
+                                  ["--query" "owned"
+                                   "--param" "owner=agent"
+                                   "--state" "active"
+                                   "--where"
+                                   (where ["=" ["attr" "meta" "rank"] 2])]))))
+          (is (= #{(:id agent)}
+                 (ids (weaver/op! rt 'ready
+                                  ["--query" "owned"
+                                   "--param" "owner=agent"
+                                   "--where"
+                                   (where ["=" ["attr" "meta" "rank"] 2])])))))
+        (testing "inline and named payload JSON use the same decoder"
+          (let [predicate (where ["and"
+                                  ["=" ["attr" "workflow/role"] "worker"]
+                                  [">=" ["attr" "meta" "rank"] 2]])]
+            (is (= #{(:id agent)}
+                   (ids (weaver/op! rt 'list
+                                    ["--where" ":payload/predicate"]
+                                    {:payloads {"predicate" predicate}}))))
+            (is (= #{(:id agent)}
+                   (ids (weaver/op! rt 'ready
+                                    ["--where" ":stdin"]
+                                    {:payloads {"stdin" predicate}})))))
+          (is (= initial-queries (graph/queries rt))
+              "request-local predicates never mutate the named-query registry"))))))
+
+(deftest json-where-rejects-malformed-input-with-location
+  (with-batteries
+    (fn [rt]
+      (weaver/add! rt {:title "Must not leak through an invalid predicate"})
+      (doseq [op ['list 'ready]
+              [input message path]
+              (concat
+               [["{not json" #"not valid JSON" []]
+                ["" #"exactly one JSON value" []]
+                [(str (json/write-str ["=" "state" "active"]) " 2")
+                 #"exactly one JSON value" []]
+                [(str (json/write-str ["=" "state" "active"]) " garbage")
+                 #"not valid JSON" []]]
+               (map (fn [[value message path]] [(json/write-str value) message path])
+                    [[nil #"must be an array" []]
+                     [false #"must be an array" []]
+                     [[] #"Query expression is empty" []]
+                     [["bogus" "state" true] #"Unsupported query operator" [0]]
+                     [["=" "unknown" true] #"Unknown query field" [1]]
+                     [["in" "state" []] #"nonempty array" [2]]
+                     [["=" "state" ["param" "owner"]] #"JSON scalar" [2]]
+                     [["and" ["=" "state"]] #"arity" [1]]
+                     [["exists" ["attr" ""]] #"non-blank" [1 1]]
+                     [["edge/out" "depends-on"
+                       ["not" ["edge/in" "parent-of" ["=" "id" "x"]]]]
+                      #"Nested edge predicates" [2 1]]]))]
+        (let [error (is (thrown-with-msg? clojure.lang.ExceptionInfo message
+                                          (weaver/op! rt op ["--where" input])))]
+          (is (= path (:path (ex-data error))))
+          (is (string? (:expected (ex-data error))))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No payload attached"
+                            (weaver/op! rt 'list ["--where" ":payload/missing"])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires --query"
+                            (weaver/op! rt 'list
+                                        ["--where" (json/write-str ["exists" "id"])
+                                         "--param" "owner=agent"]))))))
+
+(deftest json-where-preserves-lean-reads-and-result-caps
+  (with-batteries
+    (fn [rt]
+      (let [payload (apply str (repeat 1100 "x"))
+            large (weaver/add! rt {:title "Large" :attributes {:payload payload}})
+            _small (weaver/add! rt {:title "Small" :attributes {:payload "small"}})]
+        (batteries/set-read-limit! rt 1)
+        (doseq [op ['list 'ready]]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Read result matched 2 strands"
+                                (weaver/op! rt op
+                                            ["--where" (json/write-str ["exists" ["attr" "payload"]])])))
+          (is (= 2 (count (weaver/op! rt op
+                                      ["--where" (json/write-str ["exists" "id"])
+                                       "--limit" "2"]))))
+          (let [rows (weaver/op! rt op
+                                 ["--where" (json/write-str ["=" ["attr" "payload"] payload])])]
+            (is (= [(:id large)] (mapv :id rows)))
+            (is (specs/omitted-attribute-descriptor? (get-in rows [0 :attributes :payload])))))))))
+
 (deftest await-validates-the-band-and-query-boundary
   (with-batteries
     (fn [rt]

@@ -1715,12 +1715,12 @@
       probe
       (let [total (:total (execute-one! ds (into [count-sql] params)))]
         (throw (ex-info (str "Read result matched " total " strands, exceeding the configured cap of " limit
-                             ". Narrow the read with --query/--param/--state or pass explicit --limit N; "
+                             ". Narrow the read with --query/--param/--where/--state or pass explicit --limit N; "
                              "set --limit above " total " for an intentional full read.")
                         {:code "read-limit-exceeded"
                          :total total
                          :limit limit
-                         :remedies ["narrow via --query/--param/--state"
+                         :remedies ["narrow via --query/--param/--where/--state"
                                     "pass explicit --limit N above the total for an intentional full read"]}))))))
 
 (defn- clamped-select

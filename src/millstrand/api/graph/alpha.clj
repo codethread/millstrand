@@ -14,6 +14,7 @@
   (:require [clojure.spec.alpha :as s]
             [next.jdbc :as jdbc]
             [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.graph.internal.json-where :as json-where]
             [millstrand.core.db :as db]
             [millstrand.core.query :as query]
             [millstrand.core.specs :as specs]
@@ -180,6 +181,29 @@
   :ret ::query-explanation)
 
 ;; --- query selection --------------------------------------------------------
+
+(defn decode-json-where
+  "Decode a JSON-shaped predicate into the existing keyword query DSL.
+
+  JSON operator and field positions are translated; attribute keys, relation
+  names, literal strings, and typed scalar values remain unchanged. Malformed
+  expressions throw ex-info with an indexed `:path` and `:expected` shape.
+
+  Accept arrays headed by =, !=, <, <=, >, >=, in, exists, missing, and, or,
+  not, edge/out, or edge/in. Fields are core field strings or attr arrays with
+  non-blank string path segments. Comparisons take JSON scalars; in takes a
+  nonempty scalar array. Logical predicates take child expressions; edge
+  predicates take a valid relation string and a strand-local endpoint predicate
+  without nested edges. Parameters and executable forms are not accepted.
+
+  This is the weaver-side boundary for request-local predicates. It does not
+  register or mutate a named query."
+  [value]
+  (json-where/decode value))
+
+(s/fdef decode-json-where
+  :args (s/cat :value any?)
+  :ret vector?)
 
 (defn query-ids
   "Return strand ids matching an ad hoc query definition or registered query name."
