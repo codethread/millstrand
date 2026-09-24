@@ -305,7 +305,8 @@
 
 (defn- create-generation-basis
   [workspace source]
-  (let [result-file (java.io.File/createTempFile "millstrand-test-basis-" ".edn")
+  (let [source (.getCanonicalPath (io/file source))
+        result-file (java.io.File/createTempFile "millstrand-test-basis-" ".edn")
         bootstrap-deps
         {:aliases
          {:millstrand/bootstrap
@@ -314,6 +315,15 @@
            {'org.clojure/clojure {:mvn/version "1.12.0"}
             'org.clojure/data.json {:mvn/version "2.5.1"}
             'org.clojure/tools.deps {:mvn/version "0.31.1642"}}}}}
+        ;; The CLI rewrites its classpath cache without coordinating readers.
+        ;; Give each world its own project/cache, separate from fixture deps.edn
+        ;; so malformed dependency fixtures still reach the basis diagnostics.
+        bootstrap-dir (.toFile
+                       (Files/createTempDirectory
+                        (.toPath (io/file workspace)) ".bootstrap-"
+                        (make-array FileAttribute 0)))
+        bootstrap-file (write-fixture! bootstrap-dir "deps.edn"
+                                       (pr-str bootstrap-deps))
         form (pr-str
               `(spit ~(.getPath result-file)
                      (pr-str
@@ -322,9 +332,10 @@
                          'millstrand.core.weaver.basis/create-generation-basis)
                         ~workspace {:local/root ~source})
                        :classloader))))
-        ^java.util.List command ["clojure" "-Srepro" "-Sdeps" (pr-str bootstrap-deps)
+        ^java.util.List command ["clojure" "-Srepro"
                                  "-M:millstrand/bootstrap" "-e" form]
         process (-> (ProcessBuilder. command)
+                    (.directory (.getParentFile ^java.io.File bootstrap-file))
                     (.redirectErrorStream true)
                     (.start))
         output (slurp (.getInputStream process))
