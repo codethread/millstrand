@@ -1,8 +1,8 @@
 (ns me.policy.config
   "Named queries for the repository workspace.
 
-  Thin glue only: `ct.spools.devflow` owns the feature lifecycle,
-  `millhouse.spools.workflow` is its generic CLI, Harnesses owns the
+  Thin glue only: `millhouse.devflow` owns the feature lifecycle,
+  `millhouse.workflow` is its generic CLI, Harnesses owns the
   `strand agent` surface and tracked-run queries (activated from init.clj).
   This file registers named queries. Sibling init.clj modules hold
   the rest of the repo policy: hand-authored modules under me/workflows/,

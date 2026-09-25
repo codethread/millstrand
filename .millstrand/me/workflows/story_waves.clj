@@ -4,7 +4,7 @@
             [me.workflows.evidence :as evidence]
             [me.workflows.handoff :as handoff]
             [me.workflows.support :as support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.graph.alpha :as graph]

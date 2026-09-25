@@ -60,8 +60,8 @@
   "Return tools.deps data for a consumer of the resolved Workflow root."
   [coordinate]
   {:paths ["src"]
-   :deps {'millhouse.spools/workflow
-          (select-keys coordinate [:git/url :git/sha :deps/root])
+   :deps {'millhouse/workflow
+          (select-keys coordinate [:git/url :git/sha :deps/root :local/root])
           'clj-kondo/clj-kondo {:mvn/version clj-kondo-version}}
    :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
 
@@ -343,7 +343,7 @@
                        (make-array java.nio.file.attribute.FileAttribute 0)))
         repository (repository-root)
         workflow-coordinate (get-in (workspace-basis repository)
-                                    [:libs 'millhouse.spools/workflow])]
+                                    [:libs 'millhouse/workflow])]
     (try
       (write-consumer-file! root "deps.edn"
                             (pr-str (millhouse-consumer-deps workflow-coordinate)))
@@ -352,7 +352,7 @@
        (str
         "(ns example.workflow\n"
         "  \"Consumer source covering the Workflow declaration forms.\"\n"
-        "  (:require [millhouse.spools.workflow :as workflow]))\n\n"
+        "  (:require [millhouse.workflow :as workflow]))\n\n"
         "(workflow/defworkflow sample-workflow\n"
         "  \"A sample workflow.\"\n"
         "  {:entrypoints #{:start} :defaults {}}\n"
@@ -381,9 +381,9 @@
       (let [{:keys [exit output import-exit import-output lint-exit lint-output]}
             (run-consumer-kondo! root)
             imported-config (io/file root
-                                     ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
+                                     ".clj-kondo/imports/millhouse/workflow/config.edn")
             imported-hooks (io/file root
-                                    ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")]
+                                    ".clj-kondo/imports/millhouse/workflow/hooks/millhouse/workflow.clj_kondo")]
         (is (zero? exit) (str output import-output lint-output))
         (is (zero? import-exit) import-output)
         (is (zero? lint-exit) lint-output)

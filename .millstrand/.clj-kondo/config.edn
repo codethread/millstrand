@@ -2,4 +2,4 @@
  {:unresolved-var
   ;; Millhouse's Land export does not publish this support helper to downstream
   ;; kondo analysis, though it is a public runtime var.
-  {:exclude [millhouse.spools.land.support/pr-checks-argv]}}}
+  {:exclude [millhouse.land.support/pr-checks-argv]}}}

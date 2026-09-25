@@ -5,7 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.walk :as walk]
             [me.workflows.release-evidence :as release]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.spools.test-support :as test-support]
@@ -64,7 +64,7 @@
   (let [selection (workspace-release-selection)
         resolved-selection
         (walk/postwalk-replace
-         {'workflow/use-workflow! 'millhouse.spools.workflow/use-workflow!
+         {'workflow/use-workflow! 'millhouse.workflow/use-workflow!
           'release/release 'me.workflows.release/release}
          selection)
         collection
@@ -73,7 +73,7 @@
          #(eval resolved-selection))
         entry (get-in collection
                       [:contribution
-                       :millhouse.spools.workflow/definition
+                       :millhouse.workflow/definition
                        :entries
                        :release])]
     (is (= '(workflow/use-workflow! release/release) selection))
@@ -142,7 +142,7 @@
       (test-support/run-git! checkout "commit" "-am" "release fixture")
       (test-support/with-runtime
         (fn [rt _]
-          (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+          (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
           (workflow/start! "release-fixture" release-definition params)
           ;; No release shell gates run: the disposable Git fixture supplies
           ;; candidate identities while this test drives authorization boundaries.

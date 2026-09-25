@@ -34,7 +34,7 @@ Reusable spools sometimes publish a catalogue of declarations but leave activati
 
 ```clojure
 (ns ct.adapters.workflow
-  (:require [millhouse.spools.workflow.cli :as workflow-cli]
+  (:require [millhouse.workflow.cli :as workflow-cli]
             [millstrand.api.millstrand.alpha :as millstrand]))
 
 (millstrand/use-op! workflow-cli/workflow)
@@ -49,9 +49,9 @@ The initial request described the desired case as:
 The first sketch proposed a callback:
 
 ```clojure
-(runtime/module! runtime :millhouse/spools-workflow
-  {:ns 'millhouse.spools.workflow.cli
-   :spools ['millhouse.spools/workflow]}
+(runtime/module! runtime :millhouse/workflow
+  {:ns 'millhouse.workflow.cli
+   :spools ['millhouse/workflow]}
   :using (fn [workflow-cli]
            (millstrand/use-op! workflow-cli/workflow)))
 ```
@@ -144,9 +144,9 @@ It composes with the existing world-policy keys:
    ['millhouse.workflows.catalogue/land
     'millhouse.workflows.catalogue/release]
    :spools
-   ['millhouse.spools/workflow
-    'millhouse.spools/workflow-catalogue]
-   :after [:millhouse/spools-workflow]
+   ['millhouse/workflow
+    'millhouse/workflow-catalogue]
+   :after [:millhouse/workflow]
    :required? true})
 ```
 
@@ -222,14 +222,14 @@ One module may select Vars from several approved roots:
   runtime
   :ct/agent-workflow-surface
   {:using
-   ['millhouse.spools.workflow.cli/workflow
+   ['millhouse.workflow.cli/workflow
     'acme.agent.catalogue/delegate
     'acme.agent.catalogue/reviewer-pool]
    :spools
-   ['millhouse.spools/workflow
+   ['millhouse/workflow
     'acme.spools/agent]
    :after
-   [:millhouse/spools-workflow
+   [:millhouse/workflow
     :acme/spools-agent]})
 ```
 
@@ -242,15 +242,15 @@ Use one module when the selections are one activation choice and should be refre
   runtime
   :ct/workflow-cli
   {:using ['millhouse.catalogue/workflow-op]
-   :spools ['millhouse.spools/workflow]
-   :after [:millhouse/spools-workflow]})
+   :spools ['millhouse/workflow]
+   :after [:millhouse/workflow]})
 
 (runtime/module!
   runtime
   :ct/workflow-worker
   {:using ['millhouse.catalogue/workflow-resource]
-   :spools ['millhouse.spools/workflow]
-   :after [:millhouse/spools-workflow]})
+   :spools ['millhouse/workflow]
+   :after [:millhouse/workflow]})
 ```
 
 Removing `:ct/workflow-cli` does not close the resource owned by `:ct/workflow-worker`.
@@ -410,9 +410,9 @@ Then a consumer may write:
    ['millhouse.workflows.catalogue/land
     'millhouse.workflows.catalogue/release]
    :spools
-   ['millhouse.spools/workflow
-    'millhouse.spools/workflow-catalogue]
-   :after [:millhouse/spools-workflow]})
+   ['millhouse/workflow
+    'millhouse/workflow-catalogue]
+   :after [:millhouse/workflow]})
 ```
 
 The provider module must establish the workflow registry kind before the consumer publishes selected workflows. This is an ordering requirement, not a special case in `:using`.

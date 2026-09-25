@@ -10,7 +10,7 @@ cache_root="$tmp_root/cache"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="f80b80c8697e48a6ce56344372a32136d2bf279c"
+kanban_sha="f13312133daf46e57d510fc0ea289850373264c6"
 kanban_url="https://github.com/codethread/millhouse.spool.git"
 
 cleanup() {
@@ -31,7 +31,7 @@ trap cleanup EXIT
 
 mkdir -p "$workspace" "$gitlibs_root" "$cache_root"
 printf '%s\n' \
-  "{:deps {millhouse.spools/kanban {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :deps/root \"spools/kanban\"}}}" \
+  "{:deps {millhouse/identity {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :deps/root \"spools/identity\"} millhouse/kanban {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :deps/root \"spools/kanban\"}}}" \
   >"$workspace/deps.edn"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-init.clj" "$workspace/init.clj"
 
@@ -101,7 +101,7 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' | jq -r 'fromjson' >"$baseline"
 jq -e '(."basis-fingerprint" | startswith("sha256:")) and
-       ."module-keys" == ["kanban-source"] and
+       ."module-keys" == ["identity-source", "kanban-source"] and
        ."last-refresh".status == "applied" and ."last-refresh".mode == "full"' \
   "$baseline" >/dev/null || { cat "$baseline" >&2; exit 1; }
 
@@ -111,11 +111,11 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' | jq -r 'fromjson' >"$source"
 jq -e --slurpfile baseline "$baseline" '
-  .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
+  .ops == ["about", "bins", "help", "identity", "kanban", "kanban-export", "prime"] and
   .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
-   .["module-keys"] == ["kanban-source"]
+   .["module-keys"] == ["identity-source", "kanban-source"]
 ' "$source" >/dev/null || { cat "$baseline" >&2; cat "$source" >&2; exit 1; }
 
 image="$tmp_root/image.json"
@@ -133,11 +133,11 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
 jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
 jq -e --slurpfile baseline "$baseline" '
-  .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
+  .ops == ["about", "bins", "help", "identity", "kanban", "kanban-export", "prime"] and
   .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
-   .["module-keys"] == ["kanban-source"]
+   .["module-keys"] == ["identity-source", "kanban-source"]
 ' "$replayed" >/dev/null
 jq -e '.["source-status"]["kanban-source"] == null' "$replayed" >/dev/null
 echo "Millhouse Kanban module acceptance: clean ($kanban_sha, source and image)"

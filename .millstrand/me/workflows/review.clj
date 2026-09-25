@@ -4,8 +4,8 @@
             [me.workflows.handoff :as handoff]
             [me.workflows.review-evidence]
             [me.workflows.support :as support]
-            [millhouse.spools.land.support :as land-support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.land.support :as land-support]
+            [millhouse.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]))
 
 (s/def ::feature support/non-blank-string?)

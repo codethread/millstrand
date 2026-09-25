@@ -4,7 +4,7 @@
   by the sub-second `note/at` stamp."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millhouse.spools.identity :as identity]
+            [millhouse.identity :as identity]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.notes.alpha :as notes]
             [millstrand.api.weaver.alpha :as weaver]
@@ -80,8 +80,8 @@
                             [:attributes :identity/by-identity])))
           (is (empty? (graph/incoming-edges rt [note-id] "attributed"))))
         (testing "the composed identity module enriches durable attribution"
-          (test-support/activate-spool! rt :millhouse/spools-identity
-                                        'millhouse.spools.identity)
+          (test-support/activate-spool! rt :millhouse/identity
+                                        'millhouse.identity)
           (test-alpha/await-quiescent! rt)
           (is (= :unresolved
                  (:status (first (identity/inspect-attributions rt [note-id])))))

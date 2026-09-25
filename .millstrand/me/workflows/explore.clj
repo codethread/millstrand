@@ -2,7 +2,7 @@
   "The open-ended exploration workflow (family `explore`)."
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.format.alpha :as format-alpha]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [me.workflows.support :as support]
             [me.workflows.evidence :as evidence]
             [me.workflows.handoff :as handoff]

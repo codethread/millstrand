@@ -5,13 +5,13 @@
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [ct.spools.harnesses.reviewers :as reviewers]
+            [millhouse.harnesses.reviewers :as reviewers]
             [me.workflows.review]
             [me.workflows.review-evidence :as review]
             [me.workflows.evidence :as evidence]
             [me.workflows.handoff :as handoff]
             [me.workflows.story-review :as story-review]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.spools.test-support :as test-support :refer [with-runtime]]
@@ -26,19 +26,23 @@
   (pr-str
    {:deps (update-vals workspace-deps
                        #(if-let [root (:local/root %)]
-                          (assoc % :local/root
-                                 (.getCanonicalPath (io/file ".millstrand" root)))
+                          (let [root-file (io/file root)
+                                resolved-root (if (.isAbsolute root-file)
+                                                root-file
+                                                (io/file ".millstrand" root))]
+                            (assoc % :local/root
+                                   (.getCanonicalPath resolved-root)))
                           %))}))
 (def ^:private review-world-init
   (str
-   "(require '[ct.spools.codethread.bootstrap :as codethread]\n"
+   "(require '[millhouse.config.bootstrap :as codethread]\n"
    "         '[millstrand.api.current.alpha :as current]\n"
    "         '[millstrand.api.runtime.alpha :as runtime])\n"
    "(def rt (current/runtime))\n"
    "(codethread/register! rt)\n"
    "(runtime/module! rt :me/reviewers\n"
    " {:file \"me/agents/reviewers.clj\"\n"
-   "  :after [:codethread/config-reviewers]\n"
+   "  :after [:millhouse/config-reviewers]\n"
    "  :required? true})\n"))
 (def ^:private reviewer-source
   (slurp ".millstrand/me/agents/reviewers.clj"))
@@ -92,9 +96,9 @@
    (test-alpha/repl!
     ctx
     (str
-     "(do (require '[ct.spools.harnesses :as harnesses]"
-     "             '[ct.spools.harnesses.execution :as execution]"
-     "             '[ct.spools.harnesses.reviewers :as reviewers]"
+     "(do (require '[millhouse.harnesses :as harnesses]"
+     "             '[millhouse.harnesses.execution :as execution]"
+     "             '[millhouse.harnesses.reviewers :as reviewers]"
      "             '[millstrand.api.current.alpha :as current])"
      " (with-redefs [execution/schedule! (fn [_] nil)"
      "               harnesses/create!"
@@ -103,8 +107,8 @@
      (pr-str (assoc request :git patch)) ")))"))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "4ac638d679bc238fd8a373d52c3dbf2a7f682be0"
-         (get-in workspace-deps ['ct.spools/harnesses :git/sha])))
+  (is (= "f13312133daf46e57d510fc0ea289850373264c6"
+         (get-in workspace-deps ['millhouse/harnesses :git/sha])))
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
           :deps-edn review-world-deps
@@ -113,14 +117,14 @@
           {"me/agents/reviewers.clj" reviewer-source
            "fixture/unavailable_reviewers.clj"
            (str "(ns fixture.unavailable-reviewers\n"
-                "  (:require [ct.spools.harnesses.reviewers :as reviewers]))\n"
+                "  (:require [millhouse.harnesses.reviewers :as reviewers]))\n"
                 "(reviewers/defreviewer! unavailable-reviewer\n"
                 "  \"Never available in this workspace.\"\n"
                 "  {:seat 'opus :labels [\"PR\"]}\n"
                 "  \"Inspect the change.\")\n")
            "fixture/always_reviewers.clj"
            (str "(ns fixture.always-reviewers\n"
-                "  (:require [ct.spools.harnesses.reviewers :as reviewers]))\n"
+                "  (:require [millhouse.harnesses.reviewers :as reviewers]))\n"
                 "(reviewers/defreviewer! always-reviewer\n"
                 "  \"Run for every nonempty change.\"\n"
                 "  {:seat 'reviewer :labels [\"PR\"]}\n"
@@ -128,7 +132,7 @@
     (let [catalog
           (test-alpha/repl!
            ctx
-           '(ct.spools.harnesses.reviewers/reviewers
+           '(millhouse.harnesses.reviewers/reviewers
              (millstrand.api.current.alpha/runtime)))
           test-change (start-review! ctx (modified-patch
                                           "test/clojure/example_test.clj"))
@@ -153,10 +157,10 @@
           invalid-input
           (test-alpha/repl!
            ctx
-           `(with-redefs [ct.spools.harnesses.execution/schedule!
+           `(with-redefs [millhouse.harnesses.execution/schedule!
                           (fn [_#] nil)]
               (try
-                (ct.spools.harnesses.reviewers/start!
+                (millhouse.harnesses.reviewers/start!
                  (millstrand.api.current.alpha/runtime)
                  {:git ~(modified-patch "Makefile")
                   :agents ["missing-reviewer"]})
@@ -279,7 +283,7 @@
         (test-support/delete-tree! origin)))))
 
 (deftest shared-land-still-requires-basic-review-before-signoff
-  (let [definition (workflow-definition 'millhouse.spools.land/land)
+  (let [definition (workflow-definition 'millhouse.land/land)
         steps (into {} (map (juxt :id identity)) (:steps definition))]
     (is (= [:resolve-pr] (:depends-on (steps :review))))
     (is (= [:review] (:depends-on (steps :signoff))))
@@ -289,8 +293,8 @@
 (deftest review-requires-a-non-blank-review-id
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millhouse/spools-workflow
-                                    'millhouse.spools.workflow)
+      (test-support/activate-spool! rt :millhouse/workflow
+                                    'millhouse.workflow)
       (let [definition (requiring-resolve 'me.workflows.review/millstrand-review)
             params (assoc work :review-target "external-task")
             failure (try
@@ -307,7 +311,7 @@
 (deftest verification-reads-real-runs-not-sentinels-or-current-roster
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
       (workflow/start! "verify-real" (workflow-definition 'me.workflows.review/millstrand-review)
                        (assoc work :review-target "external" :review-id "real"))
       (workflow/complete! "verify-real" {:by-identity "fixture"})
@@ -354,7 +358,7 @@
 (deftest dispatch-reuses-persisted-selection-and-refuses-uncertain-fanout
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
       (workflow/start! "dispatch" (workflow-definition 'me.workflows.review/millstrand-review)
                        (assoc work :review-target "external" :review-id "dispatch"))
       (workflow/complete! "dispatch" {:by-identity "fixture"})
@@ -385,7 +389,7 @@
 (deftest accepted-handoff-reuses-even-a-completed-child-and-rejects-drift
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+      (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
       (workflow/register-workflow! :handoff-child 'millstrand.ct.review-workflow-test/handoff-child)
       (let [parent (workflow/workflow
                     "Parent" (handoff/prepare :prepare [] "handoff-child" "Prepare.")
@@ -436,7 +440,7 @@
            ["skipped" "no-matching-reviewers" [] ["Makefile"] false]]]
     (with-runtime
       (fn [rt _]
-        (test-support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+        (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
         (workflow/start! "no-applicable" (workflow-definition 'me.workflows.review/millstrand-review)
                          (assoc work :review-target "external" :review-id "no-applicable"))
         (workflow/complete! "no-applicable" {:by-identity "fixture"})

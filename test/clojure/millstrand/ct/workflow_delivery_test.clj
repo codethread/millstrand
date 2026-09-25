@@ -3,7 +3,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [ct.spools.harnesses.reviewers :as reviewers]
+            [millhouse.harnesses.reviewers :as reviewers]
             [me.workflows.explore :as explore]
             [me.workflows.handoff :as handoff]
             [me.workflows.review]
@@ -12,7 +12,7 @@
             [me.workflows.story]
             [me.workflows.story-review]
             [me.workflows.story-waves :as waves]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.weaver.alpha :as weaver]
@@ -23,7 +23,7 @@
    :module "one" :reviewer-harness "fixture-reviewer"})
 
 (defn- activate! [rt]
-  (support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+  (support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
   (doseq [[name symbol] [[:story-review 'me.workflows.story-review/story-review]
                          [:story-fold 'me.workflows.story/story-fold]
                          [:story-keep 'me.workflows.story/story-keep]
@@ -141,7 +141,7 @@
   (doseq [choice [:promote-to-devflow-brief :park :abandon]]
     (with-runtime
       (fn [rt _]
-        (support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+        (support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
         (workflow/start! "explore" @(requiring-resolve 'me.workflows.explore/explore)
                          {:topic "fixture"})
         (workflow/complete! "explore" {:attributes {"explore/card" "card"
@@ -194,7 +194,7 @@
     (fn [work {:keys [base head] :as frozen} _]
       (with-runtime
         (fn [rt _]
-          (support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+          (support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
           (workflow/start! "dispatch" @(requiring-resolve 'me.workflows.review/millstrand-review)
                            (assoc work :review-id "dispatch" :review-target "fixture"))
           (advance! "dispatch")
@@ -232,7 +232,7 @@
                         (str "HEAD:refs/heads/" (:branch work)))
       (with-runtime
         (fn [rt _]
-          (support/activate-spool! rt :millhouse/spools-workflow 'millhouse.spools.workflow)
+          (support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
           (workflow/start! "report" @(requiring-resolve 'me.workflows.review/millstrand-review)
                            (assoc work :review-id "report" :review-target "fixture"))
           ;; No quality or reviewer executor runs in this disposable fixture.

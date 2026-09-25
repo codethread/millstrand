@@ -3,7 +3,7 @@
 
   Developers bind how they are notified in gitignored init.local.clj with
   (chime/set-notifier! {:argv [...]})."
-  (:require [millhouse.spools.chime :refer [defrule]]))
+  (:require [millhouse.chime :refer [defrule]]))
 
 (defn- config-attr
   "Read strand attribute k, tolerating keyword- or string-keyed maps."
