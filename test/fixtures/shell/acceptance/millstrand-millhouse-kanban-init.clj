@@ -3,5 +3,8 @@
 
 (def runtime (current/runtime))
 
+(runtime/module! runtime :identity-source
+                 {:ns 'millhouse.identity})
 (runtime/module! runtime :kanban-source
-                 {:ns 'millhouse.spools.kanban})
+                 {:ns 'millhouse.kanban
+                  :after [:identity-source]})

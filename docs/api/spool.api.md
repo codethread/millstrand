@@ -4,9 +4,9 @@
 
 Blessed spool-authoring helpers: the accretion-compatible home for the shared fail-loud and validation seams every reference spool leans on.
 
-The public helper set is `entity-projection`, `fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, and `poll-until!`, so no blessed namespace has to reach down into a `millhouse.spools.*` peer to reuse it.
+The public helper set is `entity-projection`, `fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, and `poll-until!`, so no blessed namespace has to reach down into a `millhouse.*` peer to reuse it.
 
-Reference spools all need the same tiny fail-loud and validation seams: throw an `ex-info` with a contextual data map (TEN-003), reject unknown option keys, validate a boundary shape against a `clojure.spec` and attach its explain data, coerce an attribute key to its string wire form, tolerantly read an attribute back regardless of whether its key arrived keyword- or string-keyed, and poll a check fn against a Clock. Those were copy-pasted - and had begun to drift - across most shipped spools, and now share this one source instead of re-deriving them per file. `millhouse.spools.workflow` is a deliberate exception: it keeps its own branded `reject-unknown-keys!` rather than adopting this one.
+Reference spools all need the same tiny fail-loud and validation seams: throw an `ex-info` with a contextual data map (TEN-003), reject unknown option keys, validate a boundary shape against a `clojure.spec` and attach its explain data, coerce an attribute key to its string wire form, tolerantly read an attribute back regardless of whether its key arrived keyword- or string-keyed, and poll a check fn against a Clock. Those were copy-pasted - and had begun to drift - across most shipped spools, and now share this one source instead of re-deriving them per file. `millhouse.workflow` is a deliberate exception: it keeps its own branded `reject-unknown-keys!` rather than adopting this one.
 
 ## <a name="millstrand.api.spool.alpha/attr-get">`attr-get`</a>
 
@@ -73,7 +73,7 @@ The optional `cause` arity threads an underlying throwable so a spool can fail l
 
 Function.
 
-The shared spool-tier long-poll skeleton behind `millhouse.spools.workflow/await!` and `millhouse.spools.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test its value with `pred->result`, and repeat on `installed-clock` every `poll-ms` until either `pred->result` returns a non-nil result or `timeout-ms` has elapsed on that Clock.
+The shared spool-tier long-poll skeleton behind `millhouse.workflow/await!` and `millhouse.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test its value with `pred->result`, and repeat on `installed-clock` every `poll-ms` until either `pred->result` returns a non-nil result or `timeout-ms` has elapsed on that Clock.
 
 `pred->result` receives each `check` value and returns a non-nil result to stop and return it, or nil to keep polling. At or after the derived deadline, `on-timeout` receives the last `check` value and its return value becomes the result. `timeout-ms` and `poll-ms` are required; callers own their defaults. Fails loudly (TEN-003) before checking or sleeping when the Clock, exact option keys, numeric bounds, or required functions are malformed.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L155-L193">Source</a></sub></p>

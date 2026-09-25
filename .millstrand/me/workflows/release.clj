@@ -1,8 +1,8 @@
 (ns me.workflows.release
   "The release workflow for versioned Millstrand publication."
   (:require [clojure.spec.alpha :as s]
-            [millhouse.spools.land.support :as land-support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.land.support :as land-support]
+            [millhouse.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]
             [me.workflows.support :as support]
             [me.workflows.release-evidence]

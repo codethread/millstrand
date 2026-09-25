@@ -57,12 +57,12 @@ The `:devflow` card-view key is renamed to `:tracker` in the same change. This i
 
 ## RFC-022.D2 Repo binding (this repo's `.millstrand`)
 
-`init.clj`'s kanban activation drops `codethread/devflow` from its `:spools` guard and drops the `:after` edge — kanban no longer needs devflow to load. The join moves to a small trusted-config module that only exists in repos that want it:
+`init.clj`'s kanban activation drops `millhouse/devflow` from its `:spools` guard and drops the `:after` edge — kanban no longer needs devflow to load. The join moves to a small trusted-config module that only exists in repos that want it:
 
 ```clojure
 (runtime/module! runtime :kanban/tracker
               {:file "kanban_tracker.clj"
-               :spools ['codethread/kanban 'codethread/devflow]
+               :spools ['codethread/kanban 'millhouse/devflow]
                :after [:skein/spools-kanban :skein/spools-devflow]
                :call 'kanban-tracker/install!})
 ```
@@ -135,7 +135,7 @@ Done-when: the kanban.spool suite is green with no devflow or workflow root on t
 
 ### this repo (step 2)
 
-- `.millstrand/init.clj` — the kanban module drops `codethread/devflow` from its guard and the `:after` devflow edge; a new `:kanban/tracker` block (RFC-022.D2) loads `kanban_tracker.clj`.
+- `.millstrand/init.clj` — the kanban module drops `millhouse/devflow` from its guard and the `:after` devflow edge; a new `:kanban/tracker` block (RFC-022.D2) loads `kanban_tracker.clj`.
 - `.millstrand/kanban_tracker.clj` — new module, essentially:
 
     ```clojure

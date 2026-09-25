@@ -5,8 +5,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millhouse.spools.auto-run :as auto-run]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.auto-run :as auto-run]
+            [millhouse.workflow :as workflow]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
@@ -37,8 +37,12 @@
      (pr-str
       {:deps (update-vals deps
                           #(if-let [root (:local/root %)]
-                             (assoc % :local/root
-                                    (.getCanonicalPath (io/file workspace-root root)))
+                             (let [root-file (io/file root)
+                                   resolved-root (if (.isAbsolute root-file)
+                                                   root-file
+                                                   (io/file workspace-root root))]
+                               (assoc % :local/root
+                                      (.getCanonicalPath resolved-root)))
                              %))})
      :init-clj (slurp (io/file workspace-root "init.clj"))
      :files (workspace-files)}))
@@ -193,7 +197,7 @@
             (doseq [[label rejected-pr-result] rejected-pr-results]
               (is (not (zero? (:exit rejected-pr-result)))
                   (str label ": " (:output rejected-pr-result)))))
-          (is (not-any? #(= "millhouse.spools.land.card-actions/review-card!"
+          (is (not-any? #(= "millhouse.land.card-actions/review-card!"
                             (attr-get % :code/fn)) strands))
           (testing "repository policy delegates landing to separate shared roles"
             (is (some? handoff-step))

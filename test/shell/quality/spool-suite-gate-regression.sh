@@ -20,9 +20,9 @@ fixture_sha="$(git -C "$cache_repo" rev-parse HEAD)"
 printf '%s\n' '(ns stale.cache-source)' >"$cache_repo/spools/workflow/src/stale.clj"
 
 gitlibs="$temp_root/gitlibs"
-fixture_cache="$gitlibs/libs/millhouse.spools/workflow/$fixture_sha"
+fixture_cache="$gitlibs/libs/millhouse/workflow/$fixture_sha"
 wrong_sha=0000000000000000000000000000000000000000
-wrong_cache="$gitlibs/libs/millhouse.spools/workflow/$wrong_sha"
+wrong_cache="$gitlibs/libs/millhouse/workflow/$wrong_sha"
 mkdir -p "$(dirname "$fixture_cache")"
 ln -s "$cache_repo" "$fixture_cache"
 ln -s "$cache_repo" "$wrong_cache"

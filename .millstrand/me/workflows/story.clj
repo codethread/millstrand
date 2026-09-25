@@ -5,7 +5,7 @@
             [me.workflows.story-review :as review]
             [me.workflows.story-waves]
             [me.workflows.support :as support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]))
 
 (s/def ::feature support/non-blank-string?)

@@ -78,7 +78,7 @@ These are reviewable delivery phases, not an execution queue. After approval and
 
 The docs-only work root is card `q46b1`, with preparation task `1kh4c` and Devflow run `config-files`. This packet lives on branch `q46b1-config-files`. The current request ends at a reviewed design packet and human proposal checkpoint, not a runtime rollout.
 
-The motivating implementations inspected were Codethread's `spools/config/src/ct/spools/codethread/agents.clj:184` and `spools/config/src/ct/spools/codethread/reviewers.clj:7`, plus Harnesses' `src/ct/spools/harnesses/catalog.clj:108` and `src/ct/spools/harnesses/reviewers.clj:141`. Seat symbols are resolved by the domain when listing/running reviewers, not by quotation itself. Keep external implementation claims scoped to that source, not to a promised new core domain API.
+The motivating implementations inspected were Codethread's `spools/config/src/millhouse/config/agents.clj:184` and `spools/config/src/millhouse/config/reviewers.clj:7`, plus Harnesses' `src/millhouse/harnesses/catalog.clj:108` and `src/millhouse/harnesses/reviewers.clj:141`. Seat symbols are resolved by the domain when listing/running reviewers, not by quotation itself. Keep external implementation claims scoped to that source, not to a promised new core domain API.
 
 The authoring/lifecycle code and shared-spool guide are the implementation anchors. Historical RFC-Laf-001 and ADR-002/003 explain the printable-symbol and one-coordinator boundaries; their superseded callback-era text is not permission to reintroduce module callbacks or closure-valued declarations.
 

@@ -1,7 +1,7 @@
 (ns me.workflows.review-evidence
   "Dispatch and verify full-roster reviews against durable Harnesses evidence."
-  (:require [ct.spools.harnesses :as harnesses]
-            [ct.spools.harnesses.reviewers :as reviewers]
+  (:require [millhouse.harnesses :as harnesses]
+            [millhouse.harnesses.reviewers :as reviewers]
             [me.workflows.evidence :as evidence]
             [me.workflows.support :as support]
             [millstrand.api.current.alpha :as current]

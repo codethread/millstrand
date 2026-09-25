@@ -12,9 +12,9 @@
             [me.workflows.story :as story]
             [me.workflows.story-review :as story-review]
             [me.workflows.story-waves :as story-waves]
-            [millhouse.spools.chime :as chime]
-            [millhouse.spools.cron :as cron]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.chime :as chime]
+            [millhouse.cron :as cron]
+            [millhouse.workflow :as workflow]
             [millstrand.api.millstrand.alpha :as millstrand]
             [millstrand.spools.batteries :as batteries]))
 

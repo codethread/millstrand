@@ -3,7 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [me.workflows.evidence :as evidence]
             [me.workflows.support :as support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.spool.alpha :refer [fail!]]))
 

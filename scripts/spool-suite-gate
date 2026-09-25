@@ -15,7 +15,7 @@ coords="$(clojure -M -e '
 (require (quote [clojure.edn :as edn])
          (quote [clojure.string :as str]))
 (let [coordinate (get-in (edn/read-string (slurp ".millstrand/deps.edn"))
-                         [:deps (quote millhouse.spools/workflow)])
+                         [:deps (quote millhouse/workflow)])
       required [:git/url :git/sha :deps/root]
       missing (remove #(and (string? (get coordinate %))
                             (not (str/blank? (get coordinate %))))
@@ -24,11 +24,11 @@ coords="$(clojure -M -e '
     (binding [*out* *err*]
       (println (str "spool-suite-gate: .millstrand/deps.edn is missing "
                     (pr-str (vec missing))
-                    " for millhouse.spools/workflow; refusing to run an unpinned suite")))
+                    " for millhouse/workflow; refusing to run an unpinned suite")))
     (System/exit 1))
   (println (:git/url coordinate) (:git/sha coordinate) (:deps/root coordinate)))')"
 if [ -z "$coords" ]; then
-  echo "spool-suite-gate: coordinate extraction printed nothing for millhouse.spools/workflow" >&2
+  echo "spool-suite-gate: coordinate extraction printed nothing for millhouse/workflow" >&2
   exit 1
 fi
 
@@ -46,7 +46,7 @@ millhouse_sha="$(printf '%s' "$millhouse_sha" | tr '[:upper:]' '[:lower:]')"
 temp_root="$(mktemp -d)"
 trap 'rm -rf "${temp_root:?}"' EXIT
 millhouse_checkout="$temp_root/millhouse.spool"
-gitlib="${GITLIBS:-$HOME/.gitlibs}/libs/millhouse.spools/workflow/$millhouse_sha"
+gitlib="${GITLIBS:-$HOME/.gitlibs}/libs/millhouse/workflow/$millhouse_sha"
 
 if [ -d "$gitlib" ]; then
   cached_sha="$(git -C "$gitlib" rev-parse --verify 'HEAD^{commit}')"
@@ -115,13 +115,13 @@ if [ "$resolved_source" != "$expected_source" ]; then
   exit 1
 fi
 
-echo "==> spool-suite-gate: millhouse.spools/workflow@$millhouse_sha against $repo_root"
+echo "==> spool-suite-gate: millhouse/workflow@$millhouse_sha against $repo_root"
 if ! (
   cd "$consumer_root"
   clojure -Sdeps "$head_deps" -M:test \
-    millhouse.spools.workflow-test \
-    millhouse.spools.workflow-cli-test \
-    millhouse.spools.workflow-run-cli-test
+    millhouse.workflow-test \
+    millhouse.workflow-cli-test \
+    millhouse.workflow-run-cli-test
 ); then
   printf '\n%s\n' "spool-suite-gate: Millhouse Workflow@$millhouse_sha FAILED against $repo_root" >&2
   echo "  reproduce: make spool-suite-gate" >&2

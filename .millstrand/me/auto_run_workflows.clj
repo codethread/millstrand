@@ -2,9 +2,9 @@
   "Repository-owned delivery contract for automatically assigned features."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [millhouse.spools.auto-run-land :as autonomous]
-            [millhouse.spools.land.support :as land-support]
-            [millhouse.spools.workflow :as workflow]
+            [millhouse.auto-run-land :as autonomous]
+            [millhouse.land.support :as land-support]
+            [millhouse.workflow :as workflow]
             [millstrand.api.format.alpha :as format-alpha]))
 
 (s/def ::text (s/and string? (complement str/blank?)))

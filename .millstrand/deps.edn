@@ -1,17 +1,39 @@
 {:paths ["."]
  :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
-        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "252981205d8d8c16dbb6622749f5b35d33847ad3" :deps/root "spools/config"}
-        ct.spools/harnesses {:git/url "https://github.com/codethread/harnesses.spool.git" :git/sha "4ac638d679bc238fd8a373d52c3dbf2a7f682be0" :deps/root "."}
-        millhouse.spools/auto-run {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/auto-run"}
-        millhouse.spools/land {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/land"}
-        millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/workflow"}
-        millhouse.spools/kanban {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/kanban"}
-        millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/chime"}
-        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/cron"}
-        millhouse.spools/identity {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "c66adcca2cdc05e38c789b802e6d34532af0d6cd" :deps/root "spools/identity"}}
- :aliases
- {:dev
-  {:extra-paths ["."]
-   :extra-deps
-   {io.millstrand/millstrand {:local/root ".."}}}}}
+        millhouse/config {:git/url "https://github.com/codethread/millhouse.spool.git"
+                          :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                          :deps/root "spools/config"}
+        millhouse/harnesses {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                             :deps/root "spools/harnesses"}
+        millhouse/auto-run {:git/url "https://github.com/codethread/millhouse.spool.git"
+                            :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                            :deps/root "spools/auto-run"}
+        millhouse/land {:git/url "https://github.com/codethread/millhouse.spool.git"
+                        :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                        :deps/root "spools/land"}
+        millhouse/workflow {:git/url "https://github.com/codethread/millhouse.spool.git"
+                            :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                            :deps/root "spools/workflow"}
+        millhouse/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
+                          :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                          :deps/root "spools/kanban"}
+        millhouse/chime {:git/url "https://github.com/codethread/millhouse.spool.git"
+                         :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                         :deps/root "spools/chime"}
+        millhouse/cron {:git/url "https://github.com/codethread/millhouse.spool.git"
+                        :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                        :deps/root "spools/cron"}
+        millhouse/identity {:git/url "https://github.com/codethread/millhouse.spool.git"
+                            :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                            :deps/root "spools/identity"}
+        millhouse/devflow {:git/url "https://github.com/codethread/millhouse.spool.git"
+                           :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                           :deps/root "spools/devflow"}
+        millhouse/devflow-kanban-adapter {:git/url "https://github.com/codethread/millhouse.spool.git"
+                                          :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                          :deps/root "spools/devflow/kanban-adapter"}}
+ :aliases {:dev
+           {:extra-paths ["."]
+            :extra-deps {io.millstrand/millstrand {:local/root ".."}}}}}
