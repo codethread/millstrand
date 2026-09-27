@@ -18,6 +18,7 @@
   config/data/state workspaces. Generated worlds are isolated and disposable
   by default."
   (:require [clojure.edn :as edn]
+            [clojure.java.basis :as java-basis]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -26,6 +27,7 @@
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.client :as client]
+            [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.access :as access]
             [millstrand.core.weaver.runtime :as weaver-runtime])
@@ -409,6 +411,88 @@
                           ::basis-fingerprint]
                  :opt-un [::db-path])
          #(every? weaver-world-context-keys (keys %))))
+
+(s/def ::bare-runtime-options
+  (s/and (s/keys :opt-un [::storage ::name])
+         #(every? #{:storage :name} (keys %))))
+
+(defn- classpath-generation
+  "Adapt the test JVM's existing basis to the runtime's generation context.
+
+  The source entry is an empty fixture declaration, not a resolved workspace.
+  No deps.edn is written: full workspace refresh must not masquerade as a
+  dependency-resolution proof. Only classpath module activation is supported."
+  [root]
+  (let [source (or (source-checkout)
+                   (throw (ex-info "Millstrand source checkout is not file-backed" {})))
+        current (or (java-basis/current-basis)
+                    (throw (ex-info "Bare runtimes require a Clojure CLI test JVM" {})))
+        projection (assoc (select-keys current [:libs :classpath-roots])
+                          :argmap (:argmap current {}))]
+    {:sources [{:kind :project
+                :path (.getPath (io/file root "deps.edn"))
+                :deps {}}]
+     :aliases []
+     :reserved-deps {'io.millstrand/millstrand {:local/root source}}
+     :basis projection
+     :fingerprint (basis/basis-fingerprint {:test/classpath projection})
+     :classloader (clojure.lang.RT/baseLoader)}))
+
+(defn run-with-bare-runtime
+  "Call `f` with a fresh classpath-backed test runtime, then stop and delete it.
+
+  Options are closed to `:storage` (`:sqlite-file` by default, or
+  `:sqlite-memory`) and `:name`. The context contains `:runtime`, `:config-dir`,
+  `:state-dir`, `:data-dir`, `:storage`, and `:db-path` for file storage.
+  The callback result is returned unchanged. Runtime selection is explicit;
+  the fixture neither publishes nor dynamically binds an ambient runtime.
+
+  Each call owns fresh SQLite storage, registries, spool state, and temporary
+  paths. It reuses the test JVM's classpath and classloader without resolving
+  dependencies or launching a basis subprocess. Namespaces and Vars remain
+  JVM-global. Activate modules with `activate-module!`; startup files, full
+  workspace refresh, dependency changes, and durable reopen belong to
+  `run-with-weaver-world`, not this fixture.
+
+  This POC retains the ordinary event lane, scheduler, and transports. It does
+  not simulate runtime behavior or share mutable runtime state. Cleanup runs
+  once after success or failure; cleanup errors are thrown, or suppressed on
+  the original callback error. File-backed Millstrand source and a Clojure CLI
+  test JVM are required."
+  [opts f]
+  (require-spec! ::bare-runtime-options "bare runtime options" opts)
+  (let [root (create-temp-root)
+        started (atom nil)
+        failure (atom nil)]
+    (try
+      (let [world (weaver-config/world (.getPath root))
+            storage (:storage opts :sqlite-file)
+            rt (weaver-runtime/start!
+                nil (merge (select-keys opts [:name])
+                           {:world world
+                            :publish? false
+                            :storage storage
+                            :generation-basis (classpath-generation root)}))
+            _ (reset! started rt)
+            ctx (cond-> (assoc (select-keys world [:config-dir :state-dir :data-dir])
+                               :runtime rt :storage storage)
+                  (= :sqlite-file storage)
+                  (assoc :db-path (get-in rt [:metadata :canonical-db-path])))]
+        (f ctx))
+      (catch Throwable t
+        (reset! failure t)
+        (throw t))
+      (finally
+        (doseq [cleanup [#(when-let [rt @started] (weaver-runtime/stop! rt))
+                         #(delete-tree! root)]]
+          (try
+            (cleanup)
+            (catch Throwable t
+              (if-let [primary @failure]
+                (.addSuppressed ^Throwable primary t)
+                (reset! failure t)))))
+        (when-let [primary @failure]
+          (throw primary))))))
 
 (defn run-with-weaver-world
   "Start a disposable weaver world from `opts`, call `f` with its context map,
