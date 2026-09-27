@@ -461,7 +461,7 @@
   test JVM are required."
   [opts f]
   (require-spec! ::bare-runtime-options "bare runtime options" opts)
-  (let [root (create-temp-root)
+  (let [^java.io.File root (create-temp-root)
         started (atom nil)
         failure (atom nil)]
     (try
