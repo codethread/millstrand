@@ -22,6 +22,27 @@ If you have not met the weaver, workspaces, or the strand model yet, read the [t
 
 When absent, `mill init` creates the shared half: `config.json`, `deps.edn` with the seeded batteries dependency, `init.clj` with its explicit module, and `me/help.clj`. It does not create an empty `spools/` directory. Its `.gitignore` ignores `config.local.json`, `deps.local.edn`, and `init.local.clj`. Shared config is committed and reviewed; the local overlays stay on your machine. Explicit `--workspace` bootstrap preserves existing files. Use `mill init --auto-start` with a running Mill when this workspace should be remembered for Weaver startup; the flag writes `"autoStart": true` to shared config, registers the workspace, and starts it immediately. If Mill is unavailable or the Weaver start fails, the command returns that error. `config.local.json` has no supported `autoStart` setting.
 
+## Selecting a workspace by name
+
+Set a name in the workspace's `config.local.json`:
+
+```json
+{ "name": "frontend" }
+```
+
+Start its Weaver from the project as usual with `mill weaver start`. You can then target it from any directory:
+
+```nu
+strand --workspace frontend help
+strand --workspace frontend list
+```
+
+Mill matches the name shown by `mill weaver list`. The local name overrides `config.json`; an explicit `mill weaver start --name` overrides both. A running Weaver keeps its startup name until its next start. Name lookup does not start or restart a Weaver.
+
+Names match exactly. Duplicate names fail with the matching workspace paths so you can select one explicitly. A matching bare name takes precedence over a relative directory of the same name; use `--workspace ./frontend` to select that directory instead. Absolute paths and relative paths containing `/` remain directory selections. If no name matches, the value is resolved as a directory as before.
+
+This shorthand belongs to `strand` only. Run `mill` commands from the project's cwd as usual, or pass an explicit workspace directory; `mill` does not resolve workspace names. Selecting a different Weaver does not change the caller's cwd or Git context sent to its operations.
+
 ## Remembered Weaver startup
 
 `mill weaver start` records a true remembered-start registration only when shared `config.json` has `"autoStart": true`, including when the selected Weaver is already running. With `autoStart` omitted or false, explicit start never registers, including if the config later changes to true. On the next Mill startup, Mill re-reads shared `config.json`, prunes registrations with omitted or false `autoStart`, and starts the remaining remembered workspaces with at most four starts in flight. It logs failures and continues with other workspaces.
