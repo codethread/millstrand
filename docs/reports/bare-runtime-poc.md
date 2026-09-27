@@ -1,4 +1,12 @@
-# Classpath runtime fixture POC
+# Classpath runtime fixture POC (historical)
+
+## Promotion status
+
+This report records the proof of concept at commits `f12549af` and `56b824f0`. The measured results and POC limitations below are preserved as observed history.
+
+The fixture was promoted on 2026-09-27 as the public `millstrand.test.alpha/run-with-bare-runtime` API. Promotion added a closed callback/context contract, explicit refusal of full workspace refresh and dependency replacement, fresh classpath module activation coverage, and plain `java -cp` support without tools.deps basis metadata. SPEC-003.C28b and SPEC-006 now own the released contract; [Testing your config and spools](../spools/testing.md) is the practical guide.
+
+## Original POC record
 
 This worktree tests the upstream API gap identified by Millhouse epic `c5mdb`. It is an experiment, not a released fixture contract. Millstrand card `bblvu` and Millhouse card `i9vmi` track the paired branches, both named `spike/bare-runtime-fixture`.
 

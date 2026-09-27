@@ -1,24 +1,24 @@
 (ns millstrand.test.alpha
-  "Blessed author-side clojure.test helpers for disposable weaver worlds.
+  "Blessed author-side clojure.test helpers for disposable Weaver runtimes.
 
-  This namespace runs in the author's test JVM and orchestrates real weaver
-  runtimes in isolated temporary workspaces: it writes requested config
-  fixtures (`deps.edn`, activation files, `config.json`, and arbitrary
-  workspace files), starts an unpublished in-process weaver runtime with a real
-  generation basis and explicit
-  storage selection, exposes an orchestration context map, and stops/cleans up
-  afterwards. Manual clocks make runtime time and sleeps deterministic.
-  Weaver-side behavior is exercised through `repl!`, which
-  evaluates weaver-routed forms over the runtime's real nREPL transport.
+  `run-with-bare-runtime` starts a real unpublished runtime over the current
+  test JVM's classpath and classloader. It resolves no dependencies and writes
+  no workspace dependency or activation files. Use it for explicit-runtime
+  public API tests and classpath-visible module activation.
 
-  The namespace also exposes narrow authoring-test helpers for collecting
-  module forms as data and activating an already-classpath-visible namespace
-  on a bare test runtime. Deliberately out of scope: strand/query wrappers,
-  assertion DSLs, CLI subprocess helpers, and any use of the user's default
-  config/data/state workspaces. Generated worlds are isolated and disposable
-  by default."
+  Weaver-world helpers create isolated temporary workspaces: they write the
+  requested config fixtures (`deps.edn`, activation files, `config.json`, and
+  arbitrary workspace files), resolve a real generation basis, start an
+  unpublished in-process runtime, expose an orchestration context, and clean up
+  afterwards. `repl!` evaluates Weaver-routed forms over that runtime's real
+  nREPL transport.
+
+  The namespace also exposes manual clocks and narrow helpers for collecting
+  module forms as data. Deliberately out of scope: strand/query wrappers,
+  assertion DSLs, CLI subprocess helpers, generic fixture builders, and use of
+  the user's default config/data/state workspaces. Every generated runtime is
+  isolated and disposable by default."
   (:require [clojure.edn :as edn]
-            [clojure.java.basis :as java-basis]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -414,53 +414,104 @@
 
 (s/def ::bare-runtime-options
   (s/and (s/keys :opt-un [::storage ::name])
-         #(every? #{:storage :name} (keys %))))
+         #(every? #{:storage :name} (keys %))
+         #(or (not (contains? % :name))
+              (not (str/blank? (:name %))))))
+(s/def ::bare-runtime-callback fn?)
+(def ^:private bare-runtime-context-keys
+  #{:config-dir :state-dir :data-dir :db-path :storage :runtime})
+(s/def ::bare-runtime-context
+  (s/and (s/keys :req-un [::config-dir ::state-dir ::data-dir ::storage
+                          ::runtime]
+                 :opt-un [::db-path])
+         #(every? bare-runtime-context-keys (keys %))
+         #(= (= :sqlite-file (:storage %)) (contains? % :db-path))))
+
+(defn- current-classpath-roots
+  "Return canonical roots visible through the JVM classpath and base loader."
+  []
+  (let [classpath (System/getProperty "java.class.path")
+        property-roots
+        (when-not (str/blank? classpath)
+          (map #(-> (if (str/blank? %) "." %) io/file .getCanonicalPath)
+               (str/split classpath
+                          (re-pattern
+                           (java.util.regex.Pattern/quote
+                            java.io.File/pathSeparator))
+                          -1)))
+        loader-roots
+        (loop [loader (clojure.lang.RT/baseLoader)
+               roots []]
+          (if loader
+            (recur (.getParent ^ClassLoader loader)
+                   (if (instance? java.net.URLClassLoader loader)
+                     (into roots
+                           (keep (fn [^java.net.URL url]
+                                   (when (= "file" (.getProtocol url))
+                                     (-> url .toURI io/file .getCanonicalPath))))
+                           (.getURLs ^java.net.URLClassLoader loader))
+                     roots))
+            roots))
+        roots (vec (distinct (concat property-roots loader-roots)))]
+    (when-not (seq roots)
+      (throw (ex-info "The current JVM has no discoverable classpath roots" {})))
+    roots))
 
 (defn- classpath-generation
-  "Adapt the test JVM's existing basis to the runtime's generation context.
-
-  The source entry is an empty fixture declaration, not a resolved workspace.
-  No deps.edn is written: full workspace refresh must not masquerade as a
-  dependency-resolution proof. Only classpath module activation is supported."
+  "Describe the current JVM without resolving a selected-workspace basis."
   [root]
   (let [source (or (source-checkout)
                    (throw (ex-info "Millstrand source checkout is not file-backed" {})))
-        current (or (java-basis/current-basis)
-                    (throw (ex-info "Bare runtimes require a Clojure CLI test JVM" {})))
-        projection (assoc (select-keys current [:libs :classpath-roots])
-                          :argmap (:argmap current {}))]
-    {:sources [{:kind :project
-                :path (.getPath (io/file root "deps.edn"))
-                :deps {}}]
-     :aliases []
-     :reserved-deps {'io.millstrand/millstrand {:local/root source}}
-     :basis projection
-     :fingerprint (basis/basis-fingerprint {:test/classpath projection})
-     :classloader (clojure.lang.RT/baseLoader)}))
+        projection {:libs {}
+                    :classpath-roots (current-classpath-roots)
+                    :argmap {}}]
+    (with-meta
+      {:sources [{:kind :project
+                  :path (.getPath (io/file root "deps.edn"))
+                  :deps {}}]
+       :aliases []
+       :reserved-deps {'io.millstrand/millstrand {:local/root source}}
+       :basis projection
+       :fingerprint (basis/basis-fingerprint
+                     {:test/current-jvm-classpath
+                      (:classpath-roots projection)})
+       :classloader (clojure.lang.RT/baseLoader)}
+      {::weaver-runtime/full-refresh-unsupported true})))
 
 (defn run-with-bare-runtime
-  "Call `f` with a fresh classpath-backed test runtime, then stop and delete it.
+  "Call `f` with a fresh classpath-backed runtime, then stop and delete it.
 
-  Options are closed to `:storage` (`:sqlite-file` by default, or
-  `:sqlite-memory`) and `:name`. The context contains `:runtime`, `:config-dir`,
-  `:state-dir`, `:data-dir`, `:storage`, and `:db-path` for file storage.
-  The callback result is returned unchanged. Runtime selection is explicit;
-  the fixture neither publishes nor dynamically binds an ambient runtime.
+  `opts` must conform to `:millstrand.test.alpha/bare-runtime-options`, which is
+  closed to `:storage` (`:sqlite-file` by default, or `:sqlite-memory`) and an
+  optional non-blank runtime `:name`. `f` must conform to
+  `:millstrand.test.alpha/bare-runtime-callback`.
 
-  Each call owns fresh SQLite storage, registries, spool state, and temporary
-  paths. It reuses the test JVM's classpath and classloader without resolving
-  dependencies or launching a basis subprocess. Namespaces and Vars remain
-  JVM-global. Activate modules with `activate-module!`; startup files, full
-  workspace refresh, dependency changes, and durable reopen belong to
-  `run-with-weaver-world`, not this fixture.
+  The callback receives a closed
+  `:millstrand.test.alpha/bare-runtime-context`: `:runtime`, `:config-dir`,
+  `:state-dir`, `:data-dir`, `:storage`, and `:db-path` only for file storage.
+  Its result is returned unchanged. Runtime selection is explicit; the fixture
+  neither publishes nor dynamically binds an ambient runtime.
 
-  This POC retains the ordinary event lane, scheduler, and transports. It does
-  not simulate runtime behavior or share mutable runtime state. Cleanup runs
-  once after success or failure; cleanup errors are thrown, or suppressed on
-  the original callback error. File-backed Millstrand source and a Clojure CLI
-  test JVM are required."
+  Each call owns fresh real SQLite storage, registries, module state, spool
+  state, transports, event lane, scheduler, and temporary paths. It uses the
+  current JVM's classpath and Clojure base classloader. It does not require
+  tools.deps launch metadata, resolve dependencies, launch a basis process, or
+  write dependency and activation files. Namespaces and Vars remain JVM-global.
+  Under the current checkout dependency contract, Millstrand's own source
+  resource must be directory-backed.
+
+  Activate classpath-visible namespaces with `activate-module!`. Direct module
+  declaration and targeted module refresh use the normal production paths.
+  Full workspace refresh and plan, dependency replacement, startup files, and
+  durable reopen are unsupported and fail loudly; use `run-with-weaver-world`
+  for those contracts.
+
+  Cleanup runs once after startup, callback, activation, or close failure.
+  Cleanup errors remain visible; the original failure stays primary and owns
+  cleanup failures as suppressed exceptions."
   [opts f]
   (require-spec! ::bare-runtime-options "bare runtime options" opts)
+  (require-spec! ::bare-runtime-callback "bare runtime callback" f)
   (let [^java.io.File root (create-temp-root)
         started (atom nil)
         failure (atom nil)]
@@ -474,10 +525,14 @@
                             :storage storage
                             :generation-basis (classpath-generation root)}))
             _ (reset! started rt)
-            ctx (cond-> (assoc (select-keys world [:config-dir :state-dir :data-dir])
-                               :runtime rt :storage storage)
+            ctx (cond-> (assoc (select-keys world [:config-dir :state-dir
+                                                   :data-dir])
+                               :runtime rt
+                               :storage storage)
                   (= :sqlite-file storage)
-                  (assoc :db-path (get-in rt [:metadata :canonical-db-path])))]
+                  (assoc :db-path
+                         (get-in rt [:metadata :canonical-db-path])))]
+        (require-spec! ::bare-runtime-context "bare runtime context" ctx)
         (f ctx))
       (catch Throwable t
         (reset! failure t)
