@@ -352,7 +352,7 @@ const helpText = `Usage:
   strand [flags] <op> [args...]
 
 Flags:
-  --workspace <dir>        workspace directory
+  --workspace <dir|name>   workspace directory or published Weaver name
   --cwd <dir>              working directory (default: process cwd)
   --stdin                  read stdin into the stdin payload
   --payload name=path      read a file into a named payload (repeatable)

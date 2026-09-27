@@ -22,6 +22,24 @@ func TestRunInitAutoStartRequiresRunningMill(t *testing.T) {
 	}
 }
 
+func TestWorldRequestMakesMillWorkspaceSelectionPathOnly(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	world, err := worldRequest("frontend", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(filepath.Join(cwd, "frontend"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if world.ConfigDir != want {
+		t.Fatalf("mill workspace selection = %q, want absolute path %q", world.ConfigDir, want)
+	}
+}
+
 func TestValidateInitRequestRejectsStealthExplicitWorkspace(t *testing.T) {
 	err := validateInitRequest(client.MillWorldRequest{ConfigDir: t.TempDir(), Stealth: true})
 	if err == nil {

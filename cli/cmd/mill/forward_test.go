@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +18,7 @@ import (
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/jvmpool"
 )
 
 func TestForwardOwnedBlockingHelperProcess(t *testing.T) {
@@ -36,6 +39,154 @@ func startForwardOwnedBlockingProcess(t *testing.T) *exec.Cmd {
 		}
 	})
 	return cmd
+}
+
+func TestInvokeRoutesPublishedNameFromOutsideCallerContext(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	if err := os.WriteFile(filepath.Join(cfg, config.LocalConfigFileName), []byte(`{"name":"frontend"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var gotReq map[string]any
+	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
+		gotReq = req
+		return [][]byte{mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": req["request_id"], "ok": true, "result": map[string]any{"workspace": "frontend"}, "error": nil})}
+	})
+	name, err := friendlyName(world, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeWeaverMetadataWithName(t, world, os.Getpid(), "weaver-frontend", name)
+
+	req := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "named-workspace",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: "frontend"},
+		Payload: map[string]any{
+			"name": "read", "workspace": "frontend", "cwd": "/caller/context",
+			"worktree_root": "/caller", "git_common_dir": "/caller/.git",
+		},
+	}
+	frames := runInvokeRequest(t, req)
+	if len(frames) != 1 || frames[0]["ok"] != true {
+		t.Fatalf("named invoke did not relay the response: %#v", frames)
+	}
+	if gotReq["operation"] != "invoke" {
+		t.Fatalf("named invoke did not reach the selected Weaver: %#v", gotReq)
+	}
+	arguments, ok := gotReq["arguments"].(map[string]any)
+	if !ok || !reflect.DeepEqual(arguments, req.Payload) {
+		t.Fatalf("named routing changed invoke context: %#v", gotReq["arguments"])
+	}
+}
+
+func TestInvokeRejectsDuplicatePublishedNamesSortedByConfigPath(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	first := tempConfigWithoutSource(t)
+	second := tempConfigWithoutSource(t)
+	firstWorld, err := config.RuntimeWorld(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondWorld, err := config.RuntimeWorld(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeWeaverMetadataWithName(t, firstWorld, os.Getpid(), "weaver-first", "shared")
+	writeWeaverMetadataWithName(t, secondWorld, os.Getpid(), "weaver-second", "shared")
+
+	s := server{children: map[string]*weaverChild{}}
+	_, err = s.resolveInvokeWorld(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: "shared"})
+	if err == nil {
+		t.Fatal("duplicate published workspace name was accepted")
+	}
+	paths := []string{firstWorld.ConfigDir, secondWorld.ConfigDir}
+	sort.Strings(paths)
+	if !strings.Contains(err.Error(), strings.Join(paths, ", ")) {
+		t.Fatalf("duplicate error omitted sorted config paths: %v", err)
+	}
+}
+
+func TestInvokeRoutesPublishedPoolMemberName(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	cfg := tempConfigWithoutSource(t)
+	if err := os.WriteFile(filepath.Join(cfg, config.LocalConfigFileName), []byte(`{"name":"pooled"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeWeaverMetadataWithName(t, world, os.Getpid(), "weaver-pooled", "pooled")
+	stateRoot, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := jvmpool.New(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Reconcile(jvmpool.Member{ConfigDir: world.ConfigDir, SourceCWD: t.TempDir(), JVMPool: "backend"}, jvmpool.LiveOwnership{}); err != nil {
+		t.Fatal(err)
+	}
+	host := &weaverHost{
+		Pool: "backend", HostID: "host-pooled", HostGenerationID: "generation-host-pooled", PID: os.Getpid(), Live: true,
+		Members: []poolMember{{World: world, Name: "pooled", WeaverID: "weaver-pooled", GenerationID: "generation-pooled"}},
+	}
+	s := server{children: map[string]*weaverChild{}, poolHosts: map[string]*weaverHost{"backend": host}, poolMembers: map[string]*weaverHost{world.ConfigDir: host}}
+	selected, err := s.resolveInvokeWorld(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: "pooled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.ConfigDir != world.ConfigDir {
+		t.Fatalf("pooled published name selected %q, want %q", selected.ConfigDir, world.ConfigDir)
+	}
+}
+
+func TestInvokeWorkspaceNameAndPathPrecedence(t *testing.T) {
+	named, _ := forwardWorld(t)
+	writeWeaverMetadataWithName(t, named, os.Getpid(), "named", "frontend")
+	cwd := t.TempDir()
+	localPath := filepath.Join(cwd, "frontend")
+	if err := os.MkdirAll(localPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(localPath, config.ConfigFileName), []byte(`{"configFormat":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	local, err := config.RuntimeWorld(localPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := server{}
+	for _, tc := range []struct {
+		selection string
+		cwd       string
+		want      string
+	}{
+		{"frontend", cwd, named.ConfigDir},
+		{"./frontend", cwd, local.ConfigDir},
+		{localPath, cwd, local.ConfigDir},
+		{".", localPath, local.ConfigDir},
+		{"..", filepath.Join(localPath, "child"), local.ConfigDir},
+		{filepath.Base(cwd) + "/frontend", filepath.Dir(cwd), local.ConfigDir},
+	} {
+		t.Run(tc.selection, func(t *testing.T) {
+			selected, err := s.resolveInvokeWorld(client.MillWorldRequest{CWD: tc.cwd, ConfigDir: tc.selection})
+			if err != nil || selected.ConfigDir != tc.want {
+				t.Fatalf("selected %q, want %q: %v", selected.ConfigDir, tc.want, err)
+			}
+		})
+	}
+	if _, err := s.resolveInvokeWorld(client.MillWorldRequest{CWD: cwd, ConfigDir: "unknown"}); err == nil {
+		t.Fatal("unknown workspace name/path must fail")
+	}
+	// An unmatched bare selector still selects an ordinary relative directory.
+	writeWeaverMetadataWithName(t, named, os.Getpid(), "named", "renamed")
+	selected, err := s.resolveInvokeWorld(client.MillWorldRequest{CWD: cwd, ConfigDir: "frontend"})
+	if err != nil || selected.ConfigDir != local.ConfigDir {
+		t.Fatalf("unmatched name did not resolve as a relative path: %#v, %v", selected, err)
+	}
 }
 
 func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
@@ -671,8 +822,13 @@ func TestInvokeAdmissionDoesNotBlockAnotherWorkspace(t *testing.T) {
 // NDJSON frames.
 func runInvoke(t *testing.T, cfg string, envelope map[string]any) []map[string]any {
 	t.Helper()
-	s := server{children: map[string]*weaverChild{}}
 	req := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "req-1", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}, Payload: envelope}
+	return runInvokeRequest(t, req)
+}
+
+func runInvokeRequest(t *testing.T, req client.MillRequest) []map[string]any {
+	t.Helper()
+	s := server{children: map[string]*weaverChild{}}
 	clientConn, srvConn := net.Pipe()
 	go func() {
 		s.handleInvoke(srvConn, req)

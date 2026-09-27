@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -14,12 +15,15 @@ import (
 )
 
 // worldRequest builds the routing selector for a mill client subcommand: the
-// process cwd feeds repo-local .millstrand/.ms discovery and --workspace pins an explicit
-// selection (same precedence as the strand dispatcher, SPEC-002-D004.C9).
+// process cwd feeds repo-local .millstrand/.ms discovery. Explicit workspaces
+// are sent as absolute paths so even bin invokes never resolve Weaver names.
 func worldRequest(workspace, name string) (client.MillWorldRequest, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return client.MillWorldRequest{}, err
+	}
+	if workspace != "" && !filepath.IsAbs(workspace) {
+		workspace = filepath.Join(cwd, workspace)
 	}
 	return client.MillWorldRequest{CWD: cwd, ConfigDir: workspace, Name: name}, nil
 }

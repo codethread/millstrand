@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,7 +30,7 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	callerCtx, stopCallerWatch := watchCallerConnection(conn)
 	defer stopCallerWatch()
 
-	world, err := resolveLifecycleWorld(req.World)
+	world, err := s.resolveInvokeWorld(req.World)
 	if err != nil {
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/invoke-world-failed", Message: "invoke world resolution failed", Details: map[string]any{"detail": err.Error()}})
 		return
@@ -101,6 +104,52 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: code, Message: message, Details: details})
 		return
 	}
+}
+
+// resolveInvokeWorld gives strand invoke its one additional selection mode:
+// a bare --workspace value may be the exact published name of a known Weaver.
+// Lifecycle operations stay path-based; an explicit path and an unmatched bare
+// value both use the existing caller-relative lifecycle resolution.
+func (s *server) resolveInvokeWorld(req client.MillWorldRequest) (config.World, error) {
+	selection := req.ConfigDir
+	if selection == "" || invokeWorkspaceIsPath(selection) {
+		return resolveLifecycleWorld(req)
+	}
+
+	rows, err := s.weaverList()
+	if err != nil {
+		return config.World{}, fmt.Errorf("discover published Weavers: %w", err)
+	}
+	matched := map[string]struct{}{}
+	for _, row := range rows {
+		name, nameOK := row["name"].(string)
+		configDir, configOK := row["config_dir"].(string)
+		if !nameOK || name != selection {
+			continue
+		}
+		if !configOK || strings.TrimSpace(configDir) == "" {
+			return config.World{}, fmt.Errorf("published Weaver %q has no valid config path", selection)
+		}
+		matched[configDir] = struct{}{}
+	}
+	paths := make([]string, 0, len(matched))
+	for configDir := range matched {
+		paths = append(paths, configDir)
+	}
+	sort.Strings(paths)
+	if len(paths) > 1 {
+		return config.World{}, fmt.Errorf("workspace name %q matches multiple published Weavers: %s", selection, strings.Join(paths, ", "))
+	}
+	if len(paths) == 1 {
+		routed := req
+		routed.ConfigDir = paths[0]
+		return resolveLifecycleWorld(routed)
+	}
+	return resolveLifecycleWorld(req)
+}
+
+func invokeWorkspaceIsPath(selection string) bool {
+	return filepath.IsAbs(selection) || selection == "." || selection == ".." || strings.Contains(selection, "/")
 }
 
 func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
