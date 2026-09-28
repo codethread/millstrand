@@ -2,16 +2,18 @@
 
 # <a name="millstrand.test.alpha">millstrand.test.alpha</a>
 
-Blessed author-side clojure.test helpers for disposable weaver worlds.
+Blessed author-side clojure.test helpers for disposable Weaver runtimes.
 
-This namespace runs in the author's test JVM and orchestrates real weaver runtimes in isolated temporary workspaces: it writes requested config fixtures (`deps.edn`, activation files, `config.json`, and arbitrary workspace files), starts an unpublished in-process weaver runtime with a real generation basis and explicit storage selection, exposes an orchestration context map, and stops/cleans up afterwards. Manual clocks make runtime time and sleeps deterministic. Weaver-side behavior is exercised through `repl!`, which evaluates weaver-routed forms over the runtime's real nREPL transport.
+`run-with-bare-runtime` starts a real unpublished runtime over the current test JVM's classpath and classloader. It resolves no dependencies and writes no workspace dependency or activation files. Use it for explicit-runtime public API tests and classpath-visible module activation.
 
-The namespace also exposes narrow authoring-test helpers for collecting module forms as data and activating an already-classpath-visible namespace on a bare test runtime. Deliberately out of scope: strand/query wrappers, assertion DSLs, CLI subprocess helpers, and any use of the user's default config/data/state workspaces. Generated worlds are isolated and disposable by default.
+Weaver-world helpers create isolated temporary workspaces: they write the requested config fixtures (`deps.edn`, activation files, `config.json`, and arbitrary workspace files), resolve a real generation basis, start an unpublished in-process runtime, expose an orchestration context, and clean up afterwards. `repl!` evaluates Weaver-routed forms over that runtime's real nREPL transport.
+
+The namespace also exposes manual clocks and narrow helpers for collecting module forms as data. Deliberately out of scope: strand/query wrappers, assertion DSLs, CLI subprocess helpers, generic fixture builders, and use of the user's default config/data/state workspaces. Every generated runtime is isolated and disposable by default.
 
 ## <a name="millstrand.test.alpha/*weaver-world*">`*weaver-world*`</a>
 
 Context map for the current `weaver-world-fixture` weaver world, or nil.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L37-L39">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L39-L41">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/activate-module!">`activate-module!`</a>
 
@@ -27,7 +29,7 @@ Activate one namespace-backed module on a bare test runtime.
 Requires `ns-sym`, then declares `key` through the public `runtime/module!` boundary. `opts` is closed to `:after` and `:load`; their values follow the public module grammar. Inputs conform to the public `:millstrand.test.alpha/bare-runtime`, `module-key`, `namespace-symbol`, and `module-options` specs. Returns a `:millstrand.test.alpha/module-refresh-outcome` and throws with the full outcome for every status other than applied or unchanged.
 
 This is a small authoring-test tier for an already constructed runtime. It does not prove dependency resolution, startup-file collection, or weaver startup.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L556-L591">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L701-L736">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/advance!">`advance!`</a>
 
@@ -40,7 +42,7 @@ Function.
 Move `runtime`'s clock forward by `duration`, then pump clock consumers.
 
 `duration` is a `java.time.Duration` and must be strictly positive: advancing by zero or a backwards/negative duration fails loudly. After moving the clock, every registered clock-consumer pump (subsystems that arm real timers off the runtime clock, such as the scheduler) runs synchronously so its due-check observes the new now before `advance!` returns. Returns the new Instant.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L764-L778">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L909-L923">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/await-quiescent!">`await-quiescent!`</a>
 
@@ -54,7 +56,7 @@ Function.
 Block until `runtime`'s event lane settles, then return `runtime`.
 
 This lane-settling test primitive waits until the bounded event queue is empty and no handler dispatch is in flight. It says nothing about completion signals work dispatched off the lane may have initiated. Throws `ex-info` on timeout. The default budget is 10,000 ms; pass `:timeout-ms` to override it.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L48-L73">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L50-L75">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/check-op-return!">`check-op-return!`</a>
 
@@ -70,7 +72,7 @@ Check a captured operation return value against its registered declaration.
 `runtime` is explicit and `operation` resolves through its live op registry. The three-argument form checks a flat result. The four-argument form accepts a context map with optional `:subcommand` and `:channel` (`:emits` or `:result`) selectors; `:subcommand` is the full subcommand path vector (DELTA-Lhc-001.CC7), walked through the declaration's nested `:subcommands` tree (a legacy scalar string is tolerated intra-branch as a one-segment path). Returns `value` unchanged on success. Missing or misaligned declarations fail loudly. Shape mismatches carry the canonical operation name, selected declaration, failing path, and actual value.
 
 This helper only checks an already-captured value; it never invokes an op.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L159-L185">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L161-L187">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/collect-module-forms">`collect-module-forms`</a>
 
@@ -85,7 +87,7 @@ Run `thunk` under one synthetic namespace-backed module source context.
 Returns the validated owner-complete public collection result containing `:return`, `:contribution`, `:lifecycle`, and `:kind-declarations`. `ns-sym` must name an existing namespace; the thunk runs with that namespace and a stable synthetic source file bound so authoring forms can enforce ownership. Inputs conform to the public `:millstrand.test.alpha/module-key`, `namespace-symbol`, and `thunk` specs. The result conforms to `:millstrand.test.alpha/module-form-collection`.
 
 This authoring-form test tier inspects declarations as data. It does not prove dependency resolution, source loading, publication, reconciliation, or startup.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L603-L638">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L748-L783">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/declare-module!">`declare-module!`</a>
 
@@ -98,7 +100,7 @@ Function.
 Declare one stable module in `ctx`'s disposable weaver runtime.
 
 Delegates to `millstrand.api.runtime.alpha/module!`; see its contract for the `opts` grammar and staged/refreshed result shape.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L516-L522">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L661-L667">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/manual-clock">`manual-clock`</a>
 
@@ -111,7 +113,7 @@ Function.
 Return an uninstalled manual Clock beginning at `initial-instant`.
 
 Sleeping advances its time immediately. Once installed with `set-clock!`, sleeping also runs that runtime's registered clock pumps synchronously.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L725-L744">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L870-L889">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/module-status">`module-status`</a>
 
@@ -124,7 +126,7 @@ Function.
 Return the offline joined module status for `ctx`'s disposable weaver runtime.
 
 Delegates to `millstrand.api.runtime.alpha/status`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L661-L666">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L806-L811">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/plan-modules">`plan-modules`</a>
 
@@ -138,7 +140,7 @@ Function.
 Return the dry-run refresh intentions for `ctx`'s disposable weaver runtime.
 
 Delegates to `millstrand.api.runtime.alpha/plan`; publishes and reconciles nothing.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L654-L659">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L799-L804">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/refresh-modules!">`refresh-modules!`</a>
 
@@ -152,7 +154,7 @@ Function.
 Refresh `ctx`'s disposable weaver runtime against its declared module graph.
 
 Delegates to `millstrand.api.runtime.alpha/refresh!`; the no-opts arity refreshes the full graph and the `{:only keys}` arity refreshes the named modules.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L646-L652">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L791-L797">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/repl!">`repl!`</a>
 
@@ -165,7 +167,7 @@ Function.
 Evaluate a weaver-routed form against ctx's weaver world and return data.
 
 `form` is a quoted form rendered with pr-str, or a string of Clojure source. It evaluates in the weaver runtime over its real nREPL transport with the runtime ambiently bound, so `(millstrand.api.current.alpha/runtime)` resolves to the test weaver. Results must be EDN-readable; weaver-side and transport failures throw ExceptionInfo.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L801-L812">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L946-L957">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/run-focused!">`run-focused!`</a>
 
@@ -180,7 +182,28 @@ Run the named test namespaces in-process and return the aggregate `clojure.test`
 `namespaces` is a collection of test-namespace symbols. The run reuses the cold focused runner's single validation-and-execution core (`millstrand.test-runner/run-focused-core`), so a warm focused run accepts and rejects exactly the namespace set a cold `clojure -M:test <ns...>` run does: a namespace not declared in the runner's island sets fails loudly. The runner is resolved at call time (`requiring-resolve`) because it lives on the test classpath while this namespace is on the main classpath, so requiring `millstrand.test.alpha` outside a test JVM is unaffected.
 
 This is the agent-facing entry for the per-worktree warm test REPL. A warm focused run is never a validation gate — the cold focused run is; `run-focused!` exists for sub-second iteration only, and returns rather than exits so it is safe to call repeatedly inside a long-lived REPL.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L780-L799">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L925-L944">Source</a></sub></p>
+
+## <a name="millstrand.test.alpha/run-with-bare-runtime">`run-with-bare-runtime`</a>
+
+```clojure
+(run-with-bare-runtime opts f)
+```
+
+Function.
+
+Call `f` with a fresh classpath-backed runtime, then stop and delete it.
+
+`opts` must conform to `:millstrand.test.alpha/bare-runtime-options`, which is closed to `:storage` (`:sqlite-file` by default, or `:sqlite-memory`) and an optional non-blank runtime `:name`. `f` must conform to `:millstrand.test.alpha/bare-runtime-callback`.
+
+The callback receives a closed `:millstrand.test.alpha/bare-runtime-context`: `:runtime`, `:config-dir`, `:state-dir`, `:data-dir`, `:storage`, and `:db-path` only for file storage. Its result is returned unchanged. Runtime selection is explicit; the fixture neither publishes nor dynamically binds an ambient runtime.
+
+Each call owns fresh real SQLite storage, registries, module state, spool state, transports, event lane, scheduler, and temporary paths. It uses the current JVM's classpath and Clojure base classloader. It does not require tools.deps launch metadata, resolve dependencies, launch a basis process, or write dependency and activation files. Namespaces and Vars remain JVM-global. Under the current checkout dependency contract, Millstrand's own source resource must be directory-backed.
+
+Activate classpath-visible namespaces with `activate-module!`. Direct module declaration and targeted module refresh use the normal production paths. Full workspace refresh and plan, dependency replacement, startup files, and durable reopen are unsupported and fail loudly; use `run-with-weaver-world` for those contracts.
+
+Cleanup runs once after startup, callback, activation, or close failure. Cleanup errors remain visible; the original failure stays primary and owns cleanup failures as suppressed exceptions.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L487-L556">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/run-with-weaver-world">`run-with-weaver-world`</a>
 
@@ -195,7 +218,7 @@ Start a disposable weaver world from `opts`, call `f` with its context map, then
 Options: `:storage` (`:sqlite-file` default, or `:sqlite-memory`), `:root` (explicit workspace root; default short temp dir), `:delete?` (remove the root afterwards; default true, always false for an explicit `:root`), `:name` (weaver name), `:timeout-ms` (`repl!` default), `:source` (source checkout override), and the fixture options `:config-json`, `:deps-edn`, `:deps-local-edn`, `:init-clj`, `:init-local-clj`, and `:files`. The option map conforms to `:millstrand.test.alpha/weaver-world-options`; generated files conform to `:millstrand.test.alpha/weaver-world-files`.
 
 The context map exposes orchestration facts only: `:config-dir`, `:state-dir`, `:data-dir`, `:db-path` (file storage only), `:storage`, `:source`, `:runtime`, `:metadata`, `:timeout-ms`, and `:basis-fingerprint`, and conforms to `:millstrand.test.alpha/weaver-world-context`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L413-L483">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L558-L628">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/set-clock!">`set-clock!`</a>
 
@@ -208,7 +231,7 @@ Function.
 Install `installed-clock` as `runtime`'s Clock.
 
 A manual clock may belong to only one runtime. Replacing one detaches it from that runtime so later sleeps on the old clock cannot pump the runtime.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L746-L762">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L891-L907">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/spool-checkout-root">`spool-checkout-root`</a>
 
@@ -224,7 +247,7 @@ Resolve the checkout root of a spool from one of its classpath source files.
 `resource-path` is the spool source's classpath-relative path (for example, `"millstrand/spools/devflow.clj"`). Returns the directory holding the spool's `deps.edn`, whichever directory-backed checkout supplies the classpath entry. The supplying checkout must declare that classpath entry in `deps.edn` `:paths`. Fails loudly when the resource is not on the test classpath, is jar-backed, or does not come from a directory checkout with the expected layout. This is for tests that need an ordinary tools.deps `:local/root` bridge.
 
 The one-argument form resolves `resource-path` with `clojure.java.io/resource`. The two-argument form accepts `resource-loader`, a function from resource path string to `java.net.URL` or nil, for deterministic tests of this resolver.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L263-L294">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L265-L296">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/weaver-world-fixture">`weaver-world-fixture`</a>
 
@@ -237,7 +260,7 @@ Function.
 Return a clojure.test fixture that binds _weaver-world_ to a fresh world.
 
 Options conform to `:millstrand.test.alpha/weaver-world-options`; the bound value conforms to `:millstrand.test.alpha/weaver-world-context`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L497-L506">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L642-L651">Source</a></sub></p>
 
 ## <a name="millstrand.test.alpha/with-weaver-world">`with-weaver-world`</a>
 
@@ -252,4 +275,4 @@ Run `body` with `ctx-sym` bound to a disposable weaver world context.
 Options conform to `:millstrand.test.alpha/weaver-world-options`; the bound context conforms to `:millstrand.test.alpha/weaver-world-context`.
 
 (with-weaver-world [ctx {:deps-edn (pr-str {:deps {}})}] (is (= [] (repl! ctx '(millstrand.api.weaver.alpha/list (millstrand.api.current.alpha/runtime))))))
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L485-L495">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/test/alpha.clj#L630-L640">Source</a></sub></p>

@@ -44,15 +44,17 @@ The focused cold runner accepts only registered serial or parallel namespaces an
 
 ### Direct and component tests
 
-Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit. These tests use explicit runtimes and test classpaths; they do not prove startup files, dependency-basis loading, source loading, or a separate process topology.
+Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit.
+
+Use `millstrand.test.alpha/run-with-bare-runtime` when a direct test needs fresh real storage, runtime registries, module or spool state, transports, events, or scheduling but all code is already visible on the test JVM classpath. The fixture passes an explicit unpublished runtime, works under the Clojure CLI and plain `java -cp`, and does not resolve a selected-workspace basis. It supports explicit classpath module activation and targeted refresh, not startup files, full workspace refresh, dependency replacement, or durable reopen.
 
 The direct tier is also where `millstrand.test.alpha/collect-module-forms` proves declaration construction as data. It does not prove publication, reconciliation, or startup. Keep the exact boundary in [Testing your config and spools](../docs/spools/testing.md).
 
 ### Embedded weaver-world integration
 
-Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a real runtime: storage, startup files, dependency bases, module publication, transports, events, scheduling, or reload. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
+Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a selected workspace: startup files, dependency bases, activation-file collection, full refresh, or a written dependency change. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
 
-The fixture contract and classpath boundary live in [docs/spools/testing.md](../docs/spools/testing.md). Do not use a direct classpath require as evidence that a Weaver has a resolved basis or an explicitly activated module.
+The fixture contract and classpath boundary live in [docs/spools/testing.md](../docs/spools/testing.md). A direct classpath `require` alone proves neither a resolved Weaver basis nor explicit module activation.
 
 ### Process and repository E2E
 
@@ -73,8 +75,8 @@ The E2E entrypoint invokes `make build`, then copies the repository-local `bin/s
 
 | Fixture class | Location and shape | Evidence |
 | --- | --- | --- |
-| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No dependency-resolution or startup claim. |
-| Module lifecycle | Generated `deps.edn`/`:files` worlds used with `millstrand.test.alpha`. | Dependency-basis loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
+| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; `run-with-bare-runtime` for fresh explicit runtime state. | API, pure, component, real storage/service behavior, and classpath-visible activation. No selected-workspace dependency or startup claim. |
+| Module lifecycle | Generated `deps.edn`/`:files` worlds used with the Weaver-world helpers in `millstrand.test.alpha`. | Dependency-basis loading, activation-file collection, module publication, lifecycle, and full refresh inside an embedded disposable Weaver. |
 | Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, the committed `test/fixtures/clojure/authoring-module/` and `test/fixtures/clojure/e2e-live-spool/` fixtures, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
 Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not dependency-basis loading, and an embedded weaver is not a repository process E2E.

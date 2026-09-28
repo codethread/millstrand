@@ -330,19 +330,29 @@
                         (not (:declare opts)))
          candidate-result
          (when boundary?
-           (try
-             (let [coordinate (get (:reserved-deps running)
-                                   'io.millstrand/millstrand)
-                   candidate (basis/create-generation-basis
-                              (:source-config-dir runtime) coordinate)]
-               (when-not (= (:fingerprint running) (:fingerprint candidate))
-                 {:status :restart-required
-                  :reason :dependency-basis-changed
-                  :basis {:running-fingerprint (:fingerprint running)
-                          :candidate-fingerprint (:fingerprint candidate)}}))
-             (catch Throwable throwable
-               (or (basis/dependency-diagnostic throwable)
-                   (throw throwable)))))]
+           ;; A classpath-backed test generation has no selected-workspace basis
+           ;; to compare. Refuse before reading any dependency file a test may
+           ;; have written under its disposable config path.
+           (if (::full-refresh-unsupported (meta running))
+             (throw
+              (ex-info
+               (str "Full workspace refresh is unsupported for "
+                    "millstrand.test.alpha/run-with-bare-runtime")
+               {:reason :bare-runtime/full-refresh-unsupported
+                :remedy :use-run-with-weaver-world}))
+             (try
+               (let [coordinate (get (:reserved-deps running)
+                                     'io.millstrand/millstrand)
+                     candidate (basis/create-generation-basis
+                                (:source-config-dir runtime) coordinate)]
+                 (when-not (= (:fingerprint running) (:fingerprint candidate))
+                   {:status :restart-required
+                    :reason :dependency-basis-changed
+                    :basis {:running-fingerprint (:fingerprint running)
+                            :candidate-fingerprint (:fingerprint candidate)}}))
+               (catch Throwable throwable
+                 (or (basis/dependency-diagnostic throwable)
+                     (throw throwable))))))]
      (or candidate-result
          ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
           runtime (module-coordinator-context runtime) opts)))))

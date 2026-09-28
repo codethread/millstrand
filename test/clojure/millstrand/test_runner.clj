@@ -107,6 +107,8 @@
    ;; parallel parent with runtime consumers.
    'millstrand.core.weaver.startup-test
    'millstrand.runtime-deps-test
+   ;; Shares its source-activation fixture namespace with alpha-test.
+   'millstrand.test.bare-runtime-test
    'millstrand.core.weaver.modules-test
    ;; Workflow evidence fixtures redefine shared reviewer and workflow Vars.
    'millstrand.ct.review-workflow-test

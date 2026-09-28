@@ -1,1 +1,5 @@
-{"configFormat":"alpha","autoStart":true}
+{
+	"configFormat": "alpha",
+	"autoStart": true,
+	"name": "millstrand"
+}

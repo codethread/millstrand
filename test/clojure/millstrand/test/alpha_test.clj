@@ -9,7 +9,9 @@
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.test.alpha :as t])
-  (:import [java.time Duration Instant]))
+  (:import [java.nio.file Files Path]
+           [java.nio.file.attribute FileAttribute]
+           [java.time Duration Instant]))
 
 (s/def ::widget map?)
 
@@ -183,6 +185,44 @@
   "Test-only registered operation handler; output checks consume captured values."
   [_]
   nil)
+
+(defn- assert-fixture-cleanup-does-not-follow-directory-symlink!
+  [fixture!]
+  (let [owner (-> (Files/createTempDirectory
+                   (Path/of "/tmp" (make-array String 0))
+                   "millstrand-test-external-"
+                   (make-array FileAttribute 0))
+                  .toFile)
+        target (io/file owner "target")
+        sentinel (io/file target "sentinel")
+        fixture-root (atom nil)
+        fixture-link (atom nil)]
+    (try
+      (.mkdirs target)
+      (spit sentinel "keep")
+      (fixture! (fn [{:keys [config-dir]}]
+                  (reset! fixture-root (io/file config-dir))
+                  (let [link (io/file @fixture-root "external-target")]
+                    (reset! fixture-link link)
+                    (Files/createSymbolicLink (.toPath link)
+                                              (.toPath target)
+                                              (make-array FileAttribute 0)))))
+      (is (false? (.exists @fixture-root)))
+      (is (false? (.exists @fixture-link)))
+      (is (.isDirectory target))
+      (is (.isFile sentinel))
+      (is (= "keep" (slurp sentinel)))
+      (finally
+        (Files/deleteIfExists (.toPath sentinel))
+        (Files/deleteIfExists (.toPath target))
+        (Files/deleteIfExists (.toPath owner))))))
+
+(deftest fixture-cleanup-does-not-follow-directory-symlinks
+  (doseq [[label fixture!]
+          [["bare runtime" #(t/run-with-bare-runtime {} %)]
+           ["weaver world" #(t/run-with-weaver-world {} %)]]]
+    (testing label
+      (assert-fixture-cleanup-does-not-follow-directory-symlink! fixture!))))
 
 (deftest with-weaver-world-runs-file-backed-world-and-cleans-up
   (let [captured (atom nil)

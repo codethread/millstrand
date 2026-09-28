@@ -70,4 +70,4 @@ Native work that must continue while Mill replaces a Weaver uses the trusted `mi
 | --- | --- |
 | [`peers`](./peers.api.md) | Discovering and calling local sibling weavers from mill-published runtime metadata. |
 
-Two blessed namespaces live outside `millstrand.api.*` but inside the same contract tier: [`millstrand.test.alpha`](./test.api.md), which provides weaver-world fixtures, lane settling, and clock control, and `millstrand.repl`, the human-facing connection-aware helper surface. See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.
+Two blessed namespaces live outside `millstrand.api.*` but inside the same contract tier: [`millstrand.test.alpha`](./test.api.md), which provides classpath-runtime and Weaver-world fixtures, lane settling, and clock control, and `millstrand.repl`, the human-facing connection-aware helper surface. See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.
