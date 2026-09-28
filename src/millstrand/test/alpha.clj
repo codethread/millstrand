@@ -32,7 +32,7 @@
             [millstrand.core.weaver.access :as access]
             [millstrand.core.weaver.runtime :as weaver-runtime])
   (:import [clojure.lang DynamicClassLoader]
-           [java.nio.file Files Path]
+           [java.nio.file FileVisitOption Files Path]
            [java.nio.file.attribute FileAttribute]
            [java.time Duration Instant]))
 
@@ -357,10 +357,16 @@
         (.delete result-file)))))
 
 (defn- delete-tree! [^java.io.File root]
-  (doseq [^java.io.File file (reverse (file-seq root))]
-    (when (and (.exists file) (not (.delete file)))
-      (throw (ex-info "Failed to delete weaver world file"
-                      {:root (.getPath root) :file (.getPath file)})))))
+  (let [paths (with-open [stream (Files/walk (.toPath root)
+                                             (make-array FileVisitOption 0))]
+                (vec (iterator-seq (.iterator stream))))]
+    (doseq [^Path path (reverse paths)]
+      (try
+        (Files/delete path)
+        (catch Throwable t
+          (throw (ex-info "Failed to delete weaver world file"
+                          {:root (.getPath root) :file (str path)}
+                          t)))))))
 
 (defn- stop-and-clean! [rt root delete?]
   (weaver-runtime/stop! rt)
