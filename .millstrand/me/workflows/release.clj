@@ -144,7 +144,9 @@
    (workflow/gate
     :freeze-candidate "Record the exact candidate" :code :depends-on [:build-identity]
     :attributes {"code/fn" "me.workflows.release-evidence/candidate!"
-                 "code/params" #(select-keys % [:version :branch :worktree])}
+                 "delivery/key" #(handoff/key-for "release-candidate" %)
+                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                                       :key (handoff/key-for "release-candidate" %))}
     "Record version, release commit and formula commit before any landing or approval.")
    (workflow/step
     :landing "Land the exact candidate without rewriting its commits" :self
@@ -178,7 +180,7 @@
     :depends-on [:verify-landing]
     (format-alpha/prose
      "
-       Read verify-landing's code/result. Ask the user to approve that exact
+       Read verify-landing's `release/landing` evidence. Ask the user to approve that exact
        version and candidate SHA for publication. Record release/approval here
        with version, head and authorization (the actual conversation reference).
        A human gate label or actor string is not authorization. A changed

@@ -208,9 +208,21 @@
             (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
             (letfn [(review-params [run-id feature choice outcome]
                       (workflow/start! run-id definition (assoc params :feature feature))
-                      (dotimes [_ 3]
+                      (dotimes [_ 2]
                         (let [gate (first (workflow/ready run-id))]
                           (workflow/complete! run-id {:step (:id gate) :executor "fixture"})))
+                      (let [gate (first (workflow/ready run-id))
+                            agent-run (weaver/add!
+                                       rt {:title "Review agent proof" :state "closed"
+                                           :attributes {:harness/run "true"
+                                                        :harness/status "stopped"
+                                                        :harness/substatus "completed"
+                                                        :harness/settled "true"
+                                                        :harness/result "No findings"}})]
+                        (workflow/complete! run-id
+                                            {:step (:id gate) :executor "agent"
+                                             :executor-run-id (:id agent-run)
+                                             :attributes {"harness/result" "No findings"}}))
                       (workflow/choose! run-id choice outcome)
                       (attr-get (weaver/show rt (:id (first (workflow/ready run-id))))
                                 :code/params))]
@@ -220,7 +232,21 @@
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                       (verify! mismatch))))
               (let [matching (review-params "review-match" "match" :accepted resolution)]
-                (is (= resolution (verify! matching))))))))
+                (is (= resolution (verify! matching))))
+              (workflow/start! "review-unverified" definition
+                               (assoc params :feature "unverified"))
+              (dotimes [_ 3]
+                (let [gate (first (workflow/ready "review-unverified"))]
+                  (workflow/complete! "review-unverified"
+                                      {:step (:id gate) :executor "fixture"})))
+              (workflow/choose! "review-unverified" :accepted resolution)
+              (let [unverified
+                    (attr-get (weaver/show rt (:id (first (workflow/ready
+                                                           "review-unverified"))))
+                              :code/params)]
+                (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                      #"lacks successful configured agent evidence"
+                                      (verify! unverified))))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest invalidated-land-review-routes-directly-to-abort
@@ -310,6 +336,33 @@
                           [:attributes "workflow/instruction"])
                   {:version "0.5.3" :branch "release/0.5.3"})))))
 
+(deftest release-candidate-requires-a-distinct-canonical-main-checkout
+  (let [root (test-support/temp-dir "release-canonical")]
+    (try
+      (test-support/run-git! root "init" "-b" "release/0.5.3")
+      (test-support/run-git! root "config" "user.name" "Fixture")
+      (test-support/run-git! root "config" "user.email" "fixture@example.invalid")
+      (spit (io/file root "file") "candidate")
+      (test-support/run-git! root "add" ".")
+      (test-support/run-git! root "commit" "-m" "candidate")
+      (test-support/with-runtime
+        (fn [rt _]
+          (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+          (workflow/start!
+           "candidate-canonical"
+           (workflow/workflow
+            "Candidate canonical proof"
+            (workflow/gate :candidate "Freeze candidate" :code
+                           :attributes {"code/fn" "me.workflows.release-evidence/candidate!"
+                                        "delivery/key" "canonical-proof"}))
+           {})
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo #"distinct canonical main checkout"
+               (release/candidate! {:key "canonical-proof" :version "0.5.3"
+                                    :branch "release/0.5.3"
+                                    :worktree (.getPath root)})))))
+      (finally (test-support/delete-tree! root)))))
+
 (deftest release-publication-requires-exact-approval-and-preserved-landing
   (let [root (test-support/temp-dir "release-candidate")
         origin (io/file root "origin.git")
@@ -337,14 +390,15 @@
           ;; No release shell gates run: the disposable Git fixture supplies
           ;; candidate identities while this test drives authorization boundaries.
           (dotimes [_ 6] (workflow/complete! "release-fixture" {:by-identity "fixture"}))
-          (let [candidate (release/candidate! params)
-                candidate-gate (:id (first (workflow/ready "release-fixture")))
+          (let [candidate-step (weaver/show rt (:id (first (workflow/ready
+                                                            "release-fixture"))))
+                candidate-gate (:id candidate-step)
+                candidate (release/candidate! (attr-get candidate-step :code/params))
                 land-proof (workflow/workflow
                             "Land proof"
                             {:attributes {"land/stage" "ready"}}
                             (workflow/step :done "Complete Land custody" :self))]
-            (workflow/complete! "release-fixture"
-                                {:by-identity "fixture" :attributes {"code/result" candidate}})
+            (workflow/complete! "release-fixture" {:by-identity "fixture"})
             (is (= "Land the exact candidate without rewriting its commits"
                    (:title (first (workflow/ready "release-fixture")))))
             (workflow/start! "release-land-proof" land-proof
@@ -391,9 +445,7 @@
                                                  :merge-commit merge-commit}}})
                   (let [landed (release/landed! landed-params)]
                     (is (= (:head candidate) (:head landed)))
-                    (workflow/complete! "release-fixture"
-                                        {:by-identity "fixture"
-                                         :attributes {"code/result" landed}})))))
+                    (workflow/complete! "release-fixture" {:by-identity "fixture"})))))
             (let [approval-gate (:id (first (workflow/ready "release-fixture")))]
               (workflow/complete! "release-fixture" {:by-identity "fixture"})
               (let [publish-gate (weaver/show rt (:id (first (workflow/ready "release-fixture"))))
@@ -407,15 +459,16 @@
                 (let [receipt (release/publish! publish-params)]
                   (is (= (:head candidate) (:head receipt)))
                   (is (= receipt (release/publish! publish-params)))
-                  (workflow/complete! "release-fixture"
-                                      {:by-identity "fixture" :attributes {"code/result" receipt}})
+                  (workflow/complete! "release-fixture" {:by-identity "fixture"})
                   (let [verify-params (attr-get (weaver/show rt (:id (first (workflow/ready "release-fixture"))))
                                                 :code/params)]
                     (is (= receipt (release/verify-remote! verify-params)))
                     (test-support/run-git! canonical "push" "origin" ":refs/tags/v0.5.3")
                     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                           (release/verify-remote! verify-params)))))
-                (is (some? (attr-get (weaver/show rt candidate-gate) :code/result))))))))
+                (is (= candidate
+                       (evidence/data (attr-get (weaver/show rt candidate-gate)
+                                                :release/candidate)))))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest repository-quality-entry-delegates-through-one-shared-lock

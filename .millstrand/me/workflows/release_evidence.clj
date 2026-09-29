@@ -9,12 +9,22 @@
             [millstrand.api.weaver.alpha :as weaver]))
 
 (defn candidate!
-  "Capture the candidate commits and durable repository checkout."
-  [{:keys [version worktree] :as params}]
-  (assoc (evidence/freeze! params)
-         :version version
-         :release-commit (evidence/git! worktree "rev-parse" "HEAD^")
-         :repository (land-support/canonical-worktree worktree)))
+  "Capture and persist the candidate commits and durable repository checkout."
+  [{:keys [key version worktree] :as params}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.workflows.release-evidence/candidate!" key)
+        repository (land-support/canonical-worktree worktree)]
+    (when (or (= (.getCanonicalPath (java.io.File. worktree))
+                 (.getCanonicalPath (java.io.File. repository)))
+              (not= "main" (evidence/git! repository "branch" "--show-current")))
+      (fail! "Release requires a distinct canonical main checkout"
+             {:worktree worktree :repository repository}))
+    (let [candidate (assoc (evidence/freeze! params)
+                           :version version
+                           :release-commit (evidence/git! worktree "rev-parse" "HEAD^")
+                           :repository repository)]
+      (weaver/update! rt (:id gate) {:attributes {:release/candidate candidate}})
+      candidate)))
 
 (defn landed!
   "Require a completed repository Land run and its candidate-preserving merge."
@@ -23,7 +33,7 @@
         gate (evidence/gate! "me.workflows.release-evidence/landed!" key)
         landing-step (evidence/dependency! gate)
         candidate-step (evidence/dependency! landing-step)
-        candidate (evidence/data (attr-get candidate-step :code/result))
+        candidate (evidence/data (attr-get candidate-step :release/candidate))
         receipt (evidence/data (attr-get landing-step :release/land-receipt))
         {:keys [run-id root merge-commit]} receipt]
     (when-not (and (= version (:version candidate))
@@ -69,8 +79,11 @@
             (fail! "Release Land did not preserve the candidate as a merge parent"
                    {:candidate candidate :receipt receipt :parents parents
                     :merge-commit merge-commit}))
-          (assoc candidate :landing (assoc receipt :merge-root (:id merge-root)
-                                           :merge-commit merge-commit)))))))
+          (let [landed (assoc candidate :landing
+                              (assoc receipt :merge-root (:id merge-root)
+                                     :merge-commit merge-commit))]
+            (weaver/update! rt (:id gate) {:attributes {:release/landing landed}})
+            landed))))))
 
 (defn- remote-tag [worktree tag]
   (into {} (map (fn [line]
@@ -99,7 +112,7 @@
         gate (evidence/gate! "me.workflows.release-evidence/publish!" key)
         approval-step (evidence/dependency! gate)
         candidate-step (evidence/dependency! approval-step)
-        candidate (evidence/data (attr-get candidate-step :code/result))
+        candidate (evidence/data (attr-get candidate-step :release/landing))
         approval (evidence/data (attr-get approval-step :release/approval))
         head (:head candidate)
         repository (:repository candidate)
@@ -134,7 +147,7 @@
   [{:keys [key]}]
   (let [gate (evidence/gate! "me.workflows.release-evidence/verify-remote!" key)
         publication (evidence/dependency! gate)
-        receipt (evidence/data (attr-get publication :code/result))]
+        receipt (evidence/data (attr-get publication :release/push-intent))]
     (when-not (every? support/non-blank-string?
                       ((juxt :tag :head :object :repository) receipt))
       (fail! "Missing publication receipt" {:publication (:id publication)}))

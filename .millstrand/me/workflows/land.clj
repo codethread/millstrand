@@ -4,8 +4,10 @@
             [me.workflows.evidence :as evidence]
             [millhouse.land.support :as support]
             [millhouse.workflow :as workflow]
+            [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
-            [millstrand.api.spool.alpha :refer [attr-get fail!]]))
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -152,13 +154,30 @@
 
 (defn verify-review-resolution!
   "Require the recorded basic-review range to match the frozen candidate."
-  [{:keys [key branch head worktree]}]
-  (let [gate (evidence/gate! "me.workflows.land/verify-review-resolution!" key)
+  [{:keys [key branch head worktree reviewer]}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.workflows.land/verify-review-resolution!" key)
         checkpoint (evidence/dependency! gate)
+        review-agent (evidence/dependency! checkpoint)
+        run-id (attr-get review-agent :workflow/executor-run-id)
+        run (when (support/non-blank-string? run-id) (weaver/show rt run-id))
+        result (attr-get review-agent :harness/result)
         choice (attr-get checkpoint :workflow/outcome)
         resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))]
-    (when-not (= "accepted" choice)
-      (fail! "Review verification requires an accepted resolution" {:choice choice}))
+    (when-not (and (= "accepted" choice)
+                   (= "closed" (:state review-agent))
+                   (= "agent" (attr-get review-agent :workflow/executor))
+                   (= reviewer (attr-get review-agent :harness/alias))
+                   (support/non-blank-string? result)
+                   (some? run)
+                   (= "true" (attr-get run :harness/run))
+                   (= "stopped" (attr-get run :harness/status))
+                   (= "completed" (attr-get run :harness/substatus))
+                   (= "true" (attr-get run :harness/settled))
+                   (= result (attr-get run :harness/result)))
+      (fail! "Review resolution lacks successful configured agent evidence"
+             {:choice choice :reviewer reviewer :review-agent (:id review-agent)
+              :run-id run-id}))
     (let [frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
       (when-not (and (= head (:head frozen) (:head resolution))
                      (= (:base frozen) (:base resolution)))
@@ -250,9 +269,10 @@
     :depends-on [:resolve-review]
     :attributes {"code/fn" "me.workflows.land/verify-review-resolution!"
                  "delivery/key" review-key
-                 "code/params" (fn [{:keys [branch head worktree] :as params}]
+                 "code/params" (fn [{:keys [branch head worktree reviewer] :as params}]
                                  {:key (review-key params)
-                                  :branch branch :head head :worktree worktree})}
+                                  :branch branch :head head :worktree worktree
+                                  :reviewer reviewer})}
     "Require the accepted review base and HEAD to equal the quality-marked pushed candidate.")])
 
 (workflow/defworkflow review

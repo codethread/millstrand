@@ -343,8 +343,11 @@
               (weaver/update! rt (:id child) {:attributes patch})
               (is (thrown? clojure.lang.ExceptionInfo (verify!))))
             (weaver/update! rt (:id child) {:attributes {:harness/result "No findings"}})
-            (let [verified (verify!)]
+            (let [verified (verify!)
+                  verify-gate (weaver/show rt (:id (first (workflow/ready "verify-real"))))]
               (is (= "reviewed" (:status verified)))
+              (is (= verified
+                     (evidence/data (attr-get verify-gate :review/verification))))
               (is (= [{:run-id (:id child) :reviewer "correctness" :result "No findings"}]
                      (:results verified))))
             (weaver/update! rt (:id child)
@@ -473,7 +476,10 @@
                                               (assoc-in request [:params :head] head)}})
                 (let [receipt (handoff/deliver! {:key "land-handoff-fixture"})]
                   (is (= "accepted" (:status receipt)))
-                  (is (= head (get-in receipt [:request :params :head])))))))))
+                  (is (= head (get-in receipt [:request :params :head])))
+                  (test-support/delete-tree! checkout)
+                  (is (= receipt
+                         (handoff/deliver! {:key "land-handoff-fixture"})))))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest story-freeze-rejects-uncommitted-and-stale-revisions

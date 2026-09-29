@@ -37,16 +37,17 @@
              {:source (:id source) :target target}))
     (when-not (= expected (select-keys params (keys expected)))
       (fail! "Handoff changed the recorded work identity" {:expected expected :params params}))
-    (when (= "land" target)
-      (when-not (support/non-blank-string? (:authorization request))
-        (fail! "Landing handoff requires a reference to actual user authorization"
-               {:source (:id source)}))
-      (let [candidate (evidence/quality-head! expected)]
-        (when-not (= (:head params) (:head candidate))
-          (fail! "Landing handoff head does not match the validated candidate"
-                 {:source (:id source) :requested (:head params)
-                  :candidate candidate}))))
+    (when (and (= "land" target)
+               (not (support/non-blank-string? (:authorization request))))
+      (fail! "Landing handoff requires a reference to actual user authorization"
+             {:source (:id source)}))
     (when (empty? (roots))
+      (when (= "land" target)
+        (let [candidate (evidence/quality-head! expected)]
+          (when-not (= (:head params) (:head candidate))
+            (fail! "Landing handoff head does not match the validated candidate"
+                   {:source (:id source) :requested (:head params)
+                    :candidate candidate}))))
       (workflow/start! run-id (keyword target) params
                        {:root-attributes {"delivery/source" (:id source)
                                           "delivery/request" request}}))
@@ -121,4 +122,4 @@
    :attributes {"code/fn" "me.workflows.handoff/launch!"
                 "delivery/key" #(key-for phase %)
                 "code/params" #(hash-map :key (key-for phase %) :target target)}
-   "Read code/result and the preparation step's handoff/receipt on resume. A mismatch blocks handoff; do not invent a new run id."))
+   "Read the preparation step's handoff/receipt on resume. A mismatch blocks handoff; do not invent a new run id."))

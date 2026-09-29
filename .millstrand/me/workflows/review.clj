@@ -74,8 +74,8 @@
     :synthesize "Synthesize the verified findings" :self :depends-on [:verify]
     (format-alpha/prose
      "
-       Read code/result from the verify prerequisite. Deduplicate its actual
-       reviewer results into a P1/P2 verdict with paths and lines. Record that
+       Read `review/verification` from the verify prerequisite. Deduplicate its
+       actual reviewer results into a P1/P2 verdict with paths and lines. Record that
        synthesis on this step, naming the frozen base/head and every run id.
        For no-applicable-reviewer, explicitly record that no reviewer ran;
        do not manufacture a no-findings verdict.
