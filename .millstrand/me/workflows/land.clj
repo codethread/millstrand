@@ -118,6 +118,25 @@
    "millstrand-candidate-prepare" branch head "preserve"
    (support/script "land-prepare.sh") support/land-quality-gate-script))
 
+(defn- canonical-main-clean-argv
+  "Require the canonical main checkout to be clean before merging the PR."
+  [_]
+  (support/sh-gate
+   (str "set -eu\n"
+        "root=$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\n"
+        "branch=$(git -C \"$root\" branch --show-current)\n"
+        "[ \"$branch\" = main ] || {\n"
+        "  echo \"land: refusing to merge with canonical checkout on $branch\" >&2\n"
+        "  exit 1\n"
+        "}\n"
+        "status=$(git -C \"$root\" status --short --untracked-files=all)\n"
+        "[ -z \"$status\" ] || {\n"
+        "  echo \"land: canonical main checkout is dirty\" >&2\n"
+        "  printf '%s\\n' \"$status\" >&2\n"
+        "  exit 1\n"
+        "}\n")
+   "millstrand-canonical-main-clean"))
+
 (defn- candidate-merge-argv
   [{:keys [pr-number subject body branch head]}]
   (support/sh-gate
@@ -346,8 +365,12 @@
                    " {}))
    (support/shell-gate :prepare-merge "Require and validate the reviewed candidate HEAD"
                        [:take-turn] candidate-prepare-argv 5400 retry-instruction)
+   (support/shell-gate :canonical-main-clean
+                       "Require canonical main to be clean before PR merge"
+                       [:prepare-merge] canonical-main-clean-argv 300 retry-instruction)
    (update (support/shell-gate
-            :merge-pr "Merge the PR without rewriting its commits" [:prepare-merge]
+            :merge-pr "Merge the PR without rewriting its commits"
+            [:canonical-main-clean]
             candidate-merge-argv 300 retry-instruction)
            :attributes assoc "land/irreversible" true)
    (support/shell-gate :pull-main "Fast-forward canonical main" [:merge-pr]

@@ -87,6 +87,8 @@
                 [review-argv prepare-argv]))
     (is (= ["42" head "Subject" "Body" "release/0.5.3"]
            (conj (subvec merge-argv 4 8) (last merge-argv))))
+    (is (= [:canonical-main-clean]
+           (:depends-on (steps :merge-pr))))
     (is (str/includes? (nth merge-argv 2)
                        "merge commit does not preserve reviewed HEAD"))
     (is (= "me.workflows.land/land-abort"
@@ -159,6 +161,38 @@
         (let [drift (run-command root argv)]
           (is (not (zero? (:exit drift))))
           (is (str/includes? (:output drift) "reviewed HEAD changed"))))
+      (finally (test-support/delete-tree! root)))))
+
+(deftest canonical-main-clean-gate-refuses-dirty-main
+  (let [root (test-support/temp-dir "landing-canonical-clean")
+        origin (io/file root "origin.git")
+        canonical (doto (io/file root "canonical") .mkdirs)
+        feature (io/file root "feature")]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! canonical "init" "-b" "main")
+      (test-support/run-git! canonical "config" "user.name" "Fixture")
+      (test-support/run-git! canonical "config" "user.email" "fixture@example.invalid")
+      (spit (io/file canonical "file") "base")
+      (test-support/run-git! canonical "add" ".")
+      (test-support/run-git! canonical "commit" "-m" "base")
+      (test-support/run-git! canonical "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! canonical "push" "origin" "HEAD:main")
+      (test-support/run-git! canonical "worktree" "add" "-b" "feature/canonical-clean"
+                             (.getPath feature) "main")
+      (let [clean-step (some #(when (= :canonical-main-clean (:id %)) %)
+                             (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
+            argv ((get-in clean-step [:attributes "shell/argv"]) {})]
+        (is (zero? (:exit (run-command feature argv))))
+        (spit (io/file canonical "file") "local edit")
+        (let [{:keys [exit output]} (run-command feature argv)]
+          (is (not (zero? exit)))
+          (is (str/includes? output "canonical main checkout is dirty")))
+        (test-support/run-git! canonical "checkout" "--" "file")
+        (spit (io/file canonical "untracked") "local file")
+        (let [{:keys [exit output]} (run-command feature argv)]
+          (is (not (zero? exit)))
+          (is (str/includes? output "canonical main checkout is dirty"))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest candidate-merge-wrapper-verifies-the-reviewed-parent
