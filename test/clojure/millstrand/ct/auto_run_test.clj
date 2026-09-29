@@ -275,14 +275,7 @@
                       (is (not= (:id historical-root) (:root started)))
                       (is (= head (:head (attr-get (workflow/current-root exact-run-id)
                                                    :workflow/context))))
-                      (weaver/add! runtime
-                                   {:title "Routed merge continuation" :state "active"
-                                    :attributes
-                                    {"workflow/run-id" exact-run-id
-                                     "workflow/definition-name" "land-merge"
-                                     "workflow/context" params}})
-                      (is (= (:root started)
-                             (:root (start! (assoc params :key "exact-key"))))))
+                      (is (= started (start! (assoc params :key "exact-key")))))
                     (prepare-start! "start-stale" "stale-key"
                                     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
                     (is (thrown-with-msg?

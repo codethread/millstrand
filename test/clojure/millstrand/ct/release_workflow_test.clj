@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [me.workflows.evidence :as evidence]
             [me.workflows.release-evidence :as release]
+            [millhouse.land.support :as land-support]
             [millhouse.workflow :as workflow]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
@@ -546,6 +547,94 @@
                                     :branch "release/0.5.3"
                                     :worktree (.getPath root)})))))
       (finally (test-support/delete-tree! root)))))
+
+(defn- with-routed-release-land [choice f]
+  (test-support/with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+      (doseq [[name definition] [[:land-abort 'me.workflows.land/land-abort]
+                                 [:land-merge 'me.workflows.land/land-merge]
+                                 [:land 'me.workflows.land/land]]]
+        (workflow/register-workflow! name definition))
+      (let [candidate {:version "0.5.3" :branch "release/0.5.3"
+                       :worktree "/tmp/release" :head (apply str (repeat 40 "a"))}
+            candidate-step (weaver/add! rt {:title "Candidate" :state "closed"
+                                            :attributes {:release/candidate candidate}})
+            _ (weaver/add! rt {:title "Start Land"
+                               :attributes {:code/fn "me.workflows.release-evidence/start-land!"
+                                            :delivery/key "routed"}
+                               :edges [{:type "depends-on" :to (:id candidate-step)}]})
+            params {:key "routed" :version "0.5.3"}
+            historical (weaver/add! rt {:title "Aborted Land" :state "closed"
+                                        :attributes {:workflow/run-id (str "release-land-0.5.3-" (:head candidate))
+                                                     :workflow/role "root"
+                                                     :workflow/definition-name "land"
+                                                     :land/stage "ready"
+                                                     :workflow/context (assoc candidate :feature "release/0.5.3")}})
+            receipt (release/start-land! params)
+            run-id (:run-id receipt)]
+        ;; Complete only fixture gates; no shell, review agent or merge is run.
+        (dotimes [_ 4] (workflow/complete! run-id {:by-identity "fixture"}))
+        (workflow/choose! run-id :accepted
+                          {:reviewer "reviewer" :base (:head candidate)
+                           :head (:head candidate) :p1-p2 "none" :summary "Fixture"})
+        (workflow/complete! run-id {:by-identity "fixture"})
+        (let [signoff (:id (first (workflow/ready run-id)))]
+          (with-redefs [land-support/canonical-worktree (constantly "/tmp/canonical")]
+            (workflow/choose! run-id choice
+                              (if (= :approved choice)
+                                {:pr-number 42 :subject "Release" :body "Preserve candidate"
+                                 :authorization "fixture-user-message"}
+                                {:reason "Fixture abort"})))
+          (f {:rt rt :params params :receipt receipt :signoff signoff
+              :historical historical :continuation (workflow/current-root run-id)}))))))
+
+(deftest active-merge-recovers-the-approved-original-land-root
+  (with-routed-release-land
+    :approved
+    (fn [{:keys [rt params receipt historical continuation]}]
+      (is (= "closed" (:state (weaver/show rt (:root receipt)))))
+      (is (= "land-merge" (attr-get continuation :workflow/definition-name)))
+      (is (not= (:id historical) (:root receipt)))
+      (with-redefs [workflow/start! (fn [& _] (throw (ex-info "Unexpected restart" {})))]
+        (is (= receipt (release/start-land! params)))
+        (is (= receipt (release/start-land! params))))
+      (is (= (:id continuation) (:id (workflow/current-root (:run-id receipt))))))))
+
+(deftest active-routed-land-rejects-invalid-lifecycles
+  (testing "an active abort cannot be reused or restarted"
+    (with-routed-release-land
+      :abort
+      (fn [{:keys [params]}]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalid routed lifecycle"
+                              (release/start-land! params))))))
+  (doseq [[label patch target message]
+          [["unknown route" {:attributes {:workflow/definition-name "other"}}
+            :continuation #"invalid routed lifecycle"]
+           ["wrong stage" {:attributes {:land/stage "abort"}}
+            :continuation #"invalid stage"]
+           ["wrong candidate" {:attributes {:workflow/context {:head "different"}}}
+            :continuation #"origin is missing or ambiguous"]
+           ["missing origin" {:attributes {:workflow/definition-name "other"}}
+            :origin #"origin is missing or ambiguous"]
+           ["unapproved origin" {:attributes {:workflow/outcome "abort"}}
+            :signoff #"origin is missing or ambiguous"]
+           ["approval mismatch" {:attributes {:workflow/outcome-input
+                                              {:authorization "other"}}}
+            :signoff #"origin is missing or ambiguous"]
+           ["multiple active roots" {:state "active"}
+            :origin #"Active Land root is ambiguous"]]]
+    (testing label
+      (with-routed-release-land
+        :approved
+        (fn [{:keys [rt params receipt signoff continuation]}]
+          (weaver/update! rt (case target
+                               :origin (:root receipt)
+                               :signoff signoff
+                               :continuation (:id continuation))
+                          patch)
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo message
+                                (release/start-land! params))))))))
 
 (deftest historical-land-reuse-requires-its-successful-queue-reservation
   (test-support/with-runtime
