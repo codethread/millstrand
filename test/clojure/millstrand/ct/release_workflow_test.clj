@@ -47,6 +47,19 @@
     {:exit (.waitFor process)
      :output output}))
 
+(defn- run-command-with-env
+  [dir argv env]
+  (let [builder (doto (ProcessBuilder. ^java.util.List argv)
+                  (.directory (io/file dir))
+                  (.redirectErrorStream true))
+        environment (.environment builder)]
+    (doseq [[key value] env]
+      (.put environment key value))
+    (let [process (.start builder)
+          output (slurp (.getInputStream process))]
+      {:exit (.waitFor process)
+       :output output})))
+
 (deftest release-params-require-semver-and-an-absolute-worktree
   (let [spec (:param-spec release-definition)]
     (is (s/valid? spec {:version "0.5.3" :worktree "/tmp/millstrand" :branch "release/0.5.3"}))
@@ -192,29 +205,100 @@
         (spit (io/file canonical "untracked") "local file")
         (let [{:keys [exit output]} (run-command feature argv)]
           (is (not (zero? exit)))
-          (is (str/includes? output "canonical main checkout is dirty"))))
+          (is (str/includes? output "canonical main checkout is dirty")))
+        ;; The standalone evidence gate may have passed before this local edit.
+        ;; The irreversible shell must not trust that stale result.
+        (let [merge-step (some #(when (= :merge-pr (:id %)) %)
+                               (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
+              head (str/trim (test-support/run-git! feature "rev-parse" "HEAD"))
+              merge-argv ((get-in merge-step [:attributes "shell/argv"])
+                          {:pr-number 42 :subject "Subject" :body "Body"
+                           :branch "feature/canonical-clean" :head head})
+              merge-result (run-command feature merge-argv)]
+          (is (not (zero? (:exit merge-result))))
+          (is (str/includes? (:output merge-result)
+                             "canonical main checkout is dirty"))))
+      (finally (test-support/delete-tree! root)))))
+
+(deftest pull-main-wrapper-rechecks-canonical-cleanliness
+  (let [root (test-support/temp-dir "landing-pull-clean")
+        origin (io/file root "origin.git")
+        canonical (doto (io/file root "canonical") .mkdirs)
+        feature (io/file root "feature")
+        seed (io/file root "seed")
+        fake-bin (doto (io/file root "fake-bin") .mkdirs)]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! canonical "init" "-b" "main")
+      (test-support/run-git! canonical "config" "user.name" "Fixture")
+      (test-support/run-git! canonical "config" "user.email" "fixture@example.invalid")
+      (spit (io/file canonical "file") "base")
+      (test-support/run-git! canonical "add" ".")
+      (test-support/run-git! canonical "commit" "-m" "base")
+      (test-support/run-git! canonical "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! canonical "push" "origin" "HEAD:main")
+      (test-support/run-git! canonical "worktree" "add" "-b" "feature/pull-clean"
+                             (.getPath feature) "main")
+      (let [pull-step (some #(when (= :pull-main (:id %)) %)
+                            (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
+            pull-argv ((get-in pull-step [:attributes "shell/argv"]) {})
+            blocked (io/file canonical "blocked")]
+        (spit blocked "before pull")
+        (let [{:keys [exit output]} (run-command feature pull-argv)]
+          (is (not (zero? exit)))
+          (is (str/includes? output "canonical main checkout is dirty")))
+        (is (.delete blocked))
+        (test-support/run-git! root "clone" (.getPath origin) (.getPath seed))
+        (test-support/run-git! seed "config" "user.name" "Fixture")
+        (test-support/run-git! seed "config" "user.email" "fixture@example.invalid")
+        (spit (io/file seed "upstream") "landed")
+        (test-support/run-git! seed "add" ".")
+        (test-support/run-git! seed "commit" "-m" "landed")
+        (test-support/run-git! seed "push" "origin" "HEAD:main")
+        (let [real-git (str/trim (:output (run-command root
+                                                       ["sh" "-c" "command -v git"])))
+              fake-git (io/file fake-bin "git")]
+          (spit fake-git
+                (str "#!/bin/sh\nset -eu\n"
+                     "\"$REAL_GIT\" \"$@\"\n"
+                     "if [ \"${1-}\" = -C ] && [ \"${3-}\" = pull ]; then\n"
+                     "  : > \"$2/raced-after-pull\"\n"
+                     "fi\n"))
+          (is (.setExecutable fake-git true))
+          (let [{:keys [exit output]} (run-command-with-env
+                                       feature pull-argv
+                                       {"REAL_GIT" real-git
+                                        "PATH" (str (.getPath fake-bin)
+                                                    java.io.File/pathSeparator
+                                                    (System/getenv "PATH"))})]
+            (is (not (zero? exit)))
+            (is (str/includes? output "canonical main checkout is dirty"))
+            (is (.exists (io/file canonical "raced-after-pull"))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest candidate-merge-wrapper-verifies-the-reviewed-parent
   (let [root (test-support/temp-dir "landing-merge-parent")
         origin (io/file root "origin.git")
-        checkout (doto (io/file root "checkout") .mkdirs)
-        fake-gh (io/file checkout "gh")]
+        canonical (doto (io/file root "canonical") .mkdirs)
+        feature (io/file root "feature")
+        fake-gh (io/file feature "gh")]
     (try
       (test-support/run-git! root "init" "--bare" (.getPath origin))
-      (test-support/run-git! checkout "init" "-b" "main")
-      (test-support/run-git! checkout "config" "user.name" "Fixture")
-      (test-support/run-git! checkout "config" "user.email" "fixture@example.invalid")
-      (spit (io/file checkout "file") "base")
-      (test-support/run-git! checkout "add" ".")
-      (test-support/run-git! checkout "commit" "-m" "base")
-      (let [base (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))]
-        (test-support/run-git! checkout "remote" "add" "origin" (.getPath origin))
-        (test-support/run-git! checkout "push" "origin" "HEAD:main")
-        (test-support/run-git! checkout "checkout" "-b" "feature/merge-parent")
-        (spit (io/file checkout "file") "candidate")
-        (test-support/run-git! checkout "commit" "-am" "candidate")
-        (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+      (test-support/run-git! canonical "init" "-b" "main")
+      (test-support/run-git! canonical "config" "user.name" "Fixture")
+      (test-support/run-git! canonical "config" "user.email" "fixture@example.invalid")
+      (spit (io/file canonical "file") "base")
+      (test-support/run-git! canonical "add" ".")
+      (test-support/run-git! canonical "commit" "-m" "base")
+      (let [base (str/trim (test-support/run-git! canonical "rev-parse" "HEAD"))]
+        (test-support/run-git! canonical "remote" "add" "origin" (.getPath origin))
+        (test-support/run-git! canonical "push" "origin" "HEAD:main")
+        (test-support/run-git! canonical "worktree" "add" "-b" "feature/merge-parent"
+                               (.getPath feature) "main")
+        (spit (io/file feature "file") "candidate")
+        (test-support/run-git! feature "commit" "-am" "candidate")
+        (test-support/run-git! feature "push" "-u" "origin" "HEAD")
+        (let [head (str/trim (test-support/run-git! feature "rev-parse" "HEAD"))
               merge-step (some #(when (= :merge-pr (:id %)) %)
                                (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
               argv ((get-in merge-step [:attributes "shell/argv"])
@@ -223,17 +307,15 @@
               argv (-> argv
                        (assoc 2 (str "PATH=\"$PWD:$PATH\"\n" (nth argv 2)))
                        (assoc 8 "exit 0"))]
-          (test-support/run-git! checkout "checkout" "main")
-          (test-support/run-git! checkout "merge" "--no-ff" "feature/merge-parent"
+          (test-support/run-git! canonical "merge" "--no-ff" "feature/merge-parent"
                                  "-m" "merge candidate")
-          (let [merge-commit (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))]
-            (test-support/run-git! checkout "push" "origin" "HEAD:main")
-            (test-support/run-git! checkout "checkout" "feature/merge-parent")
+          (let [merge-commit (str/trim (test-support/run-git! canonical "rev-parse" "HEAD"))]
+            (test-support/run-git! canonical "push" "origin" "HEAD:main")
             (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" merge-commit "'\n"))
             (is (.setExecutable fake-gh true))
-            (is (zero? (:exit (run-command checkout argv))))
+            (is (zero? (:exit (run-command feature argv))))
             (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" base "'\n"))
-            (let [wrong-parent (run-command checkout argv)]
+            (let [wrong-parent (run-command feature argv)]
               (is (not (zero? (:exit wrong-parent))))
               (is (str/includes? (:output wrong-parent)
                                  "expected a two-parent merge commit"))))))

@@ -118,29 +118,37 @@
    "millstrand-candidate-prepare" branch head "preserve"
    (support/script "land-prepare.sh") support/land-quality-gate-script))
 
+(def ^:private canonical-main-clean-check
+  "Shell function that rejects a non-main or dirty canonical checkout."
+  (str "require_canonical_main_clean() {\n"
+       "  root=$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\n"
+       "  branch=$(git -C \"$root\" branch --show-current)\n"
+       "  [ \"$branch\" = main ] || {\n"
+       "    echo \"land: refusing to merge with canonical checkout on $branch\" >&2\n"
+       "    exit 1\n"
+       "  }\n"
+       "  status=$(git -C \"$root\" status --short --untracked-files=all)\n"
+       "  [ -z \"$status\" ] || {\n"
+       "    echo \"land: canonical main checkout is dirty\" >&2\n"
+       "    printf '%s\\n' \"$status\" >&2\n"
+       "    exit 1\n"
+       "  }\n"
+       "}\n"))
+
 (defn- canonical-main-clean-argv
   "Require the canonical main checkout to be clean before merging the PR."
   [_]
   (support/sh-gate
    (str "set -eu\n"
-        "root=$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\n"
-        "branch=$(git -C \"$root\" branch --show-current)\n"
-        "[ \"$branch\" = main ] || {\n"
-        "  echo \"land: refusing to merge with canonical checkout on $branch\" >&2\n"
-        "  exit 1\n"
-        "}\n"
-        "status=$(git -C \"$root\" status --short --untracked-files=all)\n"
-        "[ -z \"$status\" ] || {\n"
-        "  echo \"land: canonical main checkout is dirty\" >&2\n"
-        "  printf '%s\\n' \"$status\" >&2\n"
-        "  exit 1\n"
-        "}\n")
+        canonical-main-clean-check
+        "require_canonical_main_clean\n")
    "millstrand-canonical-main-clean"))
 
 (defn- candidate-merge-argv
   [{:keys [pr-number subject body branch head]}]
   (support/sh-gate
    (str "set -eu\n"
+        canonical-main-clean-check
         "pr_number=$1\n"
         "expected=$2\n"
         "subject=$3\n"
@@ -155,6 +163,7 @@
         "  }\n"
         "}\n"
         "require_head\n"
+        "require_canonical_main_clean\n"
         "sh -c \"$merge_script\" land-merge \"$pr_number\" \"$subject\" \"$body\" \"$branch\" merge\n"
         "git fetch origin refs/heads/main:refs/remotes/origin/main\n"
         "merge_commit=$(gh pr view \"$pr_number\" --json mergeCommit --jq '.mergeCommit.oid // empty')\n"
@@ -164,9 +173,21 @@
         "[ \"$#\" -eq 2 ] || { echo \"land: expected a two-parent merge commit: $merge_commit\" >&2; exit 1; }\n"
         "case \" $parents \" in *\" $expected \"*) ;; *) echo \"land: merge commit does not preserve reviewed HEAD $expected\" >&2; exit 1 ;; esac\n"
         "[ \"$(git merge-base \"$merge_commit\" origin/main)\" = \"$merge_commit\" ] || { echo \"land: merge commit is not on origin/main\" >&2; exit 1; }\n"
+        "require_canonical_main_clean\n"
         "require_head\n")
    "millstrand-candidate-merge" (str pr-number) head subject body
    support/land-merge-script branch))
+
+(defn- pull-main-argv
+  "Fast-forward canonical main only while it stays clean."
+  [_]
+  (support/sh-gate
+   (str "set -eu\n"
+        canonical-main-clean-check
+        "require_canonical_main_clean\n"
+        support/land-pull-main-script
+        "require_canonical_main_clean\n")
+   "millstrand-pull-main"))
 
 (defn- review-key
   [{:keys [feature head]}]
@@ -374,8 +395,7 @@
             candidate-merge-argv 300 retry-instruction)
            :attributes assoc "land/irreversible" true)
    (support/shell-gate :pull-main "Fast-forward canonical main" [:merge-pr]
-                       ["sh" "-c" support/land-pull-main-script]
-                       300 retry-instruction)
+                       pull-main-argv 300 retry-instruction)
    (workflow/gate :release-turn "Release the merge turn before housekeeping" :merge-release
                   :depends-on [:pull-main]
                   "Release is automatic. On failure, repair the cause and clear gate/error to retry.")
