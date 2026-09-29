@@ -135,13 +135,27 @@
        "  }\n"
        "}\n"))
 
+(def ^:private canonical-main-current-check
+  "Shell function that also requires canonical main to equal freshly fetched main."
+  (str "require_canonical_main_current() {\n"
+       "  require_canonical_main_clean\n"
+       "  git -C \"$root\" fetch origin refs/heads/main:refs/remotes/origin/main\n"
+       "  local_main=$(git -C \"$root\" rev-parse HEAD)\n"
+       "  remote_main=$(git -C \"$root\" rev-parse refs/remotes/origin/main)\n"
+       "  [ \"$local_main\" = \"$remote_main\" ] || {\n"
+       "    echo \"land: canonical main must match origin/main: $local_main != $remote_main\" >&2\n"
+       "    exit 1\n"
+       "  }\n"
+       "}\n"))
+
 (defn- canonical-main-clean-argv
-  "Require the canonical main checkout to be clean before merging the PR."
+  "Require canonical main to be clean and equal origin/main before merging the PR."
   [_]
   (support/sh-gate
    (str "set -eu\n"
         canonical-main-clean-check
-        "require_canonical_main_clean\n")
+        canonical-main-current-check
+        "require_canonical_main_current\n")
    "millstrand-canonical-main-clean"))
 
 (defn- candidate-merge-argv
@@ -149,6 +163,7 @@
   (support/sh-gate
    (str "set -eu\n"
         canonical-main-clean-check
+        canonical-main-current-check
         "pr_number=$1\n"
         "expected=$2\n"
         "subject=$3\n"
@@ -163,7 +178,7 @@
         "  }\n"
         "}\n"
         "require_head\n"
-        "require_canonical_main_clean\n"
+        "require_canonical_main_current\n"
         "sh -c \"$merge_script\" land-merge \"$pr_number\" \"$subject\" \"$body\" \"$branch\" merge\n"
         "git fetch origin refs/heads/main:refs/remotes/origin/main\n"
         "merge_commit=$(gh pr view \"$pr_number\" --json mergeCommit --jq '.mergeCommit.oid // empty')\n"

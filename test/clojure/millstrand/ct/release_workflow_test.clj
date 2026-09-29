@@ -217,7 +217,16 @@
               merge-result (run-command feature merge-argv)]
           (is (not (zero? (:exit merge-result))))
           (is (str/includes? (:output merge-result)
-                             "canonical main checkout is dirty"))))
+                             "canonical main checkout is dirty"))
+          (is (.delete (io/file canonical "untracked")))
+          (test-support/run-git! canonical "commit" "--allow-empty" "-m" "local-only")
+          (is (str/blank? (test-support/run-git! canonical "status" "--porcelain")))
+          (doseq [check [argv (assoc merge-argv 8
+                                     "touch ../merge-was-invoked; exit 99")]]
+            (let [{:keys [exit output]} (run-command feature check)]
+              (is (not (zero? exit)))
+              (is (str/includes? output "canonical main must match origin/main"))))
+          (is (not (.exists (io/file root "merge-was-invoked"))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest pull-main-wrapper-rechecks-canonical-cleanliness
@@ -310,10 +319,14 @@
           (test-support/run-git! canonical "merge" "--no-ff" "feature/merge-parent"
                                  "-m" "merge candidate")
           (let [merge-commit (str/trim (test-support/run-git! canonical "rev-parse" "HEAD"))]
-            (test-support/run-git! canonical "push" "origin" "HEAD:main")
+            (test-support/run-git! canonical "reset" "--hard" base)
             (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" merge-commit "'\n"))
             (is (.setExecutable fake-gh true))
-            (is (zero? (:exit (run-command feature argv))))
+            (let [merge-argv (assoc argv 8 (str "git push origin " merge-commit ":refs/heads/main"))
+                  result (run-command feature merge-argv)]
+              (is (zero? (:exit result)) (:output result)))
+            (is (= base (str/trim (test-support/run-git! canonical "rev-parse" "HEAD"))))
+            (test-support/run-git! canonical "merge" "--ff-only" "origin/main")
             (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" base "'\n"))
             (let [wrong-parent (run-command feature argv)]
               (is (not (zero? (:exit wrong-parent))))
