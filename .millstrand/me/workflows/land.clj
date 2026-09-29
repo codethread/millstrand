@@ -113,6 +113,26 @@
    "millstrand-candidate-prepare" branch head "preserve"
    (support/script "land-prepare.sh") support/land-quality-gate-script))
 
+(defn- candidate-merge-argv
+  [{:keys [pr-number subject body branch head]}]
+  (support/sh-gate
+   (require-head-script
+    (str "pr_number=$3\n"
+         "subject=$4\n"
+         "body=$5\n"
+         "merge_script=$6\n"
+         "sh -c \"$merge_script\" land-merge \"$pr_number\" \"$subject\" \"$body\" \"$branch\" merge\n"
+         "git fetch origin refs/heads/main:refs/remotes/origin/main\n"
+         "merge_commit=$(gh pr view \"$pr_number\" --json mergeCommit --jq '.mergeCommit.oid // empty')\n"
+         "[ -n \"$merge_commit\" ] || { echo \"land: merged PR has no merge commit\" >&2; exit 1; }\n"
+         "parents=$(git show -s --format=%P \"$merge_commit\")\n"
+         "set -- $parents\n"
+         "[ \"$#\" -eq 2 ] || { echo \"land: expected a two-parent merge commit: $merge_commit\" >&2; exit 1; }\n"
+         "case \" $parents \" in *\" $expected \"*) ;; *) echo \"land: merge commit does not preserve reviewed HEAD $expected\" >&2; exit 1 ;; esac\n"
+         "[ \"$(git merge-base \"$merge_commit\" origin/main)\" = \"$merge_commit\" ] || { echo \"land: merge commit is not on origin/main\" >&2; exit 1; }\n"))
+   "millstrand-candidate-merge" branch head (str pr-number) subject body
+   support/land-merge-script))
+
 (defn- review-key
   [{:keys [feature head]}]
   (str "land-review/" feature "/" head))
@@ -288,11 +308,7 @@
                        [:take-turn] candidate-prepare-argv 5400 retry-instruction)
    (update (support/shell-gate
             :merge-pr "Merge the PR without rewriting its commits" [:prepare-merge]
-            (fn [{:keys [pr-number subject body branch]}]
-              (support/sh-gate support/land-merge-script
-                               "land-merge" (str pr-number) subject body branch
-                               "merge"))
-            300 retry-instruction)
+            candidate-merge-argv 300 retry-instruction)
            :attributes assoc "land/irreversible" true)
    (support/shell-gate :pull-main "Fast-forward canonical main" [:merge-pr]
                        ["sh" "-c" support/land-pull-main-script]

@@ -78,13 +78,15 @@
                       params)
         merge-argv ((get-in steps [:merge-pr :attributes "shell/argv"])
                     {:pr-number 42 :subject "Subject" :body "Body"
-                     :branch "release/0.5.3"})]
+                     :branch "release/0.5.3" :head head})]
     (is (= ["release/0.5.3" head] (subvec review-argv 4 6)))
     (is (= ["release/0.5.3" head "preserve"] (subvec prepare-argv 4 7)))
     (is (every? #(str/includes? (nth % 2) "reviewed HEAD changed")
                 [review-argv prepare-argv]))
-    (is (= ["release/0.5.3" "merge"]
-           (subvec merge-argv (- (count merge-argv) 2))))
+    (is (= ["release/0.5.3" head "42" "Subject" "Body"]
+           (subvec merge-argv 4 9)))
+    (is (str/includes? (nth merge-argv 2)
+                       "merge commit does not preserve reviewed HEAD"))
     (is (= "me.workflows.land/land-abort"
            (get-in definition [:attributes "land/abort-definition"])))
     (is (= #{:start :call}
@@ -119,6 +121,50 @@
         (let [pre-check (run-command root argv)]
           (is (not (zero? (:exit pre-check))))
           (is (str/includes? (:output pre-check) "reviewed HEAD changed"))))
+      (finally (test-support/delete-tree! root)))))
+
+(deftest candidate-merge-wrapper-verifies-the-reviewed-parent
+  (let [root (test-support/temp-dir "landing-merge-parent")
+        origin (io/file root "origin.git")
+        checkout (doto (io/file root "checkout") .mkdirs)
+        fake-gh (io/file checkout "gh")]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! checkout "init" "-b" "main")
+      (test-support/run-git! checkout "config" "user.name" "Fixture")
+      (test-support/run-git! checkout "config" "user.email" "fixture@example.invalid")
+      (spit (io/file checkout "file") "base")
+      (test-support/run-git! checkout "add" ".")
+      (test-support/run-git! checkout "commit" "-m" "base")
+      (let [base (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))]
+        (test-support/run-git! checkout "remote" "add" "origin" (.getPath origin))
+        (test-support/run-git! checkout "push" "origin" "HEAD:main")
+        (test-support/run-git! checkout "checkout" "-b" "feature/merge-parent")
+        (spit (io/file checkout "file") "candidate")
+        (test-support/run-git! checkout "commit" "-am" "candidate")
+        (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+              merge-step (some #(when (= :merge-pr (:id %)) %)
+                               (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
+              argv ((get-in merge-step [:attributes "shell/argv"])
+                    {:pr-number 42 :subject "Subject" :body "Body"
+                     :branch "feature/merge-parent" :head head})
+              argv (-> argv
+                       (assoc 2 (str "PATH=\"$PWD:$PATH\"\n" (nth argv 2)))
+                       (assoc (dec (count argv)) "exit 0"))]
+          (test-support/run-git! checkout "checkout" "main")
+          (test-support/run-git! checkout "merge" "--no-ff" "feature/merge-parent"
+                                 "-m" "merge candidate")
+          (let [merge-commit (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))]
+            (test-support/run-git! checkout "push" "origin" "HEAD:main")
+            (test-support/run-git! checkout "checkout" "feature/merge-parent")
+            (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" merge-commit "'\n"))
+            (is (.setExecutable fake-gh true))
+            (is (zero? (:exit (run-command checkout argv))))
+            (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" base "'\n"))
+            (let [wrong-parent (run-command checkout argv)]
+              (is (not (zero? (:exit wrong-parent))))
+              (is (str/includes? (:output wrong-parent)
+                                 "expected a two-parent merge commit"))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest basic-review-resolution-is-bound-to-the-frozen-head
