@@ -112,9 +112,10 @@
     (format-alpha/prose
      "
        Read the delivery checkpoint's recorded outcome, not a remembered prompt.
-       For land, prepare handoff/request with workflow=land, explicit params,
-       receiving owner and the actual user authorization reference. The launch
-       gate reuses handoff-<this-step-id> and records acceptance.
+       For land, prepare handoff/request with workflow=land, explicit params
+       including the exact quality-marked `head`, receiving owner, and the actual
+       user authorization reference. The launch gate reuses
+       handoff-<this-step-id> and records acceptance.
 
        For report, record handoff/report with owner, evidence (the coordinator's
        acknowledgment reference) and the validated head. Keep the card open and

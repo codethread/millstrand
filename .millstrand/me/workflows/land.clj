@@ -23,7 +23,7 @@
 (s/def ::reviewer ::non-blank-string)
 (s/def ::sha
   (s/and ::non-blank-string
-         #(boolean (re-matches #"(?i)[0-9a-f]{40}" %))))
+         #(boolean (re-matches #"[0-9a-f]{40}" %))))
 (s/def ::base ::sha)
 (s/def ::head ::sha)
 (s/def ::summary ::non-blank-string)
@@ -75,9 +75,9 @@
    "
      Inspect the failed gate's output, repair the cause, then clear `gate/error`
      to retry. Keep the FIFO turn and merge lock; do not requeue at the back.
-     Obtain focused review for material repairs. Request a user decision only
-     when repair changes the authorized scope or ownership. Before a merge has
-     been submitted, withdraw safely if that decision requires changing the plan.
+     This run's reviewed HEAD is immutable. If repair would change HEAD, withdraw
+     before merge and start a fresh Land run for the repaired candidate. Request
+     a user decision when repair changes the authorized scope or ownership.
    " {}))
 
 (defn- require-head-script
@@ -85,17 +85,21 @@
   (str "set -eu\n"
        "branch=$1\n"
        "expected=$2\n"
-       "actual=$(git rev-parse HEAD)\n"
-       "[ \"$actual\" = \"$expected\" ] || {\n"
-       "  echo \"land: reviewed HEAD changed: expected $expected, found $actual\" >&2\n"
-       "  exit 1\n"
+       "require_head() {\n"
+       "  actual=$(git rev-parse HEAD)\n"
+       "  [ \"$actual\" = \"$expected\" ] || {\n"
+       "    echo \"land: reviewed HEAD changed: expected $expected, found $actual\" >&2\n"
+       "    exit 1\n"
+       "  }\n"
        "}\n"
-       next-script))
+       "require_head\n"
+       next-script
+       "require_head\n"))
 
 (defn- review-quality-argv
   [{:keys [branch head]}]
   (support/sh-gate
-   (require-head-script "exec sh -c \"$3\" land-quality \"$branch\"\n")
+   (require-head-script "sh -c \"$3\" land-quality \"$branch\"\n")
    "millstrand-review-quality" branch head support/land-quality-gate-script))
 
 (defn- candidate-prepare-argv
@@ -105,7 +109,7 @@
     (str "mode=$3\n"
          "prepare_script=$4\n"
          "quality_script=$5\n"
-         "exec sh -c \"$prepare_script\" land-prepare \"$branch\" \"$mode\" \"$quality_script\"\n"))
+         "sh -c \"$prepare_script\" land-prepare \"$branch\" \"$mode\" \"$quality_script\"\n"))
    "millstrand-candidate-prepare" branch head "preserve"
    (support/script "land-prepare.sh") support/land-quality-gate-script))
 
@@ -118,13 +122,21 @@
   [{:keys [key branch head worktree]}]
   (let [gate (evidence/gate! "me.workflows.land/verify-review-resolution!" key)
         checkpoint (evidence/dependency! gate)
-        resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))
-        frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
-    (when-not (and (= head (:head frozen) (:head resolution))
-                   (= (:base frozen) (:base resolution)))
-      (fail! "Basic review resolution does not match the frozen candidate"
-             {:expected-head head :frozen frozen :resolution resolution}))
-    (select-keys resolution [:base :head :reviewer :p1-p2 :summary])))
+        choice (attr-get checkpoint :workflow/outcome)
+        resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))]
+    (case choice
+      "accepted"
+      (let [frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
+        (when-not (and (= head (:head frozen) (:head resolution))
+                       (= (:base frozen) (:base resolution)))
+          (fail! "Basic review resolution does not match the frozen candidate"
+                 {:expected-head head :frozen frozen :resolution resolution}))
+        (select-keys resolution [:base :head :reviewer :p1-p2 :summary]))
+
+      "invalidated"
+      {:status "invalidated" :reason (:reason resolution) :head head}
+
+      (fail! "Unknown review resolution" {:choice choice}))))
 
 (defn- review-prompt
   [{:keys [branch head worktree reviewer]}]
@@ -168,7 +180,7 @@
    (support/shell-gate
     :review-quality "Validate the pushed reviewed HEAD" [:progress-card]
     review-quality-argv 5400
-    "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
+    "Fix the frozen pushed HEAD without changing it, then clear gate/error to retry. A new commit requires a fresh Land run.")
    (workflow/gate
     :review-agent "Run the one-seat code review" :agent
     :depends-on [:review-quality]
@@ -188,7 +200,10 @@
     :kind :agent
     :choices [{:key :accepted
                :label "Accept the resolved review"
-               :input review-resolution-input}]
+               :input review-resolution-input}
+              {:key :invalidated
+               :label "Candidate changed; return to abort this Land run"
+               :input land-abort-reason-input}]
     :attributes
     {"workflow/instruction"
      (format-alpha/prose
@@ -199,8 +214,9 @@
         Choose `accepted` only with the reviewer seat, full base and head SHAs, the
         head equal to the workflow's frozen reviewed HEAD, `p1-p2` equal to `none`
         or `resolved`, and a concise resolution summary.
-        The checkpoint retains that evidence. If repairs change HEAD, obtain
-        focused follow-up review before accepting.
+        The checkpoint retains that evidence. A HEAD change invalidates this run.
+        Restore the frozen commit, or choose `invalidated`; the parent Land
+        sign-off must then abort so a fresh run can review the repaired HEAD.
 
         A supplemental review needs a live, dedicated review target. Do not resume
         a reviewer whose executor gate has already closed: native continuation
@@ -339,8 +355,10 @@
                             Resources required through merge must be handled by
                             the tracked executable `.millstrand/land-cleanup.sh`.
                             Its failure stops cleanup and card completion.
-                            Act on the user's existing authorization to land; no
-                            repeat approval is needed. Approval covers the FIFO turn,
+                            If review returned `invalidated`, choose abort; approval
+                            is forbidden for that run. Otherwise act on the user's
+                            existing authorization to land; no repeat approval is
+                            needed. Approval covers the FIFO turn,
                             unchanged-candidate validation, focused review, merge-commit
                             landing, and cleanup. Request a user decision when the
                             required repair changes the authorized scope or ownership;

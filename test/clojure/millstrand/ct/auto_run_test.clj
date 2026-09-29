@@ -163,6 +163,7 @@
               quality (titled-strand strands "Pass repository quality checks")
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
+              freeze-land-head (titled-strand strands "Carry the verified HEAD into repository Land")
               quality-argv (attr-get quality :shell/argv)
               ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
@@ -185,12 +186,14 @@
           (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
             (doseq [[prerequisite step]
-                    (partition 2 1 [implement prepare-pr quality ci verify-pr])]
+                    (partition 2 1 [implement prepare-pr quality ci verify-pr freeze-land-head])]
               (is (= [(:id prerequisite)]
                      (mapv :to_strand_id
                            (graph/outgoing-edges runtime [(:id step)] "depends-on"))))))
           (testing "repository-owned quality and PR boundaries remain effective"
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
+            (is (str/includes? (attr-get freeze-land-head :workflow/instruction)
+                               "required `head` param"))
             (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
@@ -199,7 +202,7 @@
                   (str label ": " (:output rejected-pr-result)))))
           (is (not-any? #(= "millhouse.land.card-actions/review-card!"
                             (attr-get % :code/fn)) strands))
-          (testing "repository policy delegates landing to separate shared roles"
+          (testing "repository policy delegates landing to separate custody roles"
             (is (some? handoff-step))
             (is (some? finisher-step))
             (is (not= (:id handoff-step) (:id finisher-step)))))))))

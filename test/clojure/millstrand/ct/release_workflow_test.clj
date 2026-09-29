@@ -84,7 +84,11 @@
     (is (= "me.workflows.land/land-abort"
            (get-in definition [:attributes "land/abort-definition"])))
     (is (= #{:start :call}
-           (:entrypoints @(requiring-resolve 'me.workflows.land/land))))))
+           (:entrypoints @(requiring-resolve 'me.workflows.land/land))))
+    (is (not (s/valid? (:param-spec @(requiring-resolve 'me.workflows.land/land))
+                       {:feature "release" :branch "release/0.5.3"
+                        :worktree "/tmp/release"
+                        :head "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})))))
 
 (deftest landing-head-wrapper-refuses-review-drift
   (let [root (test-support/temp-dir "landing-reviewed-head")]
@@ -103,11 +107,14 @@
                   {:branch "feature/reviewed-head" :head head})
             argv (assoc argv (dec (count argv)) "exit 0")]
         (is (zero? (:exit (run-command root argv))))
-        (spit (io/file root "file") "changed")
-        (test-support/run-git! root "commit" "-am" "changed")
-        (let [drift (run-command root argv)]
-          (is (not (zero? (:exit drift))))
-          (is (str/includes? (:output drift) "reviewed HEAD changed"))))
+        (let [mutating-argv (assoc argv (dec (count argv))
+                                   "git commit --allow-empty -m drift >/dev/null")
+              post-check (run-command root mutating-argv)]
+          (is (not (zero? (:exit post-check))))
+          (is (str/includes? (:output post-check) "reviewed HEAD changed")))
+        (let [pre-check (run-command root argv)]
+          (is (not (zero? (:exit pre-check))))
+          (is (str/includes? (:output pre-check) "reviewed HEAD changed"))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest basic-review-resolution-is-bound-to-the-frozen-head
@@ -142,21 +149,25 @@
         (test-support/with-runtime
           (fn [rt _]
             (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
-            (letfn [(review-params [run-id feature outcome]
+            (letfn [(review-params [run-id feature choice outcome]
                       (workflow/start! run-id definition (assoc params :feature feature))
                       (dotimes [_ 3]
                         (let [gate (first (workflow/ready run-id))]
                           (workflow/complete! run-id {:step (:id gate) :executor "fixture"})))
-                      (workflow/choose! run-id :accepted outcome)
+                      (workflow/choose! run-id choice outcome)
                       (attr-get (weaver/show rt (:id (first (workflow/ready run-id))))
                                 :code/params))]
               (let [mismatch (review-params
-                              "review-mismatch" "mismatch"
+                              "review-mismatch" "mismatch" :accepted
                               (assoc resolution :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))]
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                       (verify! mismatch))))
-              (let [matching (review-params "review-match" "match" resolution)]
-                (is (= resolution (verify! matching))))))))
+              (let [matching (review-params "review-match" "match" :accepted resolution)]
+                (is (= resolution (verify! matching))))
+              (let [invalidated (review-params "review-invalidated" "invalidated"
+                                               :invalidated {:reason "HEAD changed"})]
+                (is (= {:status "invalidated" :reason "HEAD changed" :head head}
+                       (verify! invalidated))))))))
       (finally (test-support/delete-tree! root)))))
 
 (deftest workspace-config-selects-the-release-definition

@@ -37,10 +37,15 @@
              {:source (:id source) :target target}))
     (when-not (= expected (select-keys params (keys expected)))
       (fail! "Handoff changed the recorded work identity" {:expected expected :params params}))
-    (when (and (= "land" target)
-               (not (support/non-blank-string? (:authorization request))))
-      (fail! "Landing handoff requires a reference to actual user authorization"
-             {:source (:id source)}))
+    (when (= "land" target)
+      (when-not (support/non-blank-string? (:authorization request))
+        (fail! "Landing handoff requires a reference to actual user authorization"
+               {:source (:id source)}))
+      (let [candidate (evidence/quality-head! expected)]
+        (when-not (= (:head params) (:head candidate))
+          (fail! "Landing handoff head does not match the validated candidate"
+                 {:source (:id source) :requested (:head params)
+                  :candidate candidate}))))
     (when (empty? (roots))
       (workflow/start! run-id (keyword target) params
                        {:root-attributes {"delivery/source" (:id source)
@@ -95,8 +100,9 @@
         step with workflow `{target}`, explicit `params`, and the receiving
         coordinator's `owner`. For Land also record `authorization`, a reference
         to the user's actual permission; a human label is not permission.
-        Carry card, feature, branch and worktree from the work record. For review,
-        supply review-target and a unique review-id. Commit and push first.
+        Carry card, feature, branch and worktree from the work record. For Land,
+        also supply `head` from the exact pushed quality-marked candidate. For
+        review, supply review-target and a unique review-id. Commit and push first.
 
         The next code gate starts or reuses `handoff-<this-step-id>` and persists
         acceptance here as `handoff/receipt`. Do not launch it separately. Engine

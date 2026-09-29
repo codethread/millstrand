@@ -109,8 +109,19 @@
        (fn [{:keys [branch]}]
          (land-support/sh-gate verify-pr-script "auto-run-verify-pr" branch))
        300 failure-instruction)
+      (workflow/step
+       :freeze-land-head "Carry the verified HEAD into repository Land" :self
+       :depends-on [:verify-pr]
+       (format-alpha/prose
+        "
+          Read the exact quality marker and require it still equals the pushed
+          branch HEAD verified by the preceding gate. When the autonomous landing
+          composition tells you to start `land-auto-<card>`, include that full
+          lowercase commit as Land's required `head` param. Never derive a newer
+          head or omit it from the repository workflow.
+        "))
       (workflow/call :land #'autonomous/autonomous-land {}
-                     :depends-on [:verify-pr]
+                     :depends-on [:freeze-land-head]
                      :title "Review and hand off autonomous landing")])))
 
 (workflow/defworkflow! auto-full-land
