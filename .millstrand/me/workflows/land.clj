@@ -20,6 +20,7 @@
 (s/def ::card ::non-blank-string)
 (s/def ::subject ::non-blank-string)
 (s/def ::reason ::non-blank-string)
+(s/def ::authorization ::non-blank-string)
 (s/def ::reviewer ::non-blank-string)
 (s/def ::sha
   (s/and ::non-blank-string
@@ -35,7 +36,8 @@
           :opt-un [::card ::pr-number ::reviewer]))
 (s/def ::land-params ::review-params)
 (s/def ::land-merge-params
-  (s/keys :req-un [::feature ::branch ::worktree ::head ::subject ::body ::pr-number]
+  (s/keys :req-un [::feature ::branch ::worktree ::head ::subject ::body ::pr-number
+                   ::authorization]
           :opt-un [::card ::reviewer]))
 (s/def ::land-abort-params
   (s/keys :req-un [::branch ::reason] :opt-un [::card]))
@@ -43,8 +45,8 @@
   (s/and (s/keys :req-un [::reason])
          #(every? #{:reason} (keys %))))
 (s/def ::land-merge-input
-  (s/and (s/keys :req-un [::pr-number ::subject ::body])
-         #(every? #{:pr-number :subject :body} (keys %))))
+  (s/and (s/keys :req-un [::pr-number ::subject ::body ::authorization])
+         #(every? #{:pr-number :subject :body :authorization} (keys %))))
 (s/def ::review-resolution-input
   (s/and (s/keys :req-un [::reviewer ::base ::head ::p1-p2 ::summary])
          #(every? #{:reviewer :base :head :p1-p2 :summary} (keys %))))
@@ -62,7 +64,7 @@
 (def ^:private land-merge-input
   "Describe the sign-off approval input."
   {:spec ::land-merge-input
-   :doc "The exact pull request and merge commit message approved for landing."})
+   :doc "The exact pull request, merge message, and actual authorization reference."})
 
 (defn- stage [name]
   {:attributes {"workflow/family" "land"
@@ -376,7 +378,8 @@
         the work card. Resources required through merge must be handled by the
         tracked executable `.millstrand/land-cleanup.sh`. Its failure stops
         cleanup and card completion.
-        Act on the user's existing authorization to land; no repeat approval is
+        Record the actual user authorization reference in the approval input; a
+        human label or actor name is not authorization. No repeat approval is
         needed. Approval covers the FIFO turn, unchanged-candidate validation,
         focused review, merge-commit landing, and cleanup. Request a user decision
         when the required repair changes the authorized scope or ownership; abort

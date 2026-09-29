@@ -94,7 +94,14 @@
     (is (not (s/valid? (:param-spec @(requiring-resolve 'me.workflows.land/land))
                        {:feature "release" :branch "release/0.5.3"
                         :worktree "/tmp/release"
-                        :head "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})))))
+                        :head "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})))
+    (let [merge-params {:feature "release" :branch "release/0.5.3"
+                        :worktree "/tmp/release" :head head :pr-number 42
+                        :subject "Release" :body "Preserve candidate"}
+          merge-spec (:param-spec @(requiring-resolve 'me.workflows.land/land-merge))]
+      (is (not (s/valid? merge-spec merge-params)))
+      (is (s/valid? merge-spec
+                    (assoc merge-params :authorization "user-message-42"))))))
 
 (deftest landing-head-wrapper-refuses-review-drift
   (let [root (test-support/temp-dir "landing-reviewed-head")]
