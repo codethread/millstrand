@@ -323,7 +323,9 @@
             (test-support/run-git! canonical "reset" "--hard" base)
             (spit fake-gh (str "#!/bin/sh\nprintf '%s\\n' '" merge-commit "'\n"))
             (is (.setExecutable fake-gh true))
-            (let [merge-argv (assoc argv 8 (str "git push origin " merge-commit ":refs/heads/main"))
+            (let [merge-argv (assoc argv 8
+                                    (str "test \"$4\" = feature/merge-parent\n"
+                                         "git push origin " merge-commit ":refs/heads/main"))
                   result (run-command feature merge-argv)]
               (is (zero? (:exit result)) (:output result)))
             (is (= base (str/trim (test-support/run-git! canonical "rev-parse" "HEAD"))))
