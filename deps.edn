@@ -74,10 +74,12 @@
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
         :main-opts ["-m" "millstrand.e2e"]}
+  ;; Keep workspace sources explicit: clj-kondo writes ignored generated hook
+  ;; sources under .millstrand/.clj-kondo while land-quality checks run in parallel.
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand"]}
+           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand/init.clj" ".millstrand/me"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand"]}
+               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand/init.clj" ".millstrand/me"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
