@@ -1,7 +1,6 @@
 (ns millstrand.ct.review-workflow-test
   "Exercise Millstrand's full review and development-workflow handoffs."
-  (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -15,25 +14,13 @@
             [millhouse.workflow :as workflow]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.ct.consumer-fixture :as consumer-fixture]
             [millstrand.spools.test-support :as test-support :refer [with-runtime]]
             [millstrand.test.alpha :as test-alpha]))
 
 (def ^:private work
   {:feature "feature-task" :branch "feature/review" :worktree "/tmp/review-fixture"})
 
-(def ^:private workspace-deps
-  (:deps (edn/read-string (slurp ".millstrand/deps.edn"))))
-(def ^:private review-world-deps
-  (pr-str
-   {:deps (update-vals workspace-deps
-                       #(if-let [root (:local/root %)]
-                          (let [root-file (io/file root)
-                                resolved-root (if (.isAbsolute root-file)
-                                                root-file
-                                                (io/file ".millstrand" root))]
-                            (assoc % :local/root
-                                   (.getCanonicalPath resolved-root)))
-                          %))}))
 (def ^:private review-world-init
   (str
    "(require '[millhouse.config.bootstrap :as codethread]\n"
@@ -107,12 +94,10 @@
      "   (reviewers/start! (current/runtime) "
      (pr-str (assoc request :git patch)) ")))"))))
 
-(deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
-         (get-in workspace-deps ['millhouse/harnesses :git/sha])))
+(deftest current-harnesses-review-policy-selects-in-a-disposable-world
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
-          :deps-edn review-world-deps
+          :deps-edn (consumer-fixture/deps-edn)
           :init-clj review-world-init
           :files
           {"me/agents/reviewers.clj" reviewer-source

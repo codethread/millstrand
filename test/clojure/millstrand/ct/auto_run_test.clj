@@ -1,7 +1,6 @@
 (ns millstrand.ct.auto-run-test
   "Prove repository auto-run activation in a disposable Weaver world."
   (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -11,6 +10,7 @@
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.ct.consumer-fixture :as consumer-fixture]
             [millstrand.spools.test-support :as test-support]
             [millstrand.test.alpha :as test-alpha]))
 
@@ -31,21 +31,10 @@
 (defn- world-options
   "Build an isolated world with the repository init and its pinned dependencies."
   []
-  (let [deps (:deps (edn/read-string (slurp (io/file workspace-root "deps.edn"))))]
-    {:storage :sqlite-file
-     :deps-edn
-     (pr-str
-      {:deps (update-vals deps
-                          #(if-let [root (:local/root %)]
-                             (let [root-file (io/file root)
-                                   resolved-root (if (.isAbsolute root-file)
-                                                   root-file
-                                                   (io/file workspace-root root))]
-                               (assoc % :local/root
-                                      (.getCanonicalPath resolved-root)))
-                             %))})
-     :init-clj (slurp (io/file workspace-root "init.clj"))
-     :files (workspace-files)}))
+  {:storage :sqlite-file
+   :deps-edn (consumer-fixture/deps-edn)
+   :init-clj (slurp (io/file workspace-root "init.clj"))
+   :files (workspace-files)})
 
 (defn- role-step
   "Return the materialized autonomous-delivery step with `role`."
