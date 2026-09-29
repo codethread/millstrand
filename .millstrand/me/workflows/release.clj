@@ -151,22 +151,23 @@
    (workflow/step
     :landing "Land the exact candidate without rewriting its commits" :self
     :depends-on [:freeze-candidate]
-    (format-alpha/prose
-     "
-       Start or reuse this repository's `land` workflow for the frozen branch,
-       worktree, and exact candidate HEAD from freeze-candidate. Omit its optional
-       card so release remains open. Drive its
-       local review, sign-off, FIFO turn, candidate-preserving preparation, and
-       merge-commit landing. Do not substitute squash, rebase merge, or a direct
-       push to main.
+    (fn [{:keys [version]}]
+      (format-alpha/prose
+       "
+         Start or reuse this repository's `land` workflow with feature
+         `release/{version}`, the frozen branch, worktree, and exact candidate
+         HEAD from freeze-candidate. Omit its optional card so release remains
+         open. Drive its local review, sign-off, FIFO turn, candidate-preserving
+         preparation, and merge-commit landing. Do not substitute squash, rebase
+         merge, or a direct push to main.
 
-       Complete this step only after local Land is done and origin/main contains
-       the frozen candidate HEAD unchanged. Record `release/land-receipt` here
-       with the exact `run-id`, Land root id, and `merge-commit`. The next code
-       gate verifies completed Land custody and the preserved merge parent. The
-       frozen evidence retains the canonical repository checkout needed for
-       publication after feature cleanup.
-     "))
+         Complete this step only after local Land is done and origin/main contains
+         the frozen candidate HEAD unchanged. Record `release/land-receipt` here
+         with the exact `run-id`, Land root id, and `merge-commit`. The next code
+         gate verifies completed Land custody and the preserved merge parent. The
+         frozen evidence retains the canonical repository checkout needed for
+         publication after feature cleanup.
+       " {:version version})))
    (workflow/gate
     :verify-landing "Verify completed candidate-preserving Land custody" :code
     :depends-on [:landing]

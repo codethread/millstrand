@@ -95,8 +95,16 @@
     (fn [{:keys [branch]}]
       (land-support/sh-gate land-support/land-quality-gate-script "land-quality" branch))
     5400 "Validate the actual pushed HEAD after resolution. Fix failures and clear gate/error to retry.")
+   (workflow/gate
+    :freeze-delivery-head "Freeze the final reviewed delivery HEAD" :code
+    :depends-on [:final-ci-green]
+    :attributes {"code/fn" "me.workflows.review-evidence/freeze-delivery!"
+                 "delivery/key" key-for
+                 "code/params" #(assoc (select-keys % [:branch :worktree])
+                                       :key (key-for %))}
+    "Persist the exact quality-gated HEAD that the delivery request must carry.")
    (workflow/checkpoint
-    :delivery "Select authorized delivery" :depends-on [:final-ci-green] :kind :agent
+    :delivery "Select authorized delivery" :depends-on [:freeze-delivery-head] :kind :agent
     :choices [{:key :land :label "User authorized landing"}
               {:key :report :label "Return validated work to the coordinator"}]
     :attributes {"workflow/instruction"
@@ -112,9 +120,10 @@
     (format-alpha/prose
      "
        Read the delivery checkpoint's recorded outcome, not a remembered prompt.
-       For land, prepare handoff/request with workflow=land, explicit params
-       including the exact quality-marked `head`, receiving owner, and the actual
-       user authorization reference. The launch gate reuses
+       For land, read `review/delivery` from the delivery checkpoint's code-gate
+       prerequisite and prepare handoff/request with workflow=land, explicit params
+       including that exact `head`, receiving owner, and the actual user
+       authorization reference. The launch gate reuses
        handoff-<this-step-id> and records acceptance.
 
        For report, record handoff/report with owner, evidence (the coordinator's

@@ -235,13 +235,37 @@
                       params {:card "exact-card" :feature "Exact candidate"
                               :branch branch :worktree (.getPath checkout)}]
                   (spit (io/file checkout marker) (str head "\n"))
-                  (is (= head (:head (start! params))))
-                  (is (= head (:head (attr-get (workflow/current-root "land-auto-exact-card")
-                                               :workflow/context))))
-                  (workflow/start! "land-auto-mismatch-card" :land
-                                   (assoc params :card "mismatch-card"
-                                          :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
-                  (is (thrown-with-msg?
-                       clojure.lang.ExceptionInfo #"does not match"
-                       (start! (assoc params :card "mismatch-card")))))
+                  (letfn [(prepare-start! [run-id key verified]
+                            (workflow/start!
+                             run-id
+                             (workflow/workflow
+                              "Start proof"
+                              (workflow/step :verified "Record verified PR" :self)
+                              (workflow/gate
+                               :start "Start Land" :code :depends-on [:verified]
+                               :attributes {"code/fn" "me.auto-run-workflows/start-land!"
+                                            "delivery/key" key}))
+                             {})
+                            (workflow/complete!
+                             run-id {:attributes {"shell/output"
+                                                  (str "auto-run verified head: "
+                                                       verified)}}))]
+                    (prepare-start! "start-exact" "exact-key" head)
+                    (is (= head (:head (start! (assoc params :key "exact-key")))))
+                    (is (= head (:head (attr-get (workflow/current-root
+                                                  "land-auto-exact-card")
+                                                 :workflow/context))))
+                    (prepare-start! "start-stale" "stale-key"
+                                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                    (is (thrown-with-msg?
+                         clojure.lang.ExceptionInfo #"differs from verified PR"
+                         (start! (assoc params :card "stale-card" :key "stale-key"))))
+                    (workflow/start! "land-auto-mismatch-card" :land
+                                     (assoc params :card "mismatch-card"
+                                            :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+                    (prepare-start! "start-mismatch" "mismatch-key" head)
+                    (is (thrown-with-msg?
+                         clojure.lang.ExceptionInfo #"does not match"
+                         (start! (assoc params :card "mismatch-card"
+                                        :key "mismatch-key"))))))
                 (finally (test-support/delete-tree! root))))))))))

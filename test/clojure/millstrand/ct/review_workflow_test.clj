@@ -445,10 +445,35 @@
             (workflow/register-workflow! :land-abort 'me.workflows.land/land-abort)
             (workflow/register-workflow! :land-merge 'me.workflows.land/land-merge)
             (workflow/register-workflow! :land 'me.workflows.land/land)
-            (let [parent
+            (workflow/start!
+             "freeze-delivery"
+             (workflow/workflow
+              "Freeze delivery proof"
+              (workflow/step :quality "Final quality" :self)
+              (workflow/gate
+               :freeze "Freeze delivery" :code :depends-on [:quality]
+               :attributes {"code/fn" "me.workflows.review-evidence/freeze-delivery!"
+                            "delivery/key" "freeze-delivery-fixture"
+                            "code/params" {:key "freeze-delivery-fixture"
+                                           :branch branch
+                                           :worktree (.getPath checkout)}}))
+             {})
+            (workflow/complete!
+             "freeze-delivery"
+             {:attributes {"shell/output"
+                           (str "land quality gate: passed at unchanged " branch
+                                " HEAD " head)}})
+            (let [freeze! (requiring-resolve
+                           'me.workflows.review-evidence/freeze-delivery!)
+                  delivery (freeze! {:key "freeze-delivery-fixture"
+                                     :branch branch :worktree (.getPath checkout)})
+                  parent
                   (workflow/workflow
                    "Parent"
+                   (workflow/step :freeze "Freeze delivery" :self
+                                  :attributes {"review/delivery" delivery})
                    (workflow/checkpoint :decision "Select delivery"
+                                        :depends-on [:freeze]
                                         :choices [{:key :land :label "Land"}])
                    (workflow/step
                     :prepare "Prepare delivery" :self :depends-on [:decision]
@@ -459,7 +484,9 @@
                     :attributes {"code/fn" "me.workflows.handoff/deliver!"
                                  "delivery/key" "land-handoff-fixture"
                                  "code/params" {:key "land-handoff-fixture"}}))]
+              (is (= head (:head delivery)))
               (workflow/start! "land-handoff" parent params)
+              (workflow/complete! "land-handoff" {})
               (workflow/choose! "land-handoff" :land {})
               (let [prepare (:id (first (workflow/ready "land-handoff")))
                     request {:workflow "land"

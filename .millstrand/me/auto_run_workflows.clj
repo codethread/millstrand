@@ -52,13 +52,27 @@
        "case \"$body\" in\n"
        "  *'## Summary'*'## Walkthrough'*'## Verification'*) ;;\n"
        "  *) echo \"PR is missing its required review package\" >&2; exit 1 ;;\n"
-       "esac\n"))
+       "esac\n"
+       "printf 'auto-run verified head: %s\\n' \"$head\"\n"))
+
+(defn- start-key
+  [{:keys [card]}]
+  (str "auto-land-start/" card))
 
 (defn start-land!
   "Start or verify the exact repository Land run for autonomous delivery."
-  [{:keys [card feature branch worktree]}]
+  [{:keys [key card feature branch worktree]}]
   (let [rt (current/runtime)
-        {:keys [head]} (evidence/quality-head! {:branch branch :worktree worktree})
+        gate (evidence/gate! "me.auto-run-workflows/start-land!" key)
+        verification (evidence/dependency! gate)
+        output (or (attr-get verification :shell/output) "")
+        verified-head (second (re-find #"(?m)^auto-run verified head: ([0-9a-f]{40})$"
+                                       output))
+        {:keys [head] :as current}
+        (evidence/quality-head! {:branch branch :worktree worktree})
+        _ (when-not (= verified-head head)
+            (fail! "Autonomous Land head differs from verified PR evidence"
+                   {:verified verified-head :current current}))
         run-id (str "land-auto-" card)
         expected {:card card :feature feature :branch branch
                   :worktree worktree :head head}
@@ -138,7 +152,9 @@
        :start-land "Start repository Land at the verified HEAD" :code
        :depends-on [:verify-pr]
        :attributes {"code/fn" "me.auto-run-workflows/start-land!"
-                    "code/params" #(select-keys % [:card :feature :branch :worktree])}
+                    "delivery/key" start-key
+                    "code/params" #(assoc (select-keys % [:card :feature :branch :worktree])
+                                          :key (start-key %))}
        "Start or verify land-auto-<card> with the exact pushed quality-marked HEAD before custody handoff.")
       (workflow/call :land #'autonomous/autonomous-land {}
                      :depends-on [:start-land]

@@ -354,7 +354,11 @@
     (is (re-find #"CHANGELOG.md"
                  ((get-in (step :update-changelog)
                           [:attributes "workflow/instruction"])
-                  {:version "0.5.3" :branch "release/0.5.3"})))))
+                  {:version "0.5.3" :branch "release/0.5.3"})))
+    (is (str/includes? ((get-in (step :landing)
+                                [:attributes "workflow/instruction"])
+                        {:version "0.5.3"})
+                       "`release/0.5.3`"))))
 
 (deftest release-candidate-requires-a-distinct-canonical-main-checkout
   (let [root (test-support/temp-dir "release-canonical")]

@@ -22,7 +22,7 @@
   routed. A mismatched request fails rather than silently launching more work.
   Acceptance means the workflow engine accepted custody, not that review or
   landing is finished. The named coordinator retains driving responsibility."
-  [gate target]
+  [gate target & [reviewed-head]]
   (let [rt (current/runtime)
         source (evidence/dependency! gate)
         request (evidence/data (attr-get source :handoff/request))
@@ -37,10 +37,14 @@
              {:source (:id source) :target target}))
     (when-not (= expected (select-keys params (keys expected)))
       (fail! "Handoff changed the recorded work identity" {:expected expected :params params}))
-    (when (and (= "land" target)
-               (not (support/non-blank-string? (:authorization request))))
-      (fail! "Landing handoff requires a reference to actual user authorization"
-             {:source (:id source)}))
+    (when (= "land" target)
+      (when-not (support/non-blank-string? (:authorization request))
+        (fail! "Landing handoff requires a reference to actual user authorization"
+               {:source (:id source)}))
+      (when (and reviewed-head (not= reviewed-head (:head params)))
+        (fail! "Landing handoff head does not match final review evidence"
+               {:source (:id source) :reviewed reviewed-head
+                :requested (:head params)})))
     (when (empty? (roots))
       (when (= "land" target)
         (let [candidate (evidence/quality-head! expected)]
@@ -72,7 +76,12 @@
         decision (evidence/dependency! source)
         choice (attr-get decision :workflow/outcome)]
     (case choice
-      "land" (accept-request! gate "land")
+      "land" (let [review-proof (evidence/dependency! decision)
+                   reviewed (evidence/data (attr-get review-proof :review/delivery))]
+               (when-not (support/non-blank-string? (:head reviewed))
+                 (fail! "Landing handoff lacks final reviewed HEAD evidence"
+                        {:source (:id source) :review-proof (:id review-proof)}))
+               (accept-request! gate "land" (:head reviewed)))
       "report" (let [receipt (evidence/data (attr-get source :handoff/report))]
                  (when-not (every? support/non-blank-string?
                                    ((juxt :owner :evidence :head) receipt))
