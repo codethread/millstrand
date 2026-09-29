@@ -118,22 +118,33 @@
 (defn- candidate-merge-argv
   [{:keys [pr-number subject body branch head]}]
   (support/sh-gate
-   (require-head-script
-    (str "pr_number=$3\n"
-         "subject=$4\n"
-         "body=$5\n"
-         "merge_script=$6\n"
-         "sh -c \"$merge_script\" land-merge \"$pr_number\" \"$subject\" \"$body\" \"$branch\" merge\n"
-         "git fetch origin refs/heads/main:refs/remotes/origin/main\n"
-         "merge_commit=$(gh pr view \"$pr_number\" --json mergeCommit --jq '.mergeCommit.oid // empty')\n"
-         "[ -n \"$merge_commit\" ] || { echo \"land: merged PR has no merge commit\" >&2; exit 1; }\n"
-         "parents=$(git show -s --format=%P \"$merge_commit\")\n"
-         "set -- $parents\n"
-         "[ \"$#\" -eq 2 ] || { echo \"land: expected a two-parent merge commit: $merge_commit\" >&2; exit 1; }\n"
-         "case \" $parents \" in *\" $expected \"*) ;; *) echo \"land: merge commit does not preserve reviewed HEAD $expected\" >&2; exit 1 ;; esac\n"
-         "[ \"$(git merge-base \"$merge_commit\" origin/main)\" = \"$merge_commit\" ] || { echo \"land: merge commit is not on origin/main\" >&2; exit 1; }\n"))
-   "millstrand-candidate-merge" branch head (str pr-number) subject body
-   support/land-merge-script))
+   (str "set -eu\n"
+        "pr_number=$1\n"
+        "expected=$2\n"
+        "subject=$3\n"
+        "body=$4\n"
+        "merge_script=$5\n"
+        "branch=$6\n"
+        "require_head() {\n"
+        "  actual=$(git rev-parse HEAD)\n"
+        "  [ \"$actual\" = \"$expected\" ] || {\n"
+        "    echo \"land: reviewed HEAD changed: expected $expected, found $actual\" >&2\n"
+        "    exit 1\n"
+        "  }\n"
+        "}\n"
+        "require_head\n"
+        "sh -c \"$merge_script\" land-merge \"$pr_number\" \"$subject\" \"$body\" \"$branch\" merge\n"
+        "git fetch origin refs/heads/main:refs/remotes/origin/main\n"
+        "merge_commit=$(gh pr view \"$pr_number\" --json mergeCommit --jq '.mergeCommit.oid // empty')\n"
+        "[ -n \"$merge_commit\" ] || { echo \"land: merged PR has no merge commit\" >&2; exit 1; }\n"
+        "parents=$(git show -s --format=%P \"$merge_commit\")\n"
+        "set -- $parents\n"
+        "[ \"$#\" -eq 2 ] || { echo \"land: expected a two-parent merge commit: $merge_commit\" >&2; exit 1; }\n"
+        "case \" $parents \" in *\" $expected \"*) ;; *) echo \"land: merge commit does not preserve reviewed HEAD $expected\" >&2; exit 1 ;; esac\n"
+        "[ \"$(git merge-base \"$merge_commit\" origin/main)\" = \"$merge_commit\" ] || { echo \"land: merge commit is not on origin/main\" >&2; exit 1; }\n"
+        "require_head\n")
+   "millstrand-candidate-merge" (str pr-number) head subject body
+   support/land-merge-script branch))
 
 (defn- review-key
   [{:keys [feature head]}]

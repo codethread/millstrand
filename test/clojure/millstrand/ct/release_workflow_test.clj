@@ -83,8 +83,8 @@
     (is (= ["release/0.5.3" head "preserve"] (subvec prepare-argv 4 7)))
     (is (every? #(str/includes? (nth % 2) "reviewed HEAD changed")
                 [review-argv prepare-argv]))
-    (is (= ["release/0.5.3" head "42" "Subject" "Body"]
-           (subvec merge-argv 4 9)))
+    (is (= ["42" head "Subject" "Body" "release/0.5.3"]
+           (conj (subvec merge-argv 4 8) (last merge-argv))))
     (is (str/includes? (nth merge-argv 2)
                        "merge commit does not preserve reviewed HEAD"))
     (is (= "me.workflows.land/land-abort"
@@ -157,7 +157,7 @@
                      :branch "feature/merge-parent" :head head})
               argv (-> argv
                        (assoc 2 (str "PATH=\"$PWD:$PATH\"\n" (nth argv 2)))
-                       (assoc (dec (count argv)) "exit 0"))]
+                       (assoc 8 "exit 0"))]
           (test-support/run-git! checkout "checkout" "main")
           (test-support/run-git! checkout "merge" "--no-ff" "feature/merge-parent"
                                  "-m" "merge candidate")
