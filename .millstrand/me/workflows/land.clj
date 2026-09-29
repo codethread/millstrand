@@ -124,19 +124,14 @@
         checkpoint (evidence/dependency! gate)
         choice (attr-get checkpoint :workflow/outcome)
         resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))]
-    (case choice
-      "accepted"
-      (let [frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
-        (when-not (and (= head (:head frozen) (:head resolution))
-                       (= (:base frozen) (:base resolution)))
-          (fail! "Basic review resolution does not match the frozen candidate"
-                 {:expected-head head :frozen frozen :resolution resolution}))
-        (select-keys resolution [:base :head :reviewer :p1-p2 :summary]))
-
-      "invalidated"
-      {:status "invalidated" :reason (:reason resolution) :head head}
-
-      (fail! "Unknown review resolution" {:choice choice}))))
+    (when-not (= "accepted" choice)
+      (fail! "Review verification requires an accepted resolution" {:choice choice}))
+    (let [frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
+      (when-not (and (= head (:head frozen) (:head resolution))
+                     (= (:base frozen) (:base resolution)))
+        (fail! "Basic review resolution does not match the frozen candidate"
+               {:expected-head head :frozen frozen :resolution resolution}))
+      (select-keys resolution [:base :head :reviewer :p1-p2 :summary]))))
 
 (defn- review-prompt
   [{:keys [branch head worktree reviewer]}]
@@ -160,23 +155,15 @@
      records the result.
    " {:reviewer reviewer :branch branch :head head :worktree worktree}))
 
-(workflow/defworkflow review
-  "Run one configured review agent, then require coordinator P1/P2 resolution."
-  {:entrypoints #{:start :call}
-   :param-spec ::review-params
-   :defaults {:reviewer "reviewer"}
-   :param-docs {:feature "Work identity under review."
-                :branch "Pushed feature branch reviewed against origin/main."
-                :worktree "Absolute path to the clean feature worktree."
-                :head "Exact pushed branch HEAD supplied to review and landing."
-                :card "Optional kanban card to keep in progress during agent review."
-                :pr-number "Optional pull request identity carried with the work."
-                :reviewer "Single configured agent seat; defaults to reviewer."}}
-  (workflow/workflow
-   (fn [{:keys [branch]}] (str "Review: " branch))
-   {:attributes {"workflow/family" "review"}}
-   (support/card-gate :progress-card "Keep the optional card in progress during agent review" []
-                      "millhouse.land.card-actions/rework-card!")
+(def ^:private accepted-review-choice
+  {:key :accepted
+   :label "Accept the resolved review"
+   :input review-resolution-input})
+
+(defn- review-steps
+  [dependencies choices]
+  [(support/card-gate :progress-card "Keep the optional card in progress during agent review"
+                      dependencies "millhouse.land.card-actions/rework-card!")
    (support/shell-gate
     :review-quality "Validate the pushed reviewed HEAD" [:progress-card]
     review-quality-argv 5400
@@ -198,12 +185,7 @@
     :resolve-review "Resolve and record the review findings"
     :depends-on [:review-agent]
     :kind :agent
-    :choices [{:key :accepted
-               :label "Accept the resolved review"
-               :input review-resolution-input}
-              {:key :invalidated
-               :label "Candidate changed; return to abort this Land run"
-               :input land-abort-reason-input}]
+    :choices choices
     :attributes
     {"workflow/instruction"
      (format-alpha/prose
@@ -214,9 +196,9 @@
         Choose `accepted` only with the reviewer seat, full base and head SHAs, the
         head equal to the workflow's frozen reviewed HEAD, `p1-p2` equal to `none`
         or `resolved`, and a concise resolution summary.
-        The checkpoint retains that evidence. A HEAD change invalidates this run.
-        Restore the frozen commit, or choose `invalidated`; the parent Land
-        sign-off must then abort so a fresh run can review the repaired HEAD.
+        The checkpoint retains that evidence. In a Land run, a HEAD change
+        invalidates the run: restore the frozen commit or choose `invalidated` to
+        route directly to the abort continuation before queue admission.
 
         A supplemental review needs a live, dedicated review target. Do not resume
         a reviewer whose executor gate has already closed: native continuation
@@ -232,7 +214,24 @@
                  "code/params" (fn [{:keys [branch head worktree] :as params}]
                                  {:key (review-key params)
                                   :branch branch :head head :worktree worktree})}
-    "Require the accepted review base and HEAD to equal the quality-marked pushed candidate.")))
+    "Require the accepted review base and HEAD to equal the quality-marked pushed candidate.")])
+
+(workflow/defworkflow review
+  "Run one configured review agent, then require coordinator P1/P2 resolution."
+  {:entrypoints #{:start :call}
+   :param-spec ::review-params
+   :defaults {:reviewer "reviewer"}
+   :param-docs {:feature "Work identity under review."
+                :branch "Pushed feature branch reviewed against origin/main."
+                :worktree "Absolute path to the clean feature worktree."
+                :head "Exact pushed branch HEAD supplied to review and landing."
+                :card "Optional kanban card to keep in progress during agent review."
+                :pr-number "Optional pull request identity carried with the work."
+                :reviewer "Single configured agent seat; defaults to reviewer."}}
+  (apply workflow/workflow
+         (fn [{:keys [branch]}] (str "Review: " branch))
+         {:attributes {"workflow/family" "review"}}
+         (review-steps [] [accepted-review-choice])))
 
 (workflow/defworkflow land-abort
   "Record an aborted landing and leave the work available for follow-up."
@@ -324,43 +323,50 @@
                 :card "Optional kanban card to finish after landing."
                 :pr-number "Existing draft or ready PR; omit to resolve from the branch."
                 :reviewer "Single configured review agent seat; defaults to reviewer."}}
-  (workflow/workflow
-   (fn [{:keys [branch]}] (str "Land: " branch))
-   (stage "ready")
-   (workflow/step :resolve-pr "Resolve and verify the pull request" :self
-                  (fn [{:keys [pr-number branch]}]
-                    (format-alpha/prose
-                     "
-                       {pr}Push the clean `{branch}` branch. Reuse its open PR,
-                       draft or ready; create one only if absent. Confirm the PR
-                       head is `{branch}` and its base is `main`.
-                     " {:pr (if pr-number (str "Use PR #" pr-number ". ") "")
-                        :branch branch})))
-   (workflow/call :review #'review {} :depends-on [:resolve-pr]
-                  :title "Complete required one-seat review")
-   (workflow/checkpoint :signoff "Authorize this work to land" :depends-on [:review]
-                        :kind :agent
-                        :choices [{:key :approved :label "Approve and join the queue"
-                                   :next :land-merge :input land-merge-input}
-                                  {:key :abort :label "Abort landing"
-                                   :next :land-abort :input land-abort-reason-input}]
-                        :attributes
-                        {"workflow/instruction"
+  (let [resolve-pr
+        (workflow/step :resolve-pr "Resolve and verify the pull request" :self
+                       (fn [{:keys [pr-number branch]}]
                          (format-alpha/prose
                           "
-                            Read `strand workflow choices <run-id>` for choice inputs.
-                            Before approval, remove owned scratch files and stop
-                            owned processes by exact PID or session name. Record
-                            retained resources and their owners on the work card.
-                            Resources required through merge must be handled by
-                            the tracked executable `.millstrand/land-cleanup.sh`.
-                            Its failure stops cleanup and card completion.
-                            If review returned `invalidated`, choose abort; approval
-                            is forbidden for that run. Otherwise act on the user's
-                            existing authorization to land; no repeat approval is
-                            needed. Approval covers the FIFO turn,
-                            unchanged-candidate validation, focused review, merge-commit
-                            landing, and cleanup. Request a user decision when the
-                            required repair changes the authorized scope or ownership;
-                            abort before merge if that decision changes the plan.
-                          " {})})))
+                            {pr}Push the clean `{branch}` branch. Reuse its open PR,
+                            draft or ready; create one only if absent. Confirm the PR
+                            head is `{branch}` and its base is `main`.
+                          " {:pr (if pr-number (str "Use PR #" pr-number ". ") "")
+                             :branch branch})))
+        invalidated-choice
+        {:key :invalidated
+         :label "Candidate changed; abort this Land run"
+         :next :land-abort
+         :input land-abort-reason-input}
+        signoff
+        (workflow/checkpoint
+         :signoff "Authorize this work to land" :depends-on [:verify-resolution]
+         :kind :agent
+         :choices [{:key :approved :label "Approve and join the queue"
+                    :next :land-merge :input land-merge-input}
+                   {:key :abort :label "Abort landing"
+                    :next :land-abort :input land-abort-reason-input}]
+         :attributes
+         {"workflow/instruction"
+          (format-alpha/prose
+           "
+             Read `strand workflow choices <run-id>` for choice inputs.
+             Before approval, remove owned scratch files and stop owned processes
+             by exact PID or session name. Record retained resources and their
+             owners on the work card. Resources required through merge must be
+             handled by the tracked executable `.millstrand/land-cleanup.sh`.
+             Its failure stops cleanup and card completion.
+             Act on the user's existing authorization to land; no repeat approval
+             is needed. Approval covers the FIFO turn, unchanged-candidate
+             validation, focused review, merge-commit landing, and cleanup.
+             Request a user decision when the required repair changes the
+             authorized scope or ownership; abort before merge if that decision
+             changes the plan.
+           " {})})]
+    (apply workflow/workflow
+           (fn [{:keys [branch]}] (str "Land: " branch))
+           (stage "ready")
+           (concat [resolve-pr]
+                   (review-steps [:resolve-pr]
+                                 [accepted-review-choice invalidated-choice])
+                   [signoff]))))

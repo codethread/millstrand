@@ -159,16 +159,26 @@
        push to main.
 
        Complete this step only after local Land is done and origin/main contains
-       the frozen candidate HEAD unchanged. Record the Land run, PR, merge commit,
-       and cleanup receipt here. The frozen evidence retains the canonical
-       repository checkout needed for publication after feature cleanup.
+       the frozen candidate HEAD unchanged. Record `release/land-receipt` here
+       with the exact `run-id`, Land root id, and `merge-commit`. The next code
+       gate verifies completed Land custody and the preserved merge parent. The
+       frozen evidence retains the canonical repository checkout needed for
+       publication after feature cleanup.
      "))
    (workflow/gate
-    :approve "Approve the exact landed release candidate" :human
+    :verify-landing "Verify completed candidate-preserving Land custody" :code
     :depends-on [:landing]
+    :attributes {"code/fn" "me.workflows.release-evidence/landed!"
+                 "delivery/key" #(handoff/key-for "release-landing" %)
+                 "code/params" #(hash-map :version (:version %)
+                                          :key (handoff/key-for "release-landing" %))}
+    "Require the exact candidate's completed local Land run and merge commit before approval.")
+   (workflow/gate
+    :approve "Approve the exact landed release candidate" :human
+    :depends-on [:verify-landing]
     (format-alpha/prose
      "
-       Read freeze-candidate's code/result. Ask the user to approve that exact
+       Read verify-landing's code/result. Ask the user to approve that exact
        version and candidate SHA for publication. Record release/approval here
        with version, head and authorization (the actual conversation reference).
        A human gate label or actor string is not authorization. A changed

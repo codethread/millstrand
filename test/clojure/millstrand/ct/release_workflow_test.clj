@@ -5,8 +5,10 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.walk :as walk]
+            [me.workflows.evidence :as evidence]
             [me.workflows.release-evidence :as release]
             [millhouse.workflow :as workflow]
+            [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get]]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.spools.test-support :as test-support]
@@ -53,12 +55,14 @@
 
 (deftest release-graph-orders-mutation-validation-and-publication
   (is (= [:preflight :bump-version :update-changelog :quality :pin-homebrew
-          :build-identity :freeze-candidate :landing :approve :publish :verify-remote]
+          :build-identity :freeze-candidate :landing :verify-landing :approve
+          :publish :verify-remote]
          (mapv :id (:steps release-definition))))
   (is (= ["sh" ".millstrand/land-quality.sh"]
          (get-in (step :quality) [:attributes "shell/argv"])))
   (is (= "human"
          (get-in (step :approve) [:attributes "workflow/gate"])))
+  (is (= [:verify-landing] (:depends-on (step :approve))))
   (is (= [:approve] (:depends-on (step :publish)))))
 
 (deftest repository-land-preserves-the-reviewed-candidate-commits
@@ -163,12 +167,32 @@
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                       (verify! mismatch))))
               (let [matching (review-params "review-match" "match" :accepted resolution)]
-                (is (= resolution (verify! matching))))
-              (let [invalidated (review-params "review-invalidated" "invalidated"
-                                               :invalidated {:reason "HEAD changed"})]
-                (is (= {:status "invalidated" :reason "HEAD changed" :head head}
-                       (verify! invalidated))))))))
+                (is (= resolution (verify! matching))))))))
       (finally (test-support/delete-tree! root)))))
+
+(deftest invalidated-land-review-routes-directly-to-abort
+  (test-support/with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+      (workflow/register-workflow! :land-abort 'me.workflows.land/land-abort)
+      (workflow/register-workflow! :land-merge 'me.workflows.land/land-merge)
+      (workflow/start! "invalidated-land"
+                       @(requiring-resolve 'me.workflows.land/land)
+                       {:feature "invalidated" :branch "feature/invalidated"
+                        :worktree "/tmp/invalidated"
+                        :head "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+      (dotimes [_ 4]
+        (let [ready (first (workflow/ready "invalidated-land"))]
+          (workflow/complete! "invalidated-land"
+                              {:step (:id ready) :by-identity "fixture"})))
+      (workflow/choose! "invalidated-land" :invalidated
+                        {:reason "Candidate HEAD changed"})
+      (let [ready (workflow/ready "invalidated-land")]
+        (is (= ["Pause unfinished work"] (mapv :title ready)))
+        (is (not-any? #(= "Authorize this work to land" (:title %))
+                      (:strands (graph/subgraph rt
+                                                [(:id (workflow/current-root
+                                                       "invalidated-land"))]))))))))
 
 (deftest workspace-config-selects-the-release-definition
   (let [selection (workspace-release-selection)
@@ -236,18 +260,21 @@
 (deftest release-publication-requires-exact-approval-and-preserved-landing
   (let [root (test-support/temp-dir "release-candidate")
         origin (io/file root "origin.git")
-        checkout (doto (io/file root "checkout") .mkdirs)
+        canonical (doto (io/file root "canonical") .mkdirs)
+        checkout (io/file root "checkout")
         params {:version "0.5.3" :branch "release/0.5.3" :worktree (.getPath checkout)}]
     (try
       (test-support/run-git! root "init" "--bare" (.getPath origin))
-      (test-support/run-git! checkout "init" "-b" "release/0.5.3")
-      (test-support/run-git! checkout "config" "user.name" "Fixture")
-      (test-support/run-git! checkout "config" "user.email" "fixture@example.invalid")
-      (spit (io/file checkout "file") "base")
-      (test-support/run-git! checkout "add" ".")
-      (test-support/run-git! checkout "commit" "-m" "base")
-      (test-support/run-git! checkout "remote" "add" "origin" (.getPath origin))
-      (test-support/run-git! checkout "push" "origin" "HEAD:main")
+      (test-support/run-git! canonical "init" "-b" "main")
+      (test-support/run-git! canonical "config" "user.name" "Fixture")
+      (test-support/run-git! canonical "config" "user.email" "fixture@example.invalid")
+      (spit (io/file canonical "file") "base")
+      (test-support/run-git! canonical "add" ".")
+      (test-support/run-git! canonical "commit" "-m" "base")
+      (test-support/run-git! canonical "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! canonical "push" "origin" "HEAD:main")
+      (test-support/run-git! canonical "worktree" "add" "-b" "release/0.5.3"
+                             (.getPath checkout) "main")
       (spit (io/file checkout "file") "release")
       (test-support/run-git! checkout "commit" "-am" "release fixture")
       (test-support/with-runtime
@@ -258,12 +285,54 @@
           ;; candidate identities while this test drives authorization boundaries.
           (dotimes [_ 6] (workflow/complete! "release-fixture" {:by-identity "fixture"}))
           (let [candidate (release/candidate! params)
-                candidate-gate (:id (first (workflow/ready "release-fixture")))]
+                candidate-gate (:id (first (workflow/ready "release-fixture")))
+                land-proof (workflow/workflow
+                            "Land proof"
+                            {:attributes {"land/stage" "merge"}}
+                            (workflow/step :done "Complete Land custody" :self))]
             (workflow/complete! "release-fixture"
                                 {:by-identity "fixture" :attributes {"code/result" candidate}})
             (is (= "Land the exact candidate without rewriting its commits"
                    (:title (first (workflow/ready "release-fixture")))))
-            (workflow/complete! "release-fixture" {:by-identity "fixture"})
+            (workflow/start! "release-land-proof" land-proof
+                             {:branch (:branch candidate) :head (:head candidate)}
+                             {:root-attributes {"workflow/definition-name" "land"}})
+            (let [land-root (:id (workflow/current-root "release-land-proof"))]
+              (workflow/complete! "release-land-proof" {:by-identity "fixture"})
+              (workflow/complete!
+               "release-fixture"
+               {:by-identity "fixture"
+                :attributes {"release/land-receipt"
+                             {:run-id "release-land-proof" :root land-root
+                              :merge-commit (:head candidate)}}})
+              (let [landing-step (:id (evidence/dependency!
+                                       (weaver/show rt
+                                                    (:id (first (workflow/ready
+                                                                 "release-fixture"))))))
+                    landed-params (attr-get (weaver/show rt
+                                                         (:id (first (workflow/ready
+                                                                      "release-fixture"))))
+                                            :code/params)]
+                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"merge parent"
+                                      (release/landed! landed-params)))
+                (test-support/run-git! canonical "merge" "--no-ff" (:head candidate)
+                                       "-m" "Merge release candidate")
+                (let [merge-commit (str/trim (test-support/run-git! canonical
+                                                                    "rev-parse" "HEAD"))]
+                  (test-support/run-git! canonical "push" "origin" "HEAD:main")
+                  (test-support/run-git! canonical "worktree" "remove" "--force"
+                                         (.getPath checkout))
+                  (is (not (.exists checkout)))
+                  (weaver/update! rt landing-step
+                                  {:attributes {:release/land-receipt
+                                                {:run-id "release-land-proof"
+                                                 :root land-root
+                                                 :merge-commit merge-commit}}})
+                  (let [landed (release/landed! landed-params)]
+                    (is (= (:head candidate) (:head landed)))
+                    (workflow/complete! "release-fixture"
+                                        {:by-identity "fixture"
+                                         :attributes {"code/result" landed}})))))
             (let [approval-gate (:id (first (workflow/ready "release-fixture")))]
               (workflow/complete! "release-fixture" {:by-identity "fixture"})
               (let [publish-gate (weaver/show rt (:id (first (workflow/ready "release-fixture"))))
@@ -271,13 +340,9 @@
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"actual user approval"
                                       (release/publish! publish-params)))
                 (weaver/update! rt approval-gate
-                                {:attributes {:release/approval {:version "0.5.3" :head (:head candidate)
-                                                                 :authorization "fixture-user-message"}}})
-                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"has not preserved"
-                                      (release/publish! publish-params)))
-                ;; Simulate the repository workflow's identity-preserving landing
-                ;; in a local bare fixture.
-                (test-support/run-git! checkout "push" "origin" "HEAD:main")
+                                {:attributes {:release/approval
+                                              {:version "0.5.3" :head (:head candidate)
+                                               :authorization "fixture-user-message"}}})
                 (let [receipt (release/publish! publish-params)]
                   (is (= (:head candidate) (:head receipt)))
                   (is (= receipt (release/publish! publish-params)))
@@ -286,7 +351,7 @@
                   (let [verify-params (attr-get (weaver/show rt (:id (first (workflow/ready "release-fixture"))))
                                                 :code/params)]
                     (is (= receipt (release/verify-remote! verify-params)))
-                    (test-support/run-git! checkout "push" "origin" ":refs/tags/v0.5.3")
+                    (test-support/run-git! canonical "push" "origin" ":refs/tags/v0.5.3")
                     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                           (release/verify-remote! verify-params)))))
                 (is (some? (attr-get (weaver/show rt candidate-gate) :code/result))))))))

@@ -5,6 +5,7 @@
             [me.workflows.support :as support]
             [millhouse.land.support :as land-support]
             [millstrand.api.current.alpha :as current]
+            [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
 
@@ -15,6 +16,57 @@
          :version version
          :release-commit (evidence/git! worktree "rev-parse" "HEAD^")
          :repository (land-support/canonical-worktree worktree)))
+
+(defn landed!
+  "Require a completed repository Land run and its candidate-preserving merge."
+  [{:keys [key version]}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.workflows.release-evidence/landed!" key)
+        landing-step (evidence/dependency! gate)
+        candidate-step (evidence/dependency! landing-step)
+        candidate (evidence/data (attr-get candidate-step :code/result))
+        receipt (evidence/data (attr-get landing-step :release/land-receipt))
+        {:keys [run-id root merge-commit]} receipt]
+    (when-not (and (= version (:version candidate))
+                   (every? support/non-blank-string? [run-id root merge-commit]))
+      (fail! "Release landing receipt is incomplete"
+             {:candidate candidate :receipt receipt}))
+    (let [land-root
+          (evidence/single!
+           (weaver/list rt [:and [:= :id root]
+                            [:= [:attr "workflow/run-id"] run-id]] {})
+           "Release Land root missing or ambiguous")
+          context (evidence/data (attr-get land-root :workflow/context))
+          strands (:strands (graph/subgraph rt [root]))
+          merge-stage (filter #(= "merge" (attr-get % :land/stage)) strands)]
+      (when-not (and (= "closed" (:state land-root))
+                     (= "land" (attr-get land-root :workflow/definition-name))
+                     (= (:head candidate) (:head context))
+                     (= (:branch candidate) (:branch context))
+                     (= 1 (count merge-stage))
+                     (= "closed" (:state (first merge-stage))))
+        (fail! "Release requires a successfully completed exact-candidate Land run"
+               {:candidate candidate :receipt receipt :land-root land-root
+                :merge-stages (mapv #(select-keys % [:id :state]) merge-stage)}))
+      (let [repository (:repository candidate)]
+        (when-not (support/non-blank-string? repository)
+          (fail! "Frozen release evidence has no durable repository checkout"
+                 {:candidate candidate}))
+        (evidence/git! repository "fetch" "origin")
+        (let [merge-commit (evidence/git! repository "rev-parse"
+                                          (str merge-commit "^{commit}"))
+              parents (str/split (evidence/git! repository "show" "-s" "--format=%P"
+                                                merge-commit)
+                                 #"\s+")]
+          (when-not (and (= 2 (count parents))
+                         (some #{(:head candidate)} parents)
+                         (= merge-commit
+                            (evidence/git! repository "merge-base"
+                                           merge-commit "origin/main")))
+            (fail! "Release Land did not preserve the candidate as a merge parent"
+                   {:candidate candidate :receipt receipt :parents parents
+                    :merge-commit merge-commit}))
+          (assoc candidate :landing (assoc receipt :merge-commit merge-commit)))))))
 
 (defn- remote-tag [worktree tag]
   (into {} (map (fn [line]
@@ -42,7 +94,7 @@
   (let [rt (current/runtime)
         gate (evidence/gate! "me.workflows.release-evidence/publish!" key)
         approval-step (evidence/dependency! gate)
-        candidate-step (-> approval-step evidence/dependency! evidence/dependency!)
+        candidate-step (evidence/dependency! approval-step)
         candidate (evidence/data (attr-get candidate-step :code/result))
         approval (evidence/data (attr-get approval-step :release/approval))
         head (:head candidate)

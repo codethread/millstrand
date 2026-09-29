@@ -163,7 +163,7 @@
               quality (titled-strand strands "Pass repository quality checks")
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
-              freeze-land-head (titled-strand strands "Carry the verified HEAD into repository Land")
+              start-land (titled-strand strands "Start repository Land at the verified HEAD")
               quality-argv (attr-get quality :shell/argv)
               ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
@@ -186,14 +186,14 @@
           (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
             (doseq [[prerequisite step]
-                    (partition 2 1 [implement prepare-pr quality ci verify-pr freeze-land-head])]
+                    (partition 2 1 [implement prepare-pr quality ci verify-pr start-land])]
               (is (= [(:id prerequisite)]
                      (mapv :to_strand_id
                            (graph/outgoing-edges runtime [(:id step)] "depends-on"))))))
           (testing "repository-owned quality and PR boundaries remain effective"
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
-            (is (str/includes? (attr-get freeze-land-head :workflow/instruction)
-                               "required `head` param"))
+            (is (= "me.auto-run-workflows/start-land!"
+                   (attr-get start-land :code/fn)))
             (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
@@ -205,4 +205,43 @@
           (testing "repository policy delegates landing to separate custody roles"
             (is (some? handoff-step))
             (is (some? finisher-step))
-            (is (not= (:id handoff-step) (:id finisher-step)))))))))
+            (is (not= (:id handoff-step) (:id finisher-step))))
+          (testing "the start gate binds autonomous Land to the quality-marked HEAD"
+            (let [root (test-support/temp-dir "auto-land-head")
+                  origin (io/file root "origin.git")
+                  checkout (doto (io/file root "checkout") .mkdirs)
+                  branch "feature/auto-head"]
+              (try
+                (test-support/run-git! root "init" "--bare" (.getPath origin))
+                (test-support/run-git! checkout "init" "-b" "main")
+                (test-support/run-git! checkout "config" "user.name" "Fixture")
+                (test-support/run-git! checkout "config" "user.email"
+                                       "fixture@example.invalid")
+                (spit (io/file checkout "file") "base")
+                (test-support/run-git! checkout "add" ".")
+                (test-support/run-git! checkout "commit" "-m" "base")
+                (test-support/run-git! checkout "remote" "add" "origin"
+                                       (.getPath origin))
+                (test-support/run-git! checkout "push" "origin" "HEAD:main")
+                (test-support/run-git! checkout "checkout" "-b" branch)
+                (spit (io/file checkout "file") "candidate")
+                (test-support/run-git! checkout "commit" "-am" "candidate")
+                (test-support/run-git! checkout "push" "-u" "origin" "HEAD")
+                (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+                      marker (str/trim (test-support/run-git!
+                                        checkout "rev-parse" "--git-path"
+                                        "millstrand-land-quality-head"))
+                      start! (requiring-resolve 'me.auto-run-workflows/start-land!)
+                      params {:card "exact-card" :feature "Exact candidate"
+                              :branch branch :worktree (.getPath checkout)}]
+                  (spit (io/file checkout marker) (str head "\n"))
+                  (is (= head (:head (start! params))))
+                  (is (= head (:head (attr-get (workflow/current-root "land-auto-exact-card")
+                                               :workflow/context))))
+                  (workflow/start! "land-auto-mismatch-card" :land
+                                   (assoc params :card "mismatch-card"
+                                          :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+                  (is (thrown-with-msg?
+                       clojure.lang.ExceptionInfo #"does not match"
+                       (start! (assoc params :card "mismatch-card")))))
+                (finally (test-support/delete-tree! root))))))))))

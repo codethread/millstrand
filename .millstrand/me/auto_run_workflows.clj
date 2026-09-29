@@ -2,10 +2,14 @@
   "Repository-owned delivery contract for automatically assigned features."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [me.workflows.evidence :as evidence]
             [millhouse.auto-run-land :as autonomous]
             [millhouse.land.support :as land-support]
             [millhouse.workflow :as workflow]
-            [millstrand.api.format.alpha :as format-alpha]))
+            [millstrand.api.current.alpha :as current]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 (s/def ::text (s/and string? (complement str/blank?)))
 (s/def ::card ::text)
@@ -49,6 +53,27 @@
        "  *'## Summary'*'## Walkthrough'*'## Verification'*) ;;\n"
        "  *) echo \"PR is missing its required review package\" >&2; exit 1 ;;\n"
        "esac\n"))
+
+(defn start-land!
+  "Start or verify the exact repository Land run for autonomous delivery."
+  [{:keys [card feature branch worktree]}]
+  (let [rt (current/runtime)
+        {:keys [head]} (evidence/quality-head! {:branch branch :worktree worktree})
+        run-id (str "land-auto-" card)
+        expected {:card card :feature feature :branch branch
+                  :worktree worktree :head head}
+        roots #(weaver/list rt [:= [:attr "workflow/run-id"] run-id] {})]
+    (when (empty? (roots))
+      (workflow/start! run-id :land expected))
+    (let [root (evidence/single! (roots) "Autonomous Land root missing or ambiguous")
+          actual (evidence/data (attr-get root :workflow/context))]
+      (when-not (and (= "active" (:state root))
+                     (= "land" (attr-get root :workflow/definition-name))
+                     (= expected (select-keys actual (keys expected))))
+        (fail! "Autonomous Land run does not match the verified candidate"
+               {:run-id run-id :expected expected :actual actual
+                :definition (attr-get root :workflow/definition-name)}))
+      {:run-id run-id :root (:id root) :head head})))
 
 (defn- delivery
   "Return the one repository-approved autonomous delivery workflow."
@@ -109,19 +134,14 @@
        (fn [{:keys [branch]}]
          (land-support/sh-gate verify-pr-script "auto-run-verify-pr" branch))
        300 failure-instruction)
-      (workflow/step
-       :freeze-land-head "Carry the verified HEAD into repository Land" :self
+      (workflow/gate
+       :start-land "Start repository Land at the verified HEAD" :code
        :depends-on [:verify-pr]
-       (format-alpha/prose
-        "
-          Read the exact quality marker and require it still equals the pushed
-          branch HEAD verified by the preceding gate. When the autonomous landing
-          composition tells you to start `land-auto-<card>`, include that full
-          lowercase commit as Land's required `head` param. Never derive a newer
-          head or omit it from the repository workflow.
-        "))
+       :attributes {"code/fn" "me.auto-run-workflows/start-land!"
+                    "code/params" #(select-keys % [:card :feature :branch :worktree])}
+       "Start or verify land-auto-<card> with the exact pushed quality-marked HEAD before custody handoff.")
       (workflow/call :land #'autonomous/autonomous-land {}
-                     :depends-on [:freeze-land-head]
+                     :depends-on [:start-land]
                      :title "Review and hand off autonomous landing")])))
 
 (workflow/defworkflow! auto-full-land

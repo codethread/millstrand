@@ -6,7 +6,7 @@ Reviewer applicability is declared with `:glob`. A reviewer applies when any cha
 
 The local `workspace-runtime-policy` reviewer applies to `.millstrand/**`. The local `test-sleeps` reviewer applies only to the repository's Clojure, Go, and spool test paths. It checks changed tests for arbitrary sleeps, wall-clock polling, and race-sensitive waits. Source-only work does not schedule it.
 
-Every lens in the full PR roster is intentionally glob-scoped. Do not add an unscoped full-roster lens or broaden a lens merely to force a reviewer to run. The scopes keep each lens tied to changes it can judge and preserve the valid no-applicable-reviewer outcome. The shared `land` workflow supplies the unconditional mandatory basic review before sign-off.
+Every lens in the full PR roster is intentionally glob-scoped. Do not add an unscoped full-roster lens or broaden a lens merely to force a reviewer to run. The scopes keep each lens tied to changes it can judge and preserve the valid no-applicable-reviewer outcome. The repository-owned `land` workflow supplies the unconditional mandatory basic review before sign-off.
 
 The full-review dispatch gate persists the frozen range, roster snapshot and Harnesses selection before waiting. Verification reads those actual run records: each selected reviewer must be stopped/completed, settled, have a nonblank result, and match the selected reviewer, seat and exact captured change. It does not trust an agent's success sentinel or compare against a later roster refresh. Synthesis and finding resolution follow verification as separate steps.
 
@@ -14,7 +14,7 @@ A nonempty change with only `glob-mismatch` skips for the dispatch roster is a v
 
 Before local reviewer dispatch, the review quality gate requires the feature branch to be clean, pushed, and unchanged for the validated HEAD. Git-visible tracked, staged, and untracked changes fail the gate. After cleaning the worktree, clear `gate/error` so the shell executor retries the same gate.
 
-This local roster pass does not replace landing review. The shared `land` workflow still requires its basic one-seat review and coordinator resolution before sign-off, then keeps its existing queue and final-HEAD validation contract.
+This local roster pass does not replace landing review. The repository-owned `land` workflow still requires its basic one-seat review and coordinator resolution before sign-off, then preserves the frozen `head` through FIFO preparation and merge-commit landing.
 
 Fix and Story prepare explicit full-review requests. The launch gate derives a child run id from the preparation step and persists engine acceptance; retries reuse that exact child, including a completed child. Full review hands off to Land only with actual user authorization, or records an acknowledged report to the coordinator. Engine acceptance is not review completion, merge permission or cleanup permission. Cards stay claimed during agent work.
 
