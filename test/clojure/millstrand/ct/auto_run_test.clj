@@ -183,7 +183,9 @@
                      ["incomplete review package" {:body "## Summary"}]])
               review-step (role-step strands "worker-review")
               handoff-step (role-step strands "handoff-worker")
-              finisher-step (role-step strands "finisher")]
+              finisher-step (role-step strands "finisher")
+              signoff-step (role-step strands "finisher-signoff")
+              observe-step (role-step strands "finisher-observe")]
           (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
             (doseq [[prerequisite step]
@@ -211,6 +213,15 @@
                                "`auto-run/landing-start`"))
             (is (not (str/includes? (attr-get review-step :workflow/instruction)
                                     "`land-auto-fixture-card`")))
+            (doseq [step [signoff-step observe-step]]
+              (is (str/includes? (attr-get step :workflow/instruction)
+                                 "`auto-run/landing-start`"))
+              (is (not (str/includes? (attr-get step :workflow/instruction)
+                                      "land-auto-fixture-card"))))
+            (is (not (str/includes? (attr-get signoff-step :workflow/instruction)
+                                    "squash message")))
+            (is (str/includes? (attr-get signoff-step :workflow/instruction)
+                               "merge message"))
             (is (some? handoff-step))
             (is (some? finisher-step))
             (is (not= (:id handoff-step) (:id finisher-step))))

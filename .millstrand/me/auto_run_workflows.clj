@@ -95,30 +95,45 @@
   "Bind shared autonomous custody prose to this repository's start receipt."
   []
   (let [definition @#'autonomous/autonomous-land
-        replace-review
+        receipt-text "the parent `auto-run/landing-start` receipt's exact `:run-id`"
+        rewrite
         (fn [step]
-          (if (= :review (:id step))
+          (if-not (#{:review :authorize-land :observe-land} (:id step))
+            step
             (update-in
              step [:attributes "workflow/instruction"]
              (fn [instruction]
-               (fn [params]
+               (fn [{:keys [card] :as params}]
                  (let [rendered (instruction params)
-                       pattern (re-pattern
-                                (str "(?s)Start or reuse the\\s+exact repository Land run "
-                                     "`land-auto-.*?never replace an existing run\\."))
-                       replacement
-                       (str "Read the parent start gate's `auto-run/landing-start` "
-                            "receipt. It already started or reused the exact "
-                            "repository Land run for the verified candidate. "
-                            "Drive that receipt's run ID; never reconstruct an ID "
-                            "from the card or replace the recorded run.")
-                       revised (str/replace rendered pattern replacement)]
-                   (when (= rendered revised)
-                     (fail! "Shared autonomous review instruction no longer exposes its repository policy seam"
-                            {:step :review}))
-                   revised))))
-            step))]
-    (update definition :steps #(mapv replace-review %))))
+                       legacy-id (str "land-auto-" card)
+                       revised
+                       (case (:id step)
+                         :review
+                         (str/replace
+                          rendered
+                          (re-pattern
+                           (str "(?s)Start or reuse the\\s+exact repository Land run "
+                                "`land-auto-.*?never replace an existing run\\."))
+                          (str "Read " receipt-text ". It already started or reused "
+                               "the repository Land run for the verified candidate. "
+                               "Drive that run; never reconstruct an ID from the card "
+                               "or replace the recorded run."))
+
+                         :authorize-land
+                         (-> rendered
+                             (str/replace legacy-id receipt-text)
+                             (str/replace "squash message" "merge message"))
+
+                         :observe-land
+                         (str/replace rendered legacy-id receipt-text))]
+                   (when (or (= rendered revised)
+                             (str/includes? revised legacy-id)
+                             (and (= :authorize-land (:id step))
+                                  (str/includes? revised "squash message")))
+                     (fail! "Shared autonomous instruction no longer exposes its repository policy seam"
+                            {:step (:id step)}))
+                   revised))))))]
+    (update definition :steps #(mapv rewrite %))))
 
 (def repository-land-handoff
   "Shared custody phases with Millstrand's receipt-bound Land instruction."
