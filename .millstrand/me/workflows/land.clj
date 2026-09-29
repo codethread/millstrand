@@ -6,6 +6,7 @@
             [millhouse.workflow :as workflow]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
 
@@ -161,6 +162,9 @@
         review-agent (evidence/dependency! checkpoint)
         run-id (attr-get review-agent :workflow/executor-run-id)
         run (when (support/non-blank-string? run-id) (weaver/show rt run-id))
+        served-gates (when run
+                       (mapv :to_strand_id
+                             (graph/outgoing-edges rt [run-id] "serves")))
         result (attr-get review-agent :harness/result)
         choice (attr-get checkpoint :workflow/outcome)
         resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))]
@@ -170,6 +174,8 @@
                    (= reviewer (attr-get review-agent :harness/alias))
                    (support/non-blank-string? result)
                    (some? run)
+                   (= [(:id review-agent)] served-gates)
+                   (= reviewer (attr-get run :harness/alias))
                    (= "true" (attr-get run :harness/run))
                    (= "stopped" (attr-get run :harness/status))
                    (= "completed" (attr-get run :harness/substatus))

@@ -215,10 +215,12 @@
                             agent-run (weaver/add!
                                        rt {:title "Review agent proof" :state "closed"
                                            :attributes {:harness/run "true"
+                                                        :harness/alias "reviewer"
                                                         :harness/status "stopped"
                                                         :harness/substatus "completed"
                                                         :harness/settled "true"
-                                                        :harness/result "No findings"}})]
+                                                        :harness/result "No findings"}
+                                           :edges [{:type "serves" :to (:id gate)}]})]
                         (workflow/complete! run-id
                                             {:step (:id gate) :executor "agent"
                                              :executor-run-id (:id agent-run)
@@ -235,10 +237,23 @@
                 (is (= resolution (verify! matching))))
               (workflow/start! "review-unverified" definition
                                (assoc params :feature "unverified"))
-              (dotimes [_ 3]
+              (dotimes [_ 2]
                 (let [gate (first (workflow/ready "review-unverified"))]
                   (workflow/complete! "review-unverified"
                                       {:step (:id gate) :executor "fixture"})))
+              (let [gate (first (workflow/ready "review-unverified"))
+                    unrelated (weaver/add!
+                               rt {:title "Unrelated review proof" :state "closed"
+                                   :attributes {:harness/run "true"
+                                                :harness/alias "reviewer"
+                                                :harness/status "stopped"
+                                                :harness/substatus "completed"
+                                                :harness/settled "true"
+                                                :harness/result "No findings"}})]
+                (workflow/complete! "review-unverified"
+                                    {:step (:id gate) :executor "agent"
+                                     :executor-run-id (:id unrelated)
+                                     :attributes {"harness/result" "No findings"}}))
               (workflow/choose! "review-unverified" :accepted resolution)
               (let [unverified
                     (attr-get (weaver/show rt (:id (first (workflow/ready
