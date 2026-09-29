@@ -462,7 +462,21 @@
              "freeze-delivery"
              {:attributes {"shell/output"
                            (str "land quality gate: passed at unchanged " branch
-                                " HEAD " head)}})
+                                " HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")}})
+            (let [freeze! (requiring-resolve
+                           'me.workflows.review-evidence/freeze-delivery!)
+                  freeze-gate (weaver/show rt (:id (first (workflow/ready
+                                                           "freeze-delivery"))))
+                  quality (evidence/dependency! freeze-gate)]
+              (is (thrown-with-msg?
+                   clojure.lang.ExceptionInfo #"Delivery HEAD differs"
+                   (freeze! {:key "freeze-delivery-fixture"
+                             :branch branch :worktree (.getPath checkout)})))
+              (weaver/update! rt (:id quality)
+                              {:attributes
+                               {:shell/output
+                                (str "land quality gate: passed at unchanged " branch
+                                     " HEAD " head)}}))
             (let [freeze! (requiring-resolve
                            'me.workflows.review-evidence/freeze-delivery!)
                   delivery (freeze! {:key "freeze-delivery-fixture"

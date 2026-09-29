@@ -201,7 +201,7 @@ The landing contract freezes the exact pushed `head` parameter, supplies that co
 
 ## Flagged ambiguities
 
-- "Run" means at least five things: a **workflow run**, plus the agent, devflow, land, and bench runs their own spools define. A workflow run and an agent run are different kinds of object, not one thing at two scales — always qualify.
+- "Run" means at least five things: a **workflow run**; the agent, devflow, and bench runs their spools define; and the land runs repository workspace definitions own. A workflow run and an agent run are different kinds of object, not one thing at two scales — always qualify.
 - "Task" is not a Millstrand term at all. It belongs to kanban, delegation, and AFK queues, which each mean something different by it. Qualify it or say **strand**.
 - "Strand" means both the graph node and the Go CLI. Write **`strand` CLI** in code font when you mean the binary.
 - "Feature" means a **feat folder** here, and a card type or lifecycle key in the kanban and devflow spools. These coincide often enough to hide the times they do not.

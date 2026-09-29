@@ -114,7 +114,7 @@
             "  *'--json body'*) printf '%s\\n' '" body "' ;;\n"
             "  *) printf '" draft "\\t" state "\\t" base "\\t" pr-branch "\\t" pr-head "\\n' ;;\n"
             "esac\n"))
-      (run-command root bin argv)
+      (assoc (run-command root bin argv) :head head)
       (finally
         (test-support/delete-tree! root)))))
 
@@ -197,6 +197,9 @@
             (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
+            (is (str/includes? (:output ready-pr-result)
+                               (str "auto-run verified head: "
+                                    (:head ready-pr-result))))
             (doseq [[label rejected-pr-result] rejected-pr-results]
               (is (not (zero? (:exit rejected-pr-result)))
                   (str label ": " (:output rejected-pr-result)))))
