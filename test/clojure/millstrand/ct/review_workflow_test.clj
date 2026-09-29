@@ -107,7 +107,7 @@
      (pr-str (assoc request :git patch)) ")))"))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "ef3bce80463f7babd274121e36f5c212a1e54019"
+  (is (= "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
          (get-in workspace-deps ['millhouse/harnesses :git/sha])))
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
