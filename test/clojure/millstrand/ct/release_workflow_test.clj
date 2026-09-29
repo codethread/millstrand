@@ -248,7 +248,7 @@
           (is (not (zero? exit)))
           (is (str/includes? output "canonical main checkout is dirty")))
         (is (.delete blocked))
-        (test-support/run-git! root "clone" (.getPath origin) (.getPath seed))
+        (test-support/run-git! root "clone" "-b" "main" (.getPath origin) (.getPath seed))
         (test-support/run-git! seed "config" "user.name" "Fixture")
         (test-support/run-git! seed "config" "user.email" "fixture@example.invalid")
         (spit (io/file seed "upstream") "landed")
