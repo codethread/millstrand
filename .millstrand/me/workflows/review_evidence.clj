@@ -86,10 +86,10 @@
                (fail! "Reviewer lacks successful settled evidence for the dispatched change"
                       {:run-id id :reviewer reviewer}))
              {:run-id id :reviewer reviewer :result result}))
-         (:runs selection))]
-    (let [verification
-          {:status (if (seq results) "reviewed" "no-applicable-reviewer")
-           :dispatch (:id dispatch) :frozen frozen
-           :selection selection :results results}]
-      (weaver/update! rt (:id gate) {:attributes {:review/verification verification}})
-      verification)))
+         (:runs selection))
+        verification
+        {:status (if (seq results) "reviewed" "no-applicable-reviewer")
+         :dispatch (:id dispatch) :frozen frozen
+         :selection selection :results results}]
+    (weaver/update! rt (:id gate) {:attributes {:review/verification verification}})
+    verification))
