@@ -288,7 +288,7 @@
                 candidate-gate (:id (first (workflow/ready "release-fixture")))
                 land-proof (workflow/workflow
                             "Land proof"
-                            {:attributes {"land/stage" "merge"}}
+                            {:attributes {"land/stage" "ready"}}
                             (workflow/step :done "Complete Land custody" :self))]
             (workflow/complete! "release-fixture"
                                 {:by-identity "fixture" :attributes {"code/result" candidate}})
@@ -299,6 +299,14 @@
                              {:root-attributes {"workflow/definition-name" "land"}})
             (let [land-root (:id (workflow/current-root "release-land-proof"))]
               (workflow/complete! "release-land-proof" {:by-identity "fixture"})
+              (weaver/add! rt {:title "Merge Land proof"
+                               :state "closed"
+                               :attributes {"workflow/run-id" "release-land-proof"
+                                            "workflow/definition-name" "land-merge"
+                                            "workflow/context"
+                                            {:branch (:branch candidate)
+                                             :head (:head candidate)}
+                                            "land/stage" "merge"}})
               (workflow/complete!
                "release-fixture"
                {:by-identity "fixture"

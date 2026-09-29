@@ -160,6 +160,12 @@
    :label "Accept the resolved review"
    :input review-resolution-input})
 
+(def ^:private invalidated-review-choice
+  {:key :invalidated
+   :label "Candidate changed; abort this Land run"
+   :next :land-abort
+   :input land-abort-reason-input})
+
 (defn- review-steps
   [dependencies choices]
   [(support/card-gate :progress-card "Keep the optional card in progress during agent review"
@@ -231,7 +237,7 @@
   (apply workflow/workflow
          (fn [{:keys [branch]}] (str "Review: " branch))
          {:attributes {"workflow/family" "review"}}
-         (review-steps [] [accepted-review-choice])))
+         (review-steps [] [accepted-review-choice invalidated-review-choice])))
 
 (workflow/defworkflow land-abort
   "Record an aborted landing and leave the work available for follow-up."
@@ -323,50 +329,40 @@
                 :card "Optional kanban card to finish after landing."
                 :pr-number "Existing draft or ready PR; omit to resolve from the branch."
                 :reviewer "Single configured review agent seat; defaults to reviewer."}}
-  (let [resolve-pr
-        (workflow/step :resolve-pr "Resolve and verify the pull request" :self
-                       (fn [{:keys [pr-number branch]}]
-                         (format-alpha/prose
-                          "
-                            {pr}Push the clean `{branch}` branch. Reuse its open PR,
-                            draft or ready; create one only if absent. Confirm the PR
-                            head is `{branch}` and its base is `main`.
-                          " {:pr (if pr-number (str "Use PR #" pr-number ". ") "")
-                             :branch branch})))
-        invalidated-choice
-        {:key :invalidated
-         :label "Candidate changed; abort this Land run"
-         :next :land-abort
-         :input land-abort-reason-input}
-        signoff
-        (workflow/checkpoint
-         :signoff "Authorize this work to land" :depends-on [:verify-resolution]
-         :kind :agent
-         :choices [{:key :approved :label "Approve and join the queue"
-                    :next :land-merge :input land-merge-input}
-                   {:key :abort :label "Abort landing"
-                    :next :land-abort :input land-abort-reason-input}]
-         :attributes
-         {"workflow/instruction"
-          (format-alpha/prose
-           "
-             Read `strand workflow choices <run-id>` for choice inputs.
-             Before approval, remove owned scratch files and stop owned processes
-             by exact PID or session name. Record retained resources and their
-             owners on the work card. Resources required through merge must be
-             handled by the tracked executable `.millstrand/land-cleanup.sh`.
-             Its failure stops cleanup and card completion.
-             Act on the user's existing authorization to land; no repeat approval
-             is needed. Approval covers the FIFO turn, unchanged-candidate
-             validation, focused review, merge-commit landing, and cleanup.
-             Request a user decision when the required repair changes the
-             authorized scope or ownership; abort before merge if that decision
-             changes the plan.
-           " {})})]
-    (apply workflow/workflow
-           (fn [{:keys [branch]}] (str "Land: " branch))
-           (stage "ready")
-           (concat [resolve-pr]
-                   (review-steps [:resolve-pr]
-                                 [accepted-review-choice invalidated-choice])
-                   [signoff]))))
+  (workflow/workflow
+   (fn [{:keys [branch]}] (str "Land: " branch))
+   (stage "ready")
+   (workflow/step :resolve-pr "Resolve and verify the pull request" :self
+                  (fn [{:keys [pr-number branch]}]
+                    (format-alpha/prose
+                     "
+                       {pr}Push the clean `{branch}` branch. Reuse its open PR,
+                       draft or ready; create one only if absent. Confirm the PR
+                       head is `{branch}` and its base is `main`.
+                     " {:pr (if pr-number (str "Use PR #" pr-number ". ") "")
+                        :branch branch})))
+   (workflow/call :review #'review {} :depends-on [:resolve-pr]
+                  :title "Complete required one-seat review")
+   (workflow/checkpoint
+    :signoff "Authorize this work to land" :depends-on [:review]
+    :kind :agent
+    :choices [{:key :approved :label "Approve and join the queue"
+               :next :land-merge :input land-merge-input}
+              {:key :abort :label "Abort landing"
+               :next :land-abort :input land-abort-reason-input}]
+    :attributes
+    {"workflow/instruction"
+     (format-alpha/prose
+      "
+        Read `strand workflow choices <run-id>` for choice inputs.
+        Before approval, remove owned scratch files and stop owned processes by
+        exact PID or session name. Record retained resources and their owners on
+        the work card. Resources required through merge must be handled by the
+        tracked executable `.millstrand/land-cleanup.sh`. Its failure stops
+        cleanup and card completion.
+        Act on the user's existing authorization to land; no repeat approval is
+        needed. Approval covers the FIFO turn, unchanged-candidate validation,
+        focused review, merge-commit landing, and cleanup. Request a user decision
+        when the required repair changes the authorized scope or ownership; abort
+        before merge if that decision changes the plan.
+      " {})})))

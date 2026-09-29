@@ -5,7 +5,6 @@
             [me.workflows.support :as support]
             [millhouse.land.support :as land-support]
             [millstrand.api.current.alpha :as current]
-            [millstrand.api.graph.alpha :as graph]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
 
@@ -37,17 +36,21 @@
                             [:= [:attr "workflow/run-id"] run-id]] {})
            "Release Land root missing or ambiguous")
           context (evidence/data (attr-get land-root :workflow/context))
-          strands (:strands (graph/subgraph rt [root]))
-          merge-stage (filter #(= "merge" (attr-get % :land/stage)) strands)]
+          merge-root
+          (evidence/single!
+           (weaver/list rt [:and [:= [:attr "workflow/run-id"] run-id]
+                            [:= [:attr "workflow/definition-name"] "land-merge"]] {})
+           "Release Land merge continuation missing or ambiguous")
+          merge-context (evidence/data (attr-get merge-root :workflow/context))]
       (when-not (and (= "closed" (:state land-root))
                      (= "land" (attr-get land-root :workflow/definition-name))
-                     (= (:head candidate) (:head context))
-                     (= (:branch candidate) (:branch context))
-                     (= 1 (count merge-stage))
-                     (= "closed" (:state (first merge-stage))))
+                     (= (:head candidate) (:head context) (:head merge-context))
+                     (= (:branch candidate) (:branch context) (:branch merge-context))
+                     (= "closed" (:state merge-root))
+                     (= "merge" (attr-get merge-root :land/stage)))
         (fail! "Release requires a successfully completed exact-candidate Land run"
                {:candidate candidate :receipt receipt :land-root land-root
-                :merge-stages (mapv #(select-keys % [:id :state]) merge-stage)}))
+                :merge-root merge-root}))
       (let [repository (:repository candidate)]
         (when-not (support/non-blank-string? repository)
           (fail! "Frozen release evidence has no durable repository checkout"
@@ -66,7 +69,8 @@
             (fail! "Release Land did not preserve the candidate as a merge parent"
                    {:candidate candidate :receipt receipt :parents parents
                     :merge-commit merge-commit}))
-          (assoc candidate :landing (assoc receipt :merge-commit merge-commit)))))))
+          (assoc candidate :landing (assoc receipt :merge-root (:id merge-root)
+                                           :merge-commit merge-commit)))))))
 
 (defn- remote-tag [worktree tag]
   (into {} (map (fn [line]

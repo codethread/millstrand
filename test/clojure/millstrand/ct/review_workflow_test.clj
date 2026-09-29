@@ -286,9 +286,9 @@
 (deftest local-land-requires-basic-review-before-signoff
   (let [definition (workflow-definition 'me.workflows.land/land)
         steps (into {} (map (juxt :id identity)) (:steps definition))]
-    (is (= [:resolve-pr] (:depends-on (steps :progress-card))))
-    (is (= [:verify-resolution] (:depends-on (steps :signoff))))
-    (is (= "Run the one-seat code review" (:title (steps :review-agent))))
+    (is (= [:resolve-pr] (:depends-on (steps :review))))
+    (is (= [:review] (:depends-on (steps :signoff))))
+    (is (= "Complete required one-seat review" (:title (steps :review))))
     (is (= "Authorize this work to land" (:title (steps :signoff))))))
 
 (deftest review-requires-a-non-blank-review-id
