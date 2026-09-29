@@ -185,7 +185,8 @@
              {:choice choice :reviewer reviewer :review-agent (:id review-agent)
               :run-id run-id}))
     (let [frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
-      (when-not (and (= head (:head frozen) (:head resolution))
+      (when-not (and (= reviewer (:reviewer resolution))
+                     (= head (:head frozen) (:head resolution))
                      (= (:base frozen) (:base resolution)))
         (fail! "Basic review resolution does not match the frozen candidate"
                {:expected-head head :frozen frozen :resolution resolution}))

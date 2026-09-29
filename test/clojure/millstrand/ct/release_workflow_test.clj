@@ -233,6 +233,11 @@
                               (assoc resolution :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))]
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
                                       (verify! mismatch))))
+              (let [reviewer-mismatch
+                    (review-params "reviewer-mismatch" "reviewer-mismatch" :accepted
+                                   (assoc resolution :reviewer "other-reviewer"))]
+                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
+                                      (verify! reviewer-mismatch))))
               (let [matching (review-params "review-match" "match" :accepted resolution)]
                 (is (= resolution (verify! matching))))
               (workflow/start! "review-unverified" definition
