@@ -20,7 +20,6 @@
    'millstrand.examples-test
    'millstrand.ct.attention-test
    'millstrand.ct.auto-run-test
-   'millstrand.ct.release-workflow-test
    'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
@@ -112,7 +111,10 @@
    'millstrand.core.weaver.modules-test
    ;; Workflow evidence fixtures redefine shared reviewer and workflow Vars.
    'millstrand.ct.review-workflow-test
-   'millstrand.ct.workflow-delivery-test])
+   'millstrand.ct.workflow-delivery-test
+   ;; Release failure-window fixtures redefine shared evidence Vars. A parallel
+   ;; run proved that those bindings can leak into unrelated runtime tests.
+   'millstrand.ct.release-workflow-test])
 
 (defn- summary-zero [] test/*initial-report-counters*)
 (defn- merge-summaries [& summaries] (apply merge-with + (summary-zero) (map #(dissoc % :type) summaries)))
