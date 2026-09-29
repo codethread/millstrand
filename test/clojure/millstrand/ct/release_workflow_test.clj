@@ -557,7 +557,7 @@
                                  [:land 'me.workflows.land/land]]]
         (workflow/register-workflow! name definition))
       (let [candidate {:version "0.5.3" :branch "release/0.5.3"
-                       :worktree "/tmp/release" :head (apply str (repeat 40 "a"))}
+                       :worktree "/tmp/release" :head (str/join (repeat 40 "a"))}
             candidate-step (weaver/add! rt {:title "Candidate" :state "closed"
                                             :attributes {:release/candidate candidate}})
             _ (weaver/add! rt {:title "Start Land"
