@@ -76,9 +76,7 @@
         run-id (str "land-auto-" card "-" head)
         expected {:card card :feature feature :branch branch
                   :worktree worktree :head head}
-        roots #(filter (fn [root]
-                         (= "land" (attr-get root :workflow/definition-name)))
-                       (weaver/list rt [:= [:attr "workflow/run-id"] run-id] {}))]
+        roots #(evidence/reusable-land-roots rt run-id)]
     (when (empty? (roots))
       (workflow/start! run-id :land expected))
     (let [root (evidence/single! (roots) "Autonomous Land root missing or ambiguous")

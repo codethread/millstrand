@@ -571,9 +571,24 @@
             (workflow/complete! "release-fixture" {:by-identity "fixture"})
             (let [start-step (weaver/show rt (:id (first (workflow/ready
                                                           "release-fixture"))))
+                  run-id (str "release-land-0.5.3-" (:head candidate))
+                  historical-root
+                  (weaver/add! rt {:title "Aborted historical Land"
+                                   :state "closed"
+                                   :attributes
+                                   {"workflow/run-id" run-id
+                                    "workflow/role" "root"
+                                    "workflow/definition-name" "land"
+                                    "workflow/context"
+                                    {:feature "release/0.5.3"
+                                     :branch (:branch candidate)
+                                     :worktree (:worktree candidate)
+                                     :head (:head candidate)}}})
                   start-receipt (release/start-land! (attr-get start-step :code/params))
                   land-context (select-keys start-receipt
                                             [:feature :branch :worktree :head])]
+              (is (not= (:id historical-root) (:root start-receipt)))
+              (is (= "active" (:state (weaver/show rt (:root start-receipt)))))
               (is (= start-receipt
                      (release/start-land! (attr-get start-step :code/params))))
               (let [repaired-head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
@@ -653,6 +668,14 @@
                                 {:attributes {:release/approval
                                               {:version "0.5.3" :head (:head candidate)
                                                :authorization "fixture-user-message"}}})
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo #"persist intent fixture"
+                     (with-redefs [weaver/update!
+                                   (fn [& _]
+                                     (throw (ex-info "persist intent fixture" {})))]
+                       (release/publish! publish-params))))
+                (is (str/blank? (test-support/run-git! canonical "tag" "--list"
+                                                       "v0.5.3")))
                 (let [receipt (release/publish! publish-params)]
                   (is (= (:head candidate) (:head receipt)))
                   (is (= receipt (release/publish! publish-params)))

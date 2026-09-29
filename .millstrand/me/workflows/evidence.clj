@@ -6,7 +6,7 @@
             [clojure.walk :as walk]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
-            [millstrand.api.spool.alpha :refer [fail!]]
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
 
 (defn data
@@ -46,6 +46,42 @@
     (when-not (zero? exit)
       (fail! "Git evidence command failed" {:args args :worktree worktree :error err}))
     (str/trim out)))
+
+(defn git-input!
+  "Run Git with `input` on stdin; return trimmed stdout or fail loudly."
+  [worktree input & args]
+  (let [{:keys [exit out err]}
+        (apply shell/sh "git" (concat args [:dir worktree :in input]))]
+    (when-not (zero? exit)
+      (fail! "Git evidence command failed" {:args args :worktree worktree :error err}))
+    (str/trim out)))
+
+(defn reusable-land-roots
+  "Return the current Land root, or a successfully merged historical root.
+
+  Closed and aborted attempts do not suppress a fresh start. A closed Land root
+  is reusable only when its merge continuation also completed successfully."
+  [rt run-id]
+  (let [roots (weaver/list rt [:and
+                               [:= [:attr "workflow/run-id"] run-id]
+                               [:= [:attr "workflow/role"] "root"]] {})
+        land-roots (filter #(= "land" (attr-get % :workflow/definition-name)) roots)
+        current (filter #(= "active" (:state %)) land-roots)
+        latest (last (sort-by (juxt :created_at :id) land-roots))
+        successful-merge?
+        (some (fn [candidate]
+                (and latest
+                     (not (neg? (compare (:created_at candidate)
+                                         (:created_at latest))))
+                     (= "closed" (:state candidate))
+                     (= "land-merge" (attr-get candidate :workflow/definition-name))
+                     (= "merge" (attr-get candidate :land/stage))))
+              roots)]
+    (if (seq current)
+      (vec current)
+      (if (and latest (= "closed" (:state latest)) successful-merge?)
+        [latest]
+        []))))
 
 (defn freeze!
   "Require a clean branch and capture its immutable merge-base and HEAD."

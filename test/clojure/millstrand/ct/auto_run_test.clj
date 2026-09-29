@@ -260,8 +260,19 @@
                                                        verified)}}))]
                     (prepare-start! "start-exact" "exact-key" head)
                     (let [exact-run-id (str "land-auto-exact-card-" head)
+                          historical-root
+                          (weaver/add!
+                           runtime
+                           {:title "Aborted historical autonomous Land"
+                            :state "closed"
+                            :attributes
+                            {"workflow/run-id" exact-run-id
+                             "workflow/role" "root"
+                             "workflow/definition-name" "land"
+                             "workflow/context" (assoc params :head head)}})
                           started (start! (assoc params :key "exact-key"))]
                       (is (= head (:head started)))
+                      (is (not= (:id historical-root) (:root started)))
                       (is (= head (:head (attr-get (workflow/current-root exact-run-id)
                                                    :workflow/context))))
                       (weaver/add! runtime

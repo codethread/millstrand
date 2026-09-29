@@ -39,9 +39,7 @@
                   :worktree (:worktree candidate)
                   :head (:head candidate)}
         run-id (str "release-land-" version "-" (:head candidate))
-        roots #(filter (fn [root]
-                         (= "land" (attr-get root :workflow/definition-name)))
-                       (weaver/list rt [:= [:attr "workflow/run-id"] run-id] {}))]
+        roots #(evidence/reusable-land-roots rt run-id)]
     (when-not (= version (:version candidate))
       (fail! "Release candidate does not match the requested Land run"
              {:version version :candidate candidate}))
@@ -175,10 +173,19 @@
         (when (or (seq (remote-tag repository tag))
                   (seq (evidence/git! repository "tag" "--list" tag)))
           (fail! "Release tag already exists; never move it" {:tag tag}))
-        (evidence/git! repository "tag" "-a" tag head "-m" (str "Millstrand " version))
-        (let [receipt {:tag tag :head head :version version :repository repository
-                       :object (evidence/git! repository "rev-parse" (str "refs/tags/" tag))}]
+        (let [tag-object
+              (evidence/git-input!
+               repository
+               (str "object " head "\n"
+                    "type commit\n"
+                    "tag " tag "\n"
+                    "tagger " (evidence/git! repository "var" "GIT_COMMITTER_IDENT") "\n\n"
+                    "Millstrand " version "\n")
+               "mktag")
+              receipt {:tag tag :head head :version version :repository repository
+                       :object tag-object}]
           (weaver/update! rt (:id gate) {:attributes {:release/push-intent receipt}})
+          (evidence/git! repository "update-ref" (str "refs/tags/" tag) tag-object "")
           (evidence/git! repository "push" "--atomic" "origin" (str "refs/tags/" tag))
           receipt)))))
 
