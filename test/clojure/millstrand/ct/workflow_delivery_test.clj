@@ -238,6 +238,15 @@
           ;; No quality or reviewer executor runs in this disposable fixture.
           ;; The actual Git marker above supplies the quality evidence under test.
           (dotimes [_ 7] (advance! "report"))
+          (let [freeze (ready-step rt "report")
+                quality (evidence/dependency! freeze)]
+            (weaver/update! rt (:id quality)
+                            {:attributes
+                             {:shell/output
+                              (str "land quality gate: passed at unchanged "
+                                   (:branch work) " HEAD " head)}})
+            (review/freeze-delivery! (attr-get freeze :code/params))
+            (advance! "report"))
           (workflow/choose! "report" :report {})
           (let [source (:id (ready-step rt "report"))
                 receipt {:head head :owner "fixture-coordinator" :evidence "ack-reference"}]
