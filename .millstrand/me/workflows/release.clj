@@ -148,25 +148,32 @@
                  "code/params" #(assoc (select-keys % [:version :branch :worktree])
                                        :key (handoff/key-for "release-candidate" %))}
     "Record version, release commit and formula commit before any landing or approval.")
+   (workflow/gate
+    :start-landing "Start the exact release Land run" :code
+    :depends-on [:freeze-candidate]
+    :attributes {"code/fn" "me.workflows.release-evidence/start-land!"
+                 "delivery/key" #(handoff/key-for "release-land" %)
+                 "code/params" #(hash-map :key (handoff/key-for "release-land" %)
+                                          :version (:version %))}
+    "Start or reuse one deterministic Land run with the complete frozen candidate context.")
    (workflow/step
     :landing "Land the exact candidate without rewriting its commits" :self
-    :depends-on [:freeze-candidate]
+    :depends-on [:start-landing]
     (fn [{:keys [version]}]
       (format-alpha/prose
        "
-         Start or reuse this repository's `land` workflow with feature
-         `release/{version}`, the frozen branch, worktree, and exact candidate
-         HEAD from freeze-candidate. Omit its optional card so release remains
-         open. Drive its local review, sign-off, FIFO turn, candidate-preserving
-         preparation, and merge-commit landing. Do not substitute squash, rebase
-         merge, or a direct push to main.
+         Read `release/landing-start` from the prerequisite and drive that exact
+         `release-land-{version}` run through local review, sign-off, FIFO turn,
+         candidate-preserving preparation, and merge-commit landing. Do not
+         substitute squash, rebase merge, a duplicate Land run, or a direct push
+         to main.
 
-         Complete this step only after local Land is done and origin/main contains
-         the frozen candidate HEAD unchanged. Record `release/land-receipt` here
-         with the exact `run-id`, Land root id, and `merge-commit`. The next code
-         gate verifies completed Land custody and the preserved merge parent. The
-         frozen evidence retains the canonical repository checkout needed for
-         publication after feature cleanup.
+         Complete this step only after Land is done and origin/main contains the
+         frozen candidate HEAD unchanged. Record `release/land-receipt` here with
+         its `merge-commit`. The next code gate verifies the persisted start
+         custody, completed Land roots, complete frozen context, and preserved
+         merge parent. The frozen evidence retains the canonical repository
+         checkout needed for publication after feature cleanup.
        " {:version version})))
    (workflow/gate
     :verify-landing "Verify completed candidate-preserving Land custody" :code

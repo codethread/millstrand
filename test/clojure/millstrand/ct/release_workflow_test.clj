@@ -55,13 +55,15 @@
 
 (deftest release-graph-orders-mutation-validation-and-publication
   (is (= [:preflight :bump-version :update-changelog :quality :pin-homebrew
-          :build-identity :freeze-candidate :landing :verify-landing :approve
-          :publish :verify-remote]
+          :build-identity :freeze-candidate :start-landing :landing
+          :verify-landing :approve :publish :verify-remote]
          (mapv :id (:steps release-definition))))
   (is (= ["sh" ".millstrand/land-quality.sh"]
          (get-in (step :quality) [:attributes "shell/argv"])))
   (is (= "human"
          (get-in (step :approve) [:attributes "workflow/gate"])))
+  (is (= [:freeze-candidate] (:depends-on (step :start-landing))))
+  (is (= [:start-landing] (:depends-on (step :landing))))
   (is (= [:verify-landing] (:depends-on (step :approve))))
   (is (= [:approve] (:depends-on (step :publish)))))
 
@@ -387,7 +389,7 @@
     (is (str/includes? ((get-in (step :landing)
                                 [:attributes "workflow/instruction"])
                         {:version "0.5.3"})
-                       "`release/0.5.3`"))))
+                       "`release-land-0.5.3`"))))
 
 (deftest release-candidate-requires-a-distinct-canonical-main-checkout
   (let [root (test-support/temp-dir "release-canonical")]
@@ -439,6 +441,9 @@
       (test-support/with-runtime
         (fn [rt _]
           (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+          (workflow/register-workflow! :land-abort 'me.workflows.land/land-abort)
+          (workflow/register-workflow! :land-merge 'me.workflows.land/land-merge)
+          (workflow/register-workflow! :land 'me.workflows.land/land)
           (workflow/start! "release-fixture" release-definition params)
           ;; No release shell gates run: the disposable Git fixture supplies
           ;; candidate identities while this test drives authorization boundaries.
@@ -446,59 +451,71 @@
           (let [candidate-step (weaver/show rt (:id (first (workflow/ready
                                                             "release-fixture"))))
                 candidate-gate (:id candidate-step)
-                candidate (release/candidate! (attr-get candidate-step :code/params))
-                land-proof (workflow/workflow
-                            "Land proof"
-                            {:attributes {"land/stage" "ready"}}
-                            (workflow/step :done "Complete Land custody" :self))]
+                candidate (release/candidate! (attr-get candidate-step :code/params))]
             (workflow/complete! "release-fixture" {:by-identity "fixture"})
-            (is (= "Land the exact candidate without rewriting its commits"
-                   (:title (first (workflow/ready "release-fixture")))))
-            (workflow/start! "release-land-proof" land-proof
-                             {:branch (:branch candidate) :head (:head candidate)}
-                             {:root-attributes {"workflow/definition-name" "land"}})
-            (let [land-root (:id (workflow/current-root "release-land-proof"))]
-              (workflow/complete! "release-land-proof" {:by-identity "fixture"})
-              (weaver/add! rt {:title "Merge Land proof"
-                               :state "closed"
-                               :attributes {"workflow/run-id" "release-land-proof"
-                                            "workflow/definition-name" "land-merge"
-                                            "workflow/context"
-                                            {:branch (:branch candidate)
-                                             :head (:head candidate)}
-                                            "land/stage" "merge"}})
-              (workflow/complete!
-               "release-fixture"
-               {:by-identity "fixture"
-                :attributes {"release/land-receipt"
-                             {:run-id "release-land-proof" :root land-root
-                              :merge-commit (:head candidate)}}})
-              (let [landing-step (:id (evidence/dependency!
-                                       (weaver/show rt
-                                                    (:id (first (workflow/ready
-                                                                 "release-fixture"))))))
-                    landed-params (attr-get (weaver/show rt
-                                                         (:id (first (workflow/ready
-                                                                      "release-fixture"))))
-                                            :code/params)]
-                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"merge parent"
-                                      (release/landed! landed-params)))
-                (test-support/run-git! canonical "merge" "--no-ff" (:head candidate)
-                                       "-m" "Merge release candidate")
-                (let [merge-commit (str/trim (test-support/run-git! canonical
-                                                                    "rev-parse" "HEAD"))]
-                  (test-support/run-git! canonical "push" "origin" "HEAD:main")
-                  (test-support/run-git! canonical "worktree" "remove" "--force"
-                                         (.getPath checkout))
-                  (is (not (.exists checkout)))
-                  (weaver/update! rt landing-step
-                                  {:attributes {:release/land-receipt
-                                                {:run-id "release-land-proof"
-                                                 :root land-root
-                                                 :merge-commit merge-commit}}})
-                  (let [landed (release/landed! landed-params)]
-                    (is (= (:head candidate) (:head landed)))
-                    (workflow/complete! "release-fixture" {:by-identity "fixture"})))))
+            (let [start-step (weaver/show rt (:id (first (workflow/ready
+                                                          "release-fixture"))))
+                  start-receipt (release/start-land! (attr-get start-step :code/params))
+                  land-context (select-keys start-receipt
+                                            [:feature :branch :worktree :head])]
+              (is (= start-receipt
+                     (release/start-land! (attr-get start-step :code/params))))
+              (weaver/update! rt (:root start-receipt)
+                              {:attributes {:workflow/context
+                                            (assoc land-context :worktree "/tmp/wrong")}})
+              (is (thrown-with-msg? clojure.lang.ExceptionInfo #"frozen candidate"
+                                    (release/start-land! (attr-get start-step :code/params))))
+              (weaver/update! rt (:root start-receipt)
+                              {:attributes {:workflow/context land-context}})
+              (workflow/complete! "release-fixture" {:by-identity "fixture"})
+              (is (= "Land the exact candidate without rewriting its commits"
+                     (:title (first (workflow/ready "release-fixture")))))
+              (weaver/update! rt (:root start-receipt) {:state "closed"})
+              (let [merge-root
+                    (weaver/add! rt {:title "Merge Land proof"
+                                     :state "closed"
+                                     :attributes
+                                     {"workflow/run-id" (:run-id start-receipt)
+                                      "workflow/definition-name" "land-merge"
+                                      "workflow/role" "root"
+                                      "workflow/context" land-context
+                                      "land/stage" "merge"}})]
+                (workflow/complete!
+                 "release-fixture"
+                 {:by-identity "fixture"
+                  :attributes {"release/land-receipt"
+                               {:merge-commit (:head candidate)}}})
+                (let [landing-step (:id (evidence/dependency!
+                                         (weaver/show rt
+                                                      (:id (first (workflow/ready
+                                                                   "release-fixture"))))))
+                      landed-params (attr-get (weaver/show rt
+                                                           (:id (first (workflow/ready
+                                                                        "release-fixture"))))
+                                              :code/params)]
+                  (weaver/update! rt (:id merge-root)
+                                  {:attributes {:workflow/context
+                                                (assoc land-context :worktree "/tmp/wrong")}})
+                  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exact-candidate"
+                                        (release/landed! landed-params)))
+                  (weaver/update! rt (:id merge-root)
+                                  {:attributes {:workflow/context land-context}})
+                  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"merge parent"
+                                        (release/landed! landed-params)))
+                  (test-support/run-git! canonical "merge" "--no-ff" (:head candidate)
+                                         "-m" "Merge release candidate")
+                  (let [merge-commit (str/trim (test-support/run-git! canonical
+                                                                      "rev-parse" "HEAD"))]
+                    (test-support/run-git! canonical "push" "origin" "HEAD:main")
+                    (test-support/run-git! canonical "worktree" "remove" "--force"
+                                           (.getPath checkout))
+                    (is (not (.exists checkout)))
+                    (weaver/update! rt landing-step
+                                    {:attributes {:release/land-receipt
+                                                  {:merge-commit merge-commit}}})
+                    (let [landed (release/landed! landed-params)]
+                      (is (= (:head candidate) (:head landed)))
+                      (workflow/complete! "release-fixture" {:by-identity "fixture"}))))))
             (let [approval-gate (:id (first (workflow/ready "release-fixture")))]
               (workflow/complete! "release-fixture" {:by-identity "fixture"})
               (let [publish-gate (weaver/show rt (:id (first (workflow/ready "release-fixture"))))

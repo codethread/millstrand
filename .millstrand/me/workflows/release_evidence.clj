@@ -4,6 +4,7 @@
             [me.workflows.evidence :as evidence]
             [me.workflows.support :as support]
             [millhouse.land.support :as land-support]
+            [millhouse.workflow :as workflow]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
@@ -26,16 +27,49 @@
       (weaver/update! rt (:id gate) {:attributes {:release/candidate candidate}})
       candidate)))
 
+(defn start-land!
+  "Start or reuse the one exact repository Land run for a release candidate."
+  [{:keys [key version]}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.workflows.release-evidence/start-land!" key)
+        candidate-step (evidence/dependency! gate)
+        candidate (evidence/data (attr-get candidate-step :release/candidate))
+        expected {:feature (str "release/" version)
+                  :branch (:branch candidate)
+                  :worktree (:worktree candidate)
+                  :head (:head candidate)}
+        run-id (str "release-land-" version)
+        roots #(filter (fn [root]
+                         (= "land" (attr-get root :workflow/definition-name)))
+                       (weaver/list rt [:= [:attr "workflow/run-id"] run-id] {}))]
+    (when-not (= version (:version candidate))
+      (fail! "Release candidate does not match the requested Land run"
+             {:version version :candidate candidate}))
+    (when (empty? (roots))
+      (workflow/start! run-id :land expected))
+    (let [root (evidence/single! (roots) "Release Land root missing or ambiguous")
+          context (evidence/data (attr-get root :workflow/context))]
+      (when-not (= expected (select-keys context (keys expected)))
+        (fail! "Release Land run does not match the frozen candidate"
+               {:expected expected :actual context :root (:id root)}))
+      (let [receipt (assoc expected :run-id run-id :root (:id root))]
+        (weaver/update! rt (:id gate) {:attributes {:release/landing-start receipt}})
+        receipt))))
+
 (defn landed!
   "Require a completed repository Land run and its candidate-preserving merge."
   [{:keys [key version]}]
   (let [rt (current/runtime)
         gate (evidence/gate! "me.workflows.release-evidence/landed!" key)
         landing-step (evidence/dependency! gate)
-        candidate-step (evidence/dependency! landing-step)
+        start-step (evidence/dependency! landing-step)
+        candidate-step (evidence/dependency! start-step)
         candidate (evidence/data (attr-get candidate-step :release/candidate))
-        receipt (evidence/data (attr-get landing-step :release/land-receipt))
-        {:keys [run-id root merge-commit]} receipt]
+        start-receipt (evidence/data (attr-get start-step :release/landing-start))
+        completion (evidence/data (attr-get landing-step :release/land-receipt))
+        {:keys [run-id root]} start-receipt
+        merge-commit (:merge-commit completion)
+        receipt (assoc start-receipt :merge-commit merge-commit)]
     (when-not (and (= version (:version candidate))
                    (every? support/non-blank-string? [run-id root merge-commit]))
       (fail! "Release landing receipt is incomplete"
@@ -51,12 +85,18 @@
            (weaver/list rt [:and [:= [:attr "workflow/run-id"] run-id]
                             [:= [:attr "workflow/definition-name"] "land-merge"]] {})
            "Release Land merge continuation missing or ambiguous")
-          merge-context (evidence/data (attr-get merge-root :workflow/context))]
+          merge-context (evidence/data (attr-get merge-root :workflow/context))
+          expected {:feature (str "release/" version)
+                    :branch (:branch candidate)
+                    :worktree (:worktree candidate)
+                    :head (:head candidate)}]
       (when-not (and (= "closed" (:state land-root))
+                     (= "root" (attr-get land-root :workflow/role))
                      (= "land" (attr-get land-root :workflow/definition-name))
-                     (= (:head candidate) (:head context) (:head merge-context))
-                     (= (:branch candidate) (:branch context) (:branch merge-context))
+                     (= expected (select-keys context (keys expected)))
+                     (= expected (select-keys merge-context (keys expected)))
                      (= "closed" (:state merge-root))
+                     (= "root" (attr-get merge-root :workflow/role))
                      (= "merge" (attr-get merge-root :land/stage)))
         (fail! "Release requires a successfully completed exact-candidate Land run"
                {:candidate candidate :receipt receipt :land-root land-root
