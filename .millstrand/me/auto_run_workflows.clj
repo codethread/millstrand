@@ -114,7 +114,7 @@
                      :title "Review and hand off autonomous landing")])))
 
 (workflow/defworkflow! auto-full-land
-  "Implement, validate, review, and hand landing to an independent finisher."
+  "Implement, validate, review, and hand local landing to an independent finisher."
   {:entrypoints #{:start}
    :param-spec ::params
    :defaults {}

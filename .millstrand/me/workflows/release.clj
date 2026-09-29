@@ -146,26 +146,25 @@
     :attributes {"code/fn" "me.workflows.release-evidence/candidate!"
                  "code/params" #(select-keys % [:version :branch :worktree])}
     "Record version, release commit and formula commit before any landing or approval.")
-   (workflow/gate
-    :landing-policy "Resolve candidate-preserving shared landing" :human
+   (workflow/step
+    :landing "Land the exact candidate without rewriting its commits" :self
     :depends-on [:freeze-candidate]
     (format-alpha/prose
      "
-       STOP for the repository owner: shared Land currently squashes, whereas
-       this release must preserve the adjacent release and formula commits and
-       the formula's exact pin. Do not invent a direct-main push exception.
-       Record the policy decision and accepted shared landing run/PR receipt
-       here. Leave this boundary open until an authorized shared path preserves
-       the candidate on origin/main. No publication or cleanup while unresolved.
+       Start or reuse this repository's `land` workflow for the frozen branch
+       and worktree. Omit its optional card so release remains open. Drive its
+       local review, sign-off, FIFO turn, candidate-preserving preparation, and
+       merge-commit landing. Do not substitute squash, rebase merge, or a direct
+       push to main.
 
-       The authorized route must retain custody of the candidate checkout through
-       publication and remote verification: publish! reads Git there. Ordinary
-       shared Land cleanup must not delete it. Shared Land does not yet provide
-       this candidate-preserving landing and checkout-retention contract.
+       Complete this step only after local Land is done and origin/main contains
+       the frozen candidate HEAD unchanged. Record the Land run, PR, merge commit,
+       and cleanup receipt here. The frozen evidence retains the canonical
+       repository checkout needed for publication after feature cleanup.
      "))
    (workflow/gate
     :approve "Approve the exact landed release candidate" :human
-    :depends-on [:landing-policy]
+    :depends-on [:landing]
     (format-alpha/prose
      "
        Read freeze-candidate's code/result. Ask the user to approve that exact
@@ -178,7 +177,7 @@
     :publish "Publish the approved annotated tag" :code :depends-on [:approve]
     :attributes {"code/fn" "me.workflows.release-evidence/publish!"
                  "delivery/key" #(handoff/key-for "release" %)
-                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                 "code/params" #(assoc (select-keys % [:version])
                                        :key (handoff/key-for "release" %))}
     (format-alpha/prose
      "
@@ -190,6 +189,5 @@
     :verify-remote "Verify the remote release receipt" :code :depends-on [:publish]
     :attributes {"code/fn" "me.workflows.release-evidence/verify-remote!"
                  "delivery/key" #(handoff/key-for "release" %)
-                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
-                                       :key (handoff/key-for "release" %))}
+                 "code/params" #(hash-map :key (handoff/key-for "release" %))}
     "Require the remote annotated tag object and peeled candidate SHA to match the publication receipt.")))

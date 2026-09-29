@@ -1,5 +1,5 @@
 (ns me.workflows.review
-  "Millstrand's full repository review, before shared landing."
+  "Millstrand's full repository review before local landing."
   (:require [clojure.spec.alpha :as s]
             [me.workflows.handoff :as handoff]
             [me.workflows.review-evidence]

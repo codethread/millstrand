@@ -3,15 +3,18 @@
   (:require [clojure.string :as str]
             [me.workflows.evidence :as evidence]
             [me.workflows.support :as support]
+            [millhouse.land.support :as land-support]
             [millstrand.api.current.alpha :as current]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]))
 
 (defn candidate!
-  "Capture the clean candidate's two immutable commit identities."
+  "Capture the candidate commits and durable repository checkout."
   [{:keys [version worktree] :as params}]
   (assoc (evidence/freeze! params)
-         :version version :release-commit (evidence/git! worktree "rev-parse" "HEAD^")))
+         :version version
+         :release-commit (evidence/git! worktree "rev-parse" "HEAD^")
+         :repository (land-support/canonical-worktree worktree)))
 
 (defn- remote-tag [worktree tag]
   (into {} (map (fn [line]
@@ -35,7 +38,7 @@
   Persist push intent before the external effect. On an uncertain result, require
   the exact remote tag object and peeled candidate before accepting a retry. Do
   not replay a push or move an existing tag to repair ambiguous publication."
-  [{:keys [key version worktree]}]
+  [{:keys [key version]}]
   (let [rt (current/runtime)
         gate (evidence/gate! "me.workflows.release-evidence/publish!" key)
         approval-step (evidence/dependency! gate)
@@ -43,36 +46,40 @@
         candidate (evidence/data (attr-get candidate-step :code/result))
         approval (evidence/data (attr-get approval-step :release/approval))
         head (:head candidate)
+        repository (:repository candidate)
         tag (str "v" version)]
     (when-not (and (= version (:version candidate) (:version approval))
                    (support/non-blank-string? head) (= head (:head approval))
                    (support/non-blank-string? (:authorization approval)))
       (fail! "Publication requires actual user approval of the exact candidate"
              {:candidate candidate :approval approval}))
-    (evidence/unchanged! candidate)
-    (evidence/git! worktree "fetch" "origin")
-    (when-not (= head (evidence/git! worktree "merge-base" head "origin/main"))
+    (when-not (support/non-blank-string? repository)
+      (fail! "Frozen release evidence has no durable repository checkout"
+             {:candidate candidate}))
+    (evidence/git! repository "fetch" "origin")
+    (when-not (= head (evidence/git! repository "merge-base" head "origin/main"))
       (fail! "Shared landing has not preserved the exact two-commit candidate"
              {:head head :policy "Resolve squash versus candidate preservation before publication"}))
     (if-let [intent (attr-get gate :release/push-intent)]
-      (require-remote! worktree (evidence/data intent))
+      (require-remote! repository (evidence/data intent))
       (do
-        (when (or (seq (remote-tag worktree tag))
-                  (seq (evidence/git! worktree "tag" "--list" tag)))
+        (when (or (seq (remote-tag repository tag))
+                  (seq (evidence/git! repository "tag" "--list" tag)))
           (fail! "Release tag already exists; never move it" {:tag tag}))
-        (evidence/git! worktree "tag" "-a" tag head "-m" (str "Millstrand " version))
-        (let [receipt {:tag tag :head head :version version
-                       :object (evidence/git! worktree "rev-parse" (str "refs/tags/" tag))}]
+        (evidence/git! repository "tag" "-a" tag head "-m" (str "Millstrand " version))
+        (let [receipt {:tag tag :head head :version version :repository repository
+                       :object (evidence/git! repository "rev-parse" (str "refs/tags/" tag))}]
           (weaver/update! rt (:id gate) {:attributes {:release/push-intent receipt}})
-          (evidence/git! worktree "push" "--atomic" "origin" (str "refs/tags/" tag))
+          (evidence/git! repository "push" "--atomic" "origin" (str "refs/tags/" tag))
           receipt)))))
 
 (defn verify-remote!
   "Verify the published annotated tag and exact peeled candidate independently."
-  [{:keys [key worktree]}]
+  [{:keys [key]}]
   (let [gate (evidence/gate! "me.workflows.release-evidence/verify-remote!" key)
         publication (evidence/dependency! gate)
         receipt (evidence/data (attr-get publication :code/result))]
-    (when-not (every? support/non-blank-string? ((juxt :tag :head :object) receipt))
+    (when-not (every? support/non-blank-string?
+                      ((juxt :tag :head :object :repository) receipt))
       (fail! "Missing publication receipt" {:publication (:id publication)}))
-    (require-remote! worktree receipt)))
+    (require-remote! (:repository receipt) receipt)))

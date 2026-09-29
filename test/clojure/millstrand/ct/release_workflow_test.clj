@@ -52,13 +52,29 @@
 
 (deftest release-graph-orders-mutation-validation-and-publication
   (is (= [:preflight :bump-version :update-changelog :quality :pin-homebrew
-          :build-identity :freeze-candidate :landing-policy :approve :publish :verify-remote]
+          :build-identity :freeze-candidate :landing :approve :publish :verify-remote]
          (mapv :id (:steps release-definition))))
   (is (= ["sh" ".millstrand/land-quality.sh"]
          (get-in (step :quality) [:attributes "shell/argv"])))
   (is (= "human"
          (get-in (step :approve) [:attributes "workflow/gate"])))
   (is (= [:approve] (:depends-on (step :publish)))))
+
+(deftest repository-land-preserves-candidate-commits
+  (let [definition @(requiring-resolve 'me.workflows.land/land-merge)
+        steps (into {} (map (juxt :id identity)) (:steps definition))
+        prepare-argv ((get-in steps [:prepare-merge :attributes "shell/argv"])
+                      {:branch "release/0.5.3"})
+        merge-argv ((get-in steps [:merge-pr :attributes "shell/argv"])
+                    {:pr-number 42 :subject "Subject" :body "Body"
+                     :branch "release/0.5.3"})]
+    (is (= "preserve" (nth prepare-argv (- (count prepare-argv) 2))))
+    (is (= ["release/0.5.3" "merge"]
+           (subvec merge-argv (- (count merge-argv) 2))))
+    (is (= "me.workflows.land/land-abort"
+           (get-in definition [:attributes "land/abort-definition"])))
+    (is (= #{:start :call}
+           (:entrypoints @(requiring-resolve 'me.workflows.land/land))))))
 
 (deftest workspace-config-selects-the-release-definition
   (let [selection (workspace-release-selection)
@@ -151,7 +167,7 @@
                 candidate-gate (:id (first (workflow/ready "release-fixture")))]
             (workflow/complete! "release-fixture"
                                 {:by-identity "fixture" :attributes {"code/result" candidate}})
-            (is (= "Resolve candidate-preserving shared landing"
+            (is (= "Land the exact candidate without rewriting its commits"
                    (:title (first (workflow/ready "release-fixture")))))
             (workflow/complete! "release-fixture" {:by-identity "fixture"})
             (let [approval-gate (:id (first (workflow/ready "release-fixture")))]
