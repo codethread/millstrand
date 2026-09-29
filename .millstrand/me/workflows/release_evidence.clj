@@ -131,20 +131,43 @@
                                            (str "refs/tags/" tag)
                                            (str "refs/tags/" tag "^{}"))))))
 
-(defn- require-remote! [worktree {:keys [tag object head] :as receipt}]
-  (let [remote (remote-tag worktree tag)]
-    (when-not (and (= object (get remote (str "refs/tags/" tag)))
-                   (= head (get remote (str "refs/tags/" tag "^{}"))))
-      (fail! "Remote release receipt does not match the annotated candidate"
-             {:expected receipt :remote remote})))
+(defn- require-matching-remote! [remote {:keys [tag object head] :as receipt}]
+  (when-not (and (= object (get remote (str "refs/tags/" tag)))
+                 (= head (get remote (str "refs/tags/" tag "^{}"))))
+    (fail! "Remote release receipt does not match the annotated candidate"
+           {:expected receipt :remote remote}))
   receipt)
+
+(defn- require-remote! [worktree {:keys [tag] :as receipt}]
+  (require-matching-remote! (remote-tag worktree tag) receipt))
+
+(defn- complete-push! [{:keys [repository tag object head] :as receipt}]
+  (when-not (and (= "tag" (evidence/git! repository "cat-file" "-t" object))
+                 (= head (evidence/git! repository "rev-parse" (str object "^{commit}"))))
+    (fail! "Push intent does not identify the annotated candidate" {:intent receipt}))
+  (let [remote (remote-tag repository tag)
+        local (evidence/git! repository "tag" "--list" "--format=%(objectname)" tag)
+        ref (str "refs/tags/" tag)]
+    (when (and (seq local) (not= object local))
+      (fail! "Local release tag does not match push intent; never move it"
+             {:intent receipt :local local}))
+    (when (seq remote)
+      (require-matching-remote! remote receipt))
+    (when (str/blank? local)
+      (evidence/git! repository "update-ref" ref object ""))
+    (when (empty? remote)
+      ;; Push the persisted object, not a ref that could change after inspection.
+      ;; A competing remote tag is rejected by Git; never force publication.
+      (evidence/git! repository "push" "--atomic" "origin" (str object ":" ref)))
+    (require-remote! repository receipt)))
 
 (defn publish!
   "Publish only an explicitly approved candidate already preserved on remote main.
 
-  Persist push intent before the external effect. On an uncertain result, require
-  the exact remote tag object and peeled candidate before accepting a retry. Do
-  not replay a push or move an existing tag to repair ambiguous publication."
+  Persist push intent before the external effect. Retry only that exact annotated
+  object: prepare a missing local ref and push without force if the remote tag is
+  absent. Require an exact remote receipt before accepting publication; uncertain
+  remote reads and mismatched existing tags fail without moving either tag."
   [{:keys [key version]}]
   (let [rt (current/runtime)
         gate (evidence/gate! "me.workflows.release-evidence/publish!" key)
@@ -168,7 +191,12 @@
       (fail! "Repository landing has not preserved the exact two-commit candidate"
              {:head head :policy "Land the candidate without rewriting its commits"}))
     (if-let [intent (attr-get gate :release/push-intent)]
-      (require-remote! repository (evidence/data intent))
+      (let [intent (evidence/data intent)
+            expected {:tag tag :head head :version version :repository repository}]
+        (when-not (= expected (select-keys intent (keys expected)))
+          (fail! "Push intent does not match the approved candidate"
+                 {:expected expected :intent intent}))
+        (complete-push! intent))
       (do
         (when (or (seq (remote-tag repository tag))
                   (seq (evidence/git! repository "tag" "--list" tag)))
@@ -185,9 +213,7 @@
               receipt {:tag tag :head head :version version :repository repository
                        :object tag-object}]
           (weaver/update! rt (:id gate) {:attributes {:release/push-intent receipt}})
-          (evidence/git! repository "update-ref" (str "refs/tags/" tag) tag-object "")
-          (evidence/git! repository "push" "--atomic" "origin" (str "refs/tags/" tag))
-          receipt)))))
+          (complete-push! receipt))))))
 
 (defn verify-remote!
   "Verify the published annotated tag and exact peeled candidate independently."

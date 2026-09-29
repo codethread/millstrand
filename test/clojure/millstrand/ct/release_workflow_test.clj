@@ -719,6 +719,135 @@
                                                 :release/candidate)))))))))
       (finally (test-support/delete-tree! root)))))
 
+(defn- with-publication-fixture [f]
+  (let [root (test-support/temp-dir "release-push-retry")
+        origin (io/file root "origin.git")
+        repository (doto (io/file root "repository") .mkdirs)]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! repository "init" "-b" "main")
+      (test-support/run-git! repository "config" "user.name" "Fixture")
+      (test-support/run-git! repository "config" "user.email" "fixture@example.invalid")
+      (test-support/run-git! repository "commit" "--allow-empty" "-m" "candidate")
+      (test-support/run-git! repository "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! repository "config" "remote.origin.tagOpt" "--no-tags")
+      (test-support/run-git! repository "push" "origin" "HEAD:main")
+      (test-support/with-runtime
+        (fn [rt _]
+          (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+          (let [head (evidence/git! (.getPath repository) "rev-parse" "HEAD")
+                candidate {:version "0.5.3" :head head :repository (.getPath repository)}
+                landed (weaver/add! rt {:title "Landed candidate" :state "closed"
+                                        :attributes {:release/landing candidate}})
+                approval (weaver/add! rt {:title "Approval" :state "closed"
+                                          :attributes {:release/approval
+                                                       (assoc candidate :authorization "user-message")}
+                                          :edges [{:type "depends-on" :to (:id landed)}]})
+                gate (weaver/add! rt {:title "Publish"
+                                      :attributes {:code/fn "me.workflows.release-evidence/publish!"
+                                                   :delivery/key "retry"}
+                                      :edges [{:type "depends-on" :to (:id approval)}]})]
+            (f {:rt rt :gate (:id gate) :repository (.getPath repository)
+                :origin origin :head head :params {:version "0.5.3" :key "retry"}}))))
+      (finally (test-support/delete-tree! root)))))
+
+(defn- interrupt-publication! [params command after?]
+  (let [git! evidence/git!]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"publication interrupted"
+         (with-redefs [evidence/git!
+                       (fn [repository & args]
+                         (if (= command (first args))
+                           (do
+                             (when after? (apply git! repository args))
+                             (throw (ex-info "publication interrupted" {})))
+                           (apply git! repository args)))]
+           (release/publish! params))))))
+
+(deftest publication-retries-complete-exact-intent-across-failure-windows
+  (doseq [[command after?] [["update-ref" false] ["push" false] ["push" true]]]
+    (testing (str command " after=" after?)
+      (with-publication-fixture
+        (fn [{:keys [rt gate repository params]}]
+          (interrupt-publication! params command after?)
+          (let [intent (evidence/data (attr-get (weaver/show rt gate) :release/push-intent))
+                git! evidence/git!
+                pushes (atom [])]
+            (is (some? (:object intent)))
+            (is (= (if (= command "update-ref") "" (:object intent))
+                   (git! repository "tag" "--list" "--format=%(objectname)" "v0.5.3")))
+            (with-redefs [evidence/git!
+                          (fn [repository & args]
+                            (when (= "push" (first args)) (swap! pushes conj (vec args)))
+                            (apply git! repository args))]
+              (is (= intent (release/publish! params)))
+              (is (= intent (release/publish! params))))
+            (is (= (if after? []
+                       [["push" "--atomic" "origin" (str (:object intent) ":refs/tags/v0.5.3")]])
+                   @pushes))
+            (is (= (:object intent) (git! repository "rev-parse" "refs/tags/v0.5.3")))
+            (is (= (str (:object intent) "\trefs/tags/v0.5.3\n"
+                        (:head intent) "\trefs/tags/v0.5.3^{}")
+                   (git! repository "ls-remote" "origin" "refs/tags/v0.5.3*")))))))))
+
+(deftest publication-retries-refuse-mismatches-and-uncertain-remote-reads
+  (doseq [failure [:local :local-after-push :remote :intent :unreachable]]
+    (testing (name failure)
+      (with-publication-fixture
+        (fn [{:keys [rt gate repository origin head params]}]
+          (if (= failure :local-after-push)
+            (interrupt-publication! params "push" true)
+            (interrupt-publication! params "update-ref" false))
+          (let [intent (evidence/data (attr-get (weaver/show rt gate) :release/push-intent))
+                git! evidence/git!
+                effects (atom [])]
+            (case failure
+              :local (git! repository "tag" "v0.5.3" head)
+              :local-after-push (git! repository "update-ref" "refs/tags/v0.5.3" head)
+              :remote (test-support/run-git! origin "update-ref" "refs/tags/v0.5.3" head)
+              :intent (weaver/update! rt gate
+                                      {:attributes {:release/push-intent
+                                                    (assoc intent :head "wrong-candidate")}})
+              :unreachable nil)
+            (with-redefs [evidence/git!
+                          (fn [repository & args]
+                            (when (#{"push" "update-ref"} (first args))
+                              (swap! effects conj args))
+                            (when (and (= failure :unreachable) (= "ls-remote" (first args)))
+                              (throw (ex-info "remote unavailable" {})))
+                            (apply git! repository args))]
+              (is (thrown-with-msg?
+                   clojure.lang.ExceptionInfo #"does not match|remote unavailable"
+                   (release/publish! params))))
+            (is (empty? @effects))
+            (is (= (if (#{:local :local-after-push} failure) head "")
+                   (git! repository "tag" "--list" "--format=%(objectname)" "v0.5.3")))
+            (is (= (case failure
+                     :remote (str head "\trefs/tags/v0.5.3")
+                     :local-after-push (str (:object intent) "\trefs/tags/v0.5.3\n"
+                                            head "\trefs/tags/v0.5.3^{}")
+                     "")
+                   (git! repository "ls-remote" "origin" "refs/tags/v0.5.3*")))))))))
+
+(deftest publication-retry-never-overwrites-a-racing-remote-tag
+  (with-publication-fixture
+    (fn [{:keys [rt gate repository origin head params]}]
+      (interrupt-publication! params "push" false)
+      (let [intent (evidence/data (attr-get (weaver/show rt gate) :release/push-intent))
+            git! evidence/git!]
+        (with-redefs [evidence/git!
+                      (fn [repository & args]
+                        (when (= "push" (first args))
+                          (test-support/run-git! origin "update-ref" "refs/tags/v0.5.3" head))
+                        (apply git! repository args))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Git evidence command failed"
+                                (release/publish! params))))
+        (is (= (:object intent) (git! repository "rev-parse" "refs/tags/v0.5.3")))
+        (is (= (str head "\trefs/tags/v0.5.3")
+               (git! repository "ls-remote" "origin" "refs/tags/v0.5.3*")))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Remote release receipt does not match"
+                              (release/publish! params)))))))
+
 (deftest repository-quality-entry-delegates-through-one-shared-lock
   (let [root (test-support/temp-dir "quality-entry")
         fake-flock (io/file root "flock")]
