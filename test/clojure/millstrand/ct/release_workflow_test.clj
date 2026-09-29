@@ -534,6 +534,34 @@
                                     :worktree (.getPath root)})))))
       (finally (test-support/delete-tree! root)))))
 
+(deftest historical-land-reuse-requires-its-successful-queue-reservation
+  (test-support/with-runtime
+    (fn [rt _]
+      (doseq [[run-id outcome entry-state same-root? reusable?]
+              [["missing" nil "closed" true false]
+               ["withdrawn" "withdrawn" "closed" true false]
+               ["unfinished" "merged" "active" true false]
+               ["other-root" "merged" "closed" false false]
+               ["merged" "merged" "closed" true true]]]
+        (testing run-id
+          (let [root (weaver/add! rt {:title "Historical Land" :state "closed"
+                                      :attributes {:workflow/run-id run-id
+                                                   :workflow/role "root"
+                                                   :workflow/definition-name "land"}})
+                merge-root (weaver/add! rt {:title "Merge continuation" :state "closed"
+                                            :attributes {:workflow/run-id run-id
+                                                         :workflow/role "root"
+                                                         :workflow/definition-name "land-merge"
+                                                         :land/stage "merge"}})]
+            (when outcome
+              (weaver/add! rt {:title "Queue reservation" :state entry-state
+                               :attributes {:kind "merge-queue-entry"
+                                            :land/run-id run-id
+                                            :queue/root (if same-root? (:id merge-root) "other")
+                                            :queue/outcome outcome}}))
+            (is (= (if reusable? [(:id root)] [])
+                   (mapv :id (evidence/reusable-land-roots rt run-id))))))))))
+
 (deftest release-publication-requires-exact-approval-and-preserved-landing
   (let [root (test-support/temp-dir "release-candidate")
         origin (io/file root "origin.git")

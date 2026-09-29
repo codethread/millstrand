@@ -68,6 +68,12 @@
         land-roots (filter #(= "land" (attr-get % :workflow/definition-name)) roots)
         current (filter #(= "active" (:state %)) land-roots)
         latest (last (sort-by (juxt :created_at :id) land-roots))
+        merged-roots (set (map #(attr-get % :queue/root)
+                               (weaver/list rt [:and
+                                                [:= [:attr "kind"] "merge-queue-entry"]
+                                                [:= [:attr "land/run-id"] run-id]
+                                                [:= :state "closed"]
+                                                [:= [:attr "queue/outcome"] "merged"]] {})))
         successful-merge?
         (some (fn [candidate]
                 (and latest
@@ -75,7 +81,8 @@
                                          (:created_at latest))))
                      (= "closed" (:state candidate))
                      (= "land-merge" (attr-get candidate :workflow/definition-name))
-                     (= "merge" (attr-get candidate :land/stage))))
+                     (= "merge" (attr-get candidate :land/stage))
+                     (contains? merged-roots (:id candidate))))
               roots)]
     (if (seq current)
       (vec current)
