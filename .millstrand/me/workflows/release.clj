@@ -151,8 +151,9 @@
     :depends-on [:freeze-candidate]
     (format-alpha/prose
      "
-       Start or reuse this repository's `land` workflow for the frozen branch
-       and worktree. Omit its optional card so release remains open. Drive its
+       Start or reuse this repository's `land` workflow for the frozen branch,
+       worktree, and exact candidate HEAD from freeze-candidate. Omit its optional
+       card so release remains open. Drive its
        local review, sign-off, FIFO turn, candidate-preserving preparation, and
        merge-commit landing. Do not substitute squash, rebase merge, or a direct
        push to main.

@@ -2,6 +2,7 @@
   "Tests for the repository release workflow declaration."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.walk :as walk]
             [me.workflows.release-evidence :as release]
@@ -60,21 +61,103 @@
          (get-in (step :approve) [:attributes "workflow/gate"])))
   (is (= [:approve] (:depends-on (step :publish)))))
 
-(deftest repository-land-preserves-candidate-commits
-  (let [definition @(requiring-resolve 'me.workflows.land/land-merge)
+(deftest repository-land-preserves-the-reviewed-candidate-commits
+  (let [head "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        params {:branch "release/0.5.3" :head head}
+        definition @(requiring-resolve 'me.workflows.land/land-merge)
         steps (into {} (map (juxt :id identity)) (:steps definition))
+        review-definition @(requiring-resolve 'me.workflows.land/review)
+        review-steps (into {} (map (juxt :id identity)) (:steps review-definition))
+        review-argv ((get-in review-steps [:review-quality :attributes "shell/argv"])
+                     params)
         prepare-argv ((get-in steps [:prepare-merge :attributes "shell/argv"])
-                      {:branch "release/0.5.3"})
+                      params)
         merge-argv ((get-in steps [:merge-pr :attributes "shell/argv"])
                     {:pr-number 42 :subject "Subject" :body "Body"
                      :branch "release/0.5.3"})]
-    (is (= "preserve" (nth prepare-argv (- (count prepare-argv) 2))))
+    (is (= ["release/0.5.3" head] (subvec review-argv 4 6)))
+    (is (= ["release/0.5.3" head "preserve"] (subvec prepare-argv 4 7)))
+    (is (every? #(str/includes? (nth % 2) "reviewed HEAD changed")
+                [review-argv prepare-argv]))
     (is (= ["release/0.5.3" "merge"]
            (subvec merge-argv (- (count merge-argv) 2))))
     (is (= "me.workflows.land/land-abort"
            (get-in definition [:attributes "land/abort-definition"])))
     (is (= #{:start :call}
            (:entrypoints @(requiring-resolve 'me.workflows.land/land))))))
+
+(deftest landing-head-wrapper-refuses-review-drift
+  (let [root (test-support/temp-dir "landing-reviewed-head")]
+    (try
+      (test-support/run-git! root "init" "-b" "feature/reviewed-head")
+      (test-support/run-git! root "config" "user.name" "Fixture")
+      (test-support/run-git! root "config" "user.email" "fixture@example.invalid")
+      (spit (io/file root "file") "reviewed")
+      (test-support/run-git! root "add" ".")
+      (test-support/run-git! root "commit" "-m" "reviewed")
+      (let [head (str/trim (:output (run-command root ["git" "rev-parse" "HEAD"])))
+            review-definition @(requiring-resolve 'me.workflows.land/review)
+            review-step (some #(when (= :review-quality (:id %)) %)
+                              (:steps review-definition))
+            argv ((get-in review-step [:attributes "shell/argv"])
+                  {:branch "feature/reviewed-head" :head head})
+            argv (assoc argv (dec (count argv)) "exit 0")]
+        (is (zero? (:exit (run-command root argv))))
+        (spit (io/file root "file") "changed")
+        (test-support/run-git! root "commit" "-am" "changed")
+        (let [drift (run-command root argv)]
+          (is (not (zero? (:exit drift))))
+          (is (str/includes? (:output drift) "reviewed HEAD changed"))))
+      (finally (test-support/delete-tree! root)))))
+
+(deftest basic-review-resolution-is-bound-to-the-frozen-head
+  (let [root (test-support/temp-dir "landing-review-evidence")
+        origin (io/file root "origin.git")
+        checkout (doto (io/file root "checkout") .mkdirs)]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! checkout "init" "-b" "main")
+      (test-support/run-git! checkout "config" "user.name" "Fixture")
+      (test-support/run-git! checkout "config" "user.email" "fixture@example.invalid")
+      (spit (io/file checkout "file") "base")
+      (test-support/run-git! checkout "add" ".")
+      (test-support/run-git! checkout "commit" "-m" "base")
+      (test-support/run-git! checkout "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! checkout "push" "origin" "HEAD:main")
+      (test-support/run-git! checkout "checkout" "-b" "feature/review-evidence")
+      (spit (io/file checkout "file") "candidate")
+      (test-support/run-git! checkout "commit" "-am" "candidate")
+      (test-support/run-git! checkout "push" "-u" "origin" "HEAD")
+      (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+            base (str/trim (test-support/run-git! checkout "merge-base" "origin/main" head))
+            marker (str/trim (test-support/run-git! checkout "rev-parse" "--git-path"
+                                                    "millstrand-land-quality-head"))
+            definition (requiring-resolve 'me.workflows.land/review)
+            verify! (requiring-resolve 'me.workflows.land/verify-review-resolution!)
+            params {:branch "feature/review-evidence" :head head
+                    :worktree (.getPath checkout)}
+            resolution {:base base :head head :reviewer "reviewer"
+                        :p1-p2 "none" :summary "No findings"}]
+        (spit (io/file checkout marker) (str head "\n"))
+        (test-support/with-runtime
+          (fn [rt _]
+            (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+            (letfn [(review-params [run-id feature outcome]
+                      (workflow/start! run-id definition (assoc params :feature feature))
+                      (dotimes [_ 3]
+                        (let [gate (first (workflow/ready run-id))]
+                          (workflow/complete! run-id {:step (:id gate) :executor "fixture"})))
+                      (workflow/choose! run-id :accepted outcome)
+                      (attr-get (weaver/show rt (:id (first (workflow/ready run-id))))
+                                :code/params))]
+              (let [mismatch (review-params
+                              "review-mismatch" "mismatch"
+                              (assoc resolution :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))]
+                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not match"
+                                      (verify! mismatch))))
+              (let [matching (review-params "review-match" "match" resolution)]
+                (is (= resolution (verify! matching))))))))
+      (finally (test-support/delete-tree! root)))))
 
 (deftest workspace-config-selects-the-release-definition
   (let [selection (workspace-release-selection)
@@ -181,8 +264,8 @@
                                                                  :authorization "fixture-user-message"}}})
                 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"has not preserved"
                                       (release/publish! publish-params)))
-                ;; Simulate an authorized identity-preserving landing in a local
-                ;; bare fixture only. Production's squash-policy question remains.
+                ;; Simulate the repository workflow's identity-preserving landing
+                ;; in a local bare fixture.
                 (test-support/run-git! checkout "push" "origin" "HEAD:main")
                 (let [receipt (release/publish! publish-params)]
                   (is (= (:head candidate) (:head receipt)))

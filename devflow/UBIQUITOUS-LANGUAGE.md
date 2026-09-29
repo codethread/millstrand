@@ -163,7 +163,7 @@ Registered by shared workspace modules and the repository modules under `.millst
 | **Coordinator** | The agent that plans the work, delegates it, verifies the result, and closes it. Only a coordinator drives **land**. | Orchestrator, manager, parent agent, lead |
 | **Worker** | A delegated agent doing one slice of work. Workers stop at implemented and committed; they do not land. | Subagent, agent, child, slave |
 
-The landing contract validates the exact pushed branch HEAD and requires it to contain current main. It uses a merge commit so branch commits retain identity; an outdated candidate fails instead of rebasing. The merge turn serializes cooperating landings until main is fast-forwarded. The workflow's own instructions describe retry and withdrawal behavior.
+The landing contract freezes the exact pushed `head` parameter, supplies that commit to basic review, and requires the same HEAD through queue preparation with current main already contained. It uses a merge commit so branch commits retain identity; an outdated candidate fails instead of rebasing. The merge turn serializes cooperating landings until main is fast-forwarded. The workflow's own instructions describe retry and withdrawal behavior.
 
 ## Relationships
 

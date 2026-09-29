@@ -1,9 +1,11 @@
 (ns me.workflows.land
   "Millstrand's one-seat review and candidate-preserving landing policy."
   (:require [clojure.spec.alpha :as s]
+            [me.workflows.evidence :as evidence]
             [millhouse.land.support :as support]
             [millhouse.workflow :as workflow]
-            [millstrand.api.format.alpha :as format-alpha]))
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -29,11 +31,11 @@
 (s/def ::pr-number pos-int?)
 
 (s/def ::review-params
-  (s/keys :req-un [::feature ::branch ::worktree]
+  (s/keys :req-un [::feature ::branch ::worktree ::head]
           :opt-un [::card ::pr-number ::reviewer]))
 (s/def ::land-params ::review-params)
 (s/def ::land-merge-params
-  (s/keys :req-un [::feature ::branch ::worktree ::subject ::body ::pr-number]
+  (s/keys :req-un [::feature ::branch ::worktree ::head ::subject ::body ::pr-number]
           :opt-un [::card ::reviewer]))
 (s/def ::land-abort-params
   (s/keys :req-un [::branch ::reason] :opt-un [::card]))
@@ -78,8 +80,54 @@
      been submitted, withdraw safely if that decision requires changing the plan.
    " {}))
 
+(defn- require-head-script
+  [next-script]
+  (str "set -eu\n"
+       "branch=$1\n"
+       "expected=$2\n"
+       "actual=$(git rev-parse HEAD)\n"
+       "[ \"$actual\" = \"$expected\" ] || {\n"
+       "  echo \"land: reviewed HEAD changed: expected $expected, found $actual\" >&2\n"
+       "  exit 1\n"
+       "}\n"
+       next-script))
+
+(defn- review-quality-argv
+  [{:keys [branch head]}]
+  (support/sh-gate
+   (require-head-script "exec sh -c \"$3\" land-quality \"$branch\"\n")
+   "millstrand-review-quality" branch head support/land-quality-gate-script))
+
+(defn- candidate-prepare-argv
+  [{:keys [branch head]}]
+  (support/sh-gate
+   (require-head-script
+    (str "mode=$3\n"
+         "prepare_script=$4\n"
+         "quality_script=$5\n"
+         "exec sh -c \"$prepare_script\" land-prepare \"$branch\" \"$mode\" \"$quality_script\"\n"))
+   "millstrand-candidate-prepare" branch head "preserve"
+   (support/script "land-prepare.sh") support/land-quality-gate-script))
+
+(defn- review-key
+  [{:keys [feature head]}]
+  (str "land-review/" feature "/" head))
+
+(defn verify-review-resolution!
+  "Require the recorded basic-review range to match the frozen candidate."
+  [{:keys [key branch head worktree]}]
+  (let [gate (evidence/gate! "me.workflows.land/verify-review-resolution!" key)
+        checkpoint (evidence/dependency! gate)
+        resolution (evidence/data (attr-get checkpoint :workflow/outcome-input))
+        frozen (evidence/quality-head! {:branch branch :head head :worktree worktree})]
+    (when-not (and (= head (:head frozen) (:head resolution))
+                   (= (:base frozen) (:base resolution)))
+      (fail! "Basic review resolution does not match the frozen candidate"
+             {:expected-head head :frozen frozen :resolution resolution}))
+    (select-keys resolution [:base :head :reviewer :p1-p2 :summary])))
+
 (defn- review-prompt
-  [{:keys [branch worktree reviewer]}]
+  [{:keys [branch head worktree reviewer]}]
   (format-alpha/prose
    "
      Act as the single `{reviewer}` review seat for branch `{branch}` in
@@ -88,16 +136,17 @@
      Verify the checkout is clean and on `{branch}`. Resolve `HEAD`,
      `origin/{branch}`, `origin/main`, and the quality marker at
      `$(git rev-parse --git-path millstrand-land-quality-head)`. Require HEAD,
-     origin/{branch}, and the marker to be the same full commit SHA. Set the
-     immutable review base to `git merge-base origin/main HEAD`, then inspect
-     that exact base..HEAD range.
+     origin/{branch}, the marker, and the frozen reviewed HEAD `{head}` to be the
+     same full commit SHA. Set the immutable review base to
+     `git merge-base origin/main {head}`, then inspect that exact base..{head}
+     range.
 
      Report concrete correctness, data-loss, concurrency, and cleanup findings,
      prioritizing P1/P2 issues with paths and lines. Say explicitly when there
      are no P1/P2 findings. A successful reviewer run supplies findings; it does
      not approve landing. The following coordinator checkpoint adjudicates and
      records the result.
-   " {:reviewer reviewer :branch branch :worktree worktree}))
+   " {:reviewer reviewer :branch branch :head head :worktree worktree}))
 
 (workflow/defworkflow review
   "Run one configured review agent, then require coordinator P1/P2 resolution."
@@ -107,6 +156,7 @@
    :param-docs {:feature "Work identity under review."
                 :branch "Pushed feature branch reviewed against origin/main."
                 :worktree "Absolute path to the clean feature worktree."
+                :head "Exact pushed branch HEAD supplied to review and landing."
                 :card "Optional kanban card to keep in progress during agent review."
                 :pr-number "Optional pull request identity carried with the work."
                 :reviewer "Single configured agent seat; defaults to reviewer."}}
@@ -116,10 +166,8 @@
    (support/card-gate :progress-card "Keep the optional card in progress during agent review" []
                       "millhouse.land.card-actions/rework-card!")
    (support/shell-gate
-    :review-quality "Validate the pushed HEAD before review" [:progress-card]
-    (fn [{:keys [branch]}]
-      (support/sh-gate support/land-quality-gate-script "review-quality" branch))
-    5400
+    :review-quality "Validate the pushed reviewed HEAD" [:progress-card]
+    review-quality-argv 5400
     "Commit and push the clean branch. Fix failed checks, then clear gate/error to retry.")
    (workflow/gate
     :review-agent "Run the one-seat code review" :agent
@@ -148,8 +196,9 @@
         Read the review-agent gate's `harness/result`. Adjudicate every finding;
         reviewer process success is not approval. Resolve all P1/P2 findings and
         compare the recorded base and head with the immutable reviewed range.
-        Choose `accepted` only with the reviewer seat, full base and head SHAs,
-        `p1-p2` equal to `none` or `resolved`, and a concise resolution summary.
+        Choose `accepted` only with the reviewer seat, full base and head SHAs, the
+        head equal to the workflow's frozen reviewed HEAD, `p1-p2` equal to `none`
+        or `resolved`, and a concise resolution summary.
         The checkpoint retains that evidence. If repairs change HEAD, obtain
         focused follow-up review before accepting.
 
@@ -158,7 +207,16 @@
         retains that closed target and cannot launch. Keep the completed gate's
         evidence; run follow-up review on a separate active task and record its
         exact range and findings here. Do not reopen or repour the original gate.
-      " {})})))
+      " {})})
+   (workflow/gate
+    :verify-resolution "Bind review evidence to the frozen candidate" :code
+    :depends-on [:resolve-review]
+    :attributes {"code/fn" "me.workflows.land/verify-review-resolution!"
+                 "delivery/key" review-key
+                 "code/params" (fn [{:keys [branch head worktree] :as params}]
+                                 {:key (review-key params)
+                                  :branch branch :head head :worktree worktree})}
+    "Require the accepted review base and HEAD to equal the quality-marked pushed candidate.")))
 
 (workflow/defworkflow land-abort
   "Record an aborted landing and leave the work available for follow-up."
@@ -205,13 +263,8 @@
                      <entry-id> --reason <reason>`. Withdrawal stops shell work first;
                      a possibly submitted merge requires reconciliation instead.
                    " {}))
-   (support/shell-gate :prepare-merge "Require and validate the unchanged candidate HEAD"
-                       [:take-turn]
-                       (fn [{:keys [branch]}]
-                         (support/sh-gate (support/script "land-prepare.sh")
-                                          "land-prepare" branch "preserve"
-                                          support/land-quality-gate-script))
-                       5400 retry-instruction)
+   (support/shell-gate :prepare-merge "Require and validate the reviewed candidate HEAD"
+                       [:take-turn] candidate-prepare-argv 5400 retry-instruction)
    (update (support/shell-gate
             :merge-pr "Merge the PR without rewriting its commits" [:prepare-merge]
             (fn [{:keys [pr-number subject body branch]}]
@@ -251,6 +304,7 @@
    :param-docs {:feature "Work identity being landed."
                 :branch "Branch containing the change."
                 :worktree "Absolute path to the branch's worktree."
+                :head "Exact pushed branch HEAD supplied to review and landing."
                 :card "Optional kanban card to finish after landing."
                 :pr-number "Existing draft or ready PR; omit to resolve from the branch."
                 :reviewer "Single configured review agent seat; defaults to reviewer."}}
