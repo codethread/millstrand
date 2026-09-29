@@ -254,10 +254,19 @@
                                                   (str "auto-run verified head: "
                                                        verified)}}))]
                     (prepare-start! "start-exact" "exact-key" head)
-                    (is (= head (:head (start! (assoc params :key "exact-key")))))
-                    (is (= head (:head (attr-get (workflow/current-root
-                                                  "land-auto-exact-card")
-                                                 :workflow/context))))
+                    (let [started (start! (assoc params :key "exact-key"))]
+                      (is (= head (:head started)))
+                      (is (= head (:head (attr-get (workflow/current-root
+                                                    "land-auto-exact-card")
+                                                   :workflow/context))))
+                      (weaver/add! runtime
+                                   {:title "Routed merge continuation" :state "active"
+                                    :attributes
+                                    {"workflow/run-id" "land-auto-exact-card"
+                                     "workflow/definition-name" "land-merge"
+                                     "workflow/context" params}})
+                      (is (= (:root started)
+                             (:root (start! (assoc params :key "exact-key"))))))
                     (prepare-start! "start-stale" "stale-key"
                                     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
                     (is (thrown-with-msg?

@@ -515,6 +515,17 @@
                 (weaver/update! rt prepare
                                 {:attributes {:handoff/request
                                               (assoc-in request [:params :head] head)}})
+                (test-support/run-git! checkout "commit" "--allow-empty" "-m" "drift")
+                (test-support/run-git! checkout "push" "origin" "HEAD")
+                (spit (io/file checkout marker)
+                      (str (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+                           "\n"))
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo #"does not match the validated candidate"
+                     (handoff/deliver! {:key "land-handoff-fixture"})))
+                (test-support/run-git! checkout "reset" "--hard" head)
+                (test-support/run-git! checkout "push" "--force" "origin" "HEAD")
+                (spit (io/file checkout marker) (str head "\n"))
                 (let [receipt (handoff/deliver! {:key "land-handoff-fixture"})]
                   (is (= "accepted" (:status receipt)))
                   (is (= head (get-in receipt [:request :params :head])))

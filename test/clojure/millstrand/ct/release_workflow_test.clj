@@ -130,6 +130,35 @@
           (is (str/includes? (:output pre-check) "reviewed HEAD changed"))))
       (finally (test-support/delete-tree! root)))))
 
+(deftest candidate-prepare-wrapper-preserves-the-reviewed-head
+  (let [root (test-support/temp-dir "landing-candidate-prepare")
+        record (io/file root "prepare-arguments")]
+    (try
+      (test-support/run-git! root "init" "-b" "feature/candidate-prepare")
+      (test-support/run-git! root "config" "user.name" "Fixture")
+      (test-support/run-git! root "config" "user.email" "fixture@example.invalid")
+      (spit (io/file root "file") "candidate")
+      (test-support/run-git! root "add" ".")
+      (test-support/run-git! root "commit" "-m" "candidate")
+      (let [head (str/trim (test-support/run-git! root "rev-parse" "HEAD"))
+            prepare-step (some #(when (= :prepare-merge (:id %)) %)
+                               (:steps @(requiring-resolve 'me.workflows.land/land-merge)))
+            argv ((get-in prepare-step [:attributes "shell/argv"])
+                  {:branch "feature/candidate-prepare" :head head})
+            recorder (str "printf '%s|%s|%s\\n' \"$1\" \"$2\" \"$3\" >"
+                          " " (pr-str (.getPath record)))
+            argv (-> argv
+                     (assoc 7 recorder)
+                     (assoc 8 "quality-script-fixture"))]
+        (is (zero? (:exit (run-command root argv))))
+        (is (= "feature/candidate-prepare|preserve|quality-script-fixture\n"
+               (slurp record)))
+        (test-support/run-git! root "commit" "--allow-empty" "-m" "drift")
+        (let [drift (run-command root argv)]
+          (is (not (zero? (:exit drift))))
+          (is (str/includes? (:output drift) "reviewed HEAD changed"))))
+      (finally (test-support/delete-tree! root)))))
+
 (deftest candidate-merge-wrapper-verifies-the-reviewed-parent
   (let [root (test-support/temp-dir "landing-merge-parent")
         origin (io/file root "origin.git")

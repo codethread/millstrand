@@ -76,14 +76,14 @@
         run-id (str "land-auto-" card)
         expected {:card card :feature feature :branch branch
                   :worktree worktree :head head}
-        roots #(weaver/list rt [:= [:attr "workflow/run-id"] run-id] {})]
+        roots #(filter (fn [root]
+                         (= "land" (attr-get root :workflow/definition-name)))
+                       (weaver/list rt [:= [:attr "workflow/run-id"] run-id] {}))]
     (when (empty? (roots))
       (workflow/start! run-id :land expected))
     (let [root (evidence/single! (roots) "Autonomous Land root missing or ambiguous")
           actual (evidence/data (attr-get root :workflow/context))]
-      (when-not (and (= "active" (:state root))
-                     (= "land" (attr-get root :workflow/definition-name))
-                     (= expected (select-keys actual (keys expected))))
+      (when-not (= expected (select-keys actual (keys expected)))
         (fail! "Autonomous Land run does not match the verified candidate"
                {:run-id run-id :expected expected :actual actual
                 :definition (attr-get root :workflow/definition-name)}))
