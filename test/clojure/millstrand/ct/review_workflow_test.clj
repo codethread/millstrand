@@ -107,7 +107,7 @@
      (pr-str (assoc request :git patch)) ")))"))))
 
 (deftest pinned-harnesses-review-policy-selects-in-a-disposable-world
-  (is (= "f40503fcb6559a94b660b1f82e729bd4f6751773"
+  (is (= "ef3bce80463f7babd274121e36f5c212a1e54019"
          (get-in workspace-deps ['millhouse/harnesses :git/sha])))
   (test-alpha/with-weaver-world
     [ctx {:storage :sqlite-memory
@@ -282,8 +282,8 @@
         (test-support/delete-tree! root)
         (test-support/delete-tree! origin)))))
 
-(deftest shared-land-still-requires-basic-review-before-signoff
-  (let [definition (workflow-definition 'millhouse.land/land)
+(deftest local-land-requires-basic-review-before-signoff
+  (let [definition (workflow-definition 'me.workflows.land/land)
         steps (into {} (map (juxt :id identity)) (:steps definition))]
     (is (= [:resolve-pr] (:depends-on (steps :review))))
     (is (= [:review] (:depends-on (steps :signoff))))

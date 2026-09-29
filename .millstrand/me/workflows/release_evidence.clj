@@ -58,8 +58,8 @@
              {:candidate candidate}))
     (evidence/git! repository "fetch" "origin")
     (when-not (= head (evidence/git! repository "merge-base" head "origin/main"))
-      (fail! "Shared landing has not preserved the exact two-commit candidate"
-             {:head head :policy "Resolve squash versus candidate preservation before publication"}))
+      (fail! "Repository landing has not preserved the exact two-commit candidate"
+             {:head head :policy "Land the candidate without rewriting its commits"}))
     (if-let [intent (attr-get gate :release/push-intent)]
       (require-remote! repository (evidence/data intent))
       (do
