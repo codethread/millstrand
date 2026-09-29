@@ -73,7 +73,7 @@
         _ (when-not (= verified-head head)
             (fail! "Autonomous Land head differs from verified PR evidence"
                    {:verified verified-head :current current}))
-        run-id (str "land-auto-" card)
+        run-id (str "land-auto-" card "-" head)
         expected {:card card :feature feature :branch branch
                   :worktree worktree :head head}
         roots #(filter (fn [root]
@@ -87,7 +87,42 @@
         (fail! "Autonomous Land run does not match the verified candidate"
                {:run-id run-id :expected expected :actual actual
                 :definition (attr-get root :workflow/definition-name)}))
-      {:run-id run-id :root (:id root) :head head})))
+      (let [receipt {:run-id run-id :root (:id root) :head head}]
+        (weaver/update! rt (:id gate) {:attributes {:auto-run/landing-start receipt}})
+        receipt))))
+
+(defn- repository-autonomous-land
+  "Bind shared autonomous custody prose to this repository's start receipt."
+  []
+  (let [definition @#'autonomous/autonomous-land
+        replace-review
+        (fn [step]
+          (if (= :review (:id step))
+            (update-in
+             step [:attributes "workflow/instruction"]
+             (fn [instruction]
+               (fn [params]
+                 (let [rendered (instruction params)
+                       pattern (re-pattern
+                                (str "(?s)Start or reuse the\\s+exact repository Land run "
+                                     "`land-auto-.*?never replace an existing run\\."))
+                       replacement
+                       (str "Read the parent start gate's `auto-run/landing-start` "
+                            "receipt. It already started or reused the exact "
+                            "repository Land run for the verified candidate. "
+                            "Drive that receipt's run ID; never reconstruct an ID "
+                            "from the card or replace the recorded run.")
+                       revised (str/replace rendered pattern replacement)]
+                   (when (= rendered revised)
+                     (fail! "Shared autonomous review instruction no longer exposes its repository policy seam"
+                            {:step :review}))
+                   revised))))
+            step))]
+    (update definition :steps #(mapv replace-review %))))
+
+(def repository-land-handoff
+  "Shared custody phases with Millstrand's receipt-bound Land instruction."
+  (repository-autonomous-land))
 
 (defn- delivery
   "Return the one repository-approved autonomous delivery workflow."
@@ -155,8 +190,8 @@
                     "delivery/key" start-key
                     "code/params" #(assoc (select-keys % [:card :feature :branch :worktree])
                                           :key (start-key %))}
-       "Start or verify land-auto-<card> with the exact pushed quality-marked HEAD before custody handoff.")
-      (workflow/call :land #'autonomous/autonomous-land {}
+       "Start or verify land-auto-<card>-<head> and persist auto-run/landing-start as the authoritative custody receipt.")
+      (workflow/call :land #'repository-land-handoff {}
                      :depends-on [:start-land]
                      :title "Review and hand off autonomous landing")])))
 

@@ -389,7 +389,7 @@
     (is (str/includes? ((get-in (step :landing)
                                 [:attributes "workflow/instruction"])
                         {:version "0.5.3"})
-                       "`release-land-0.5.3`"))))
+                       "`release-land-0.5.3-<candidate-head>`"))))
 
 (deftest release-candidate-requires-a-distinct-canonical-main-checkout
   (let [root (test-support/temp-dir "release-canonical")]
@@ -460,6 +460,17 @@
                                             [:feature :branch :worktree :head])]
               (is (= start-receipt
                      (release/start-land! (attr-get start-step :code/params))))
+              (let [repaired-head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+                (weaver/update! rt candidate-gate
+                                {:attributes {:release/candidate
+                                              (assoc candidate :head repaired-head)}})
+                (is (= (str "release-land-0.5.3-" repaired-head)
+                       (:run-id (release/start-land!
+                                 (attr-get start-step :code/params)))))
+                (weaver/update! rt candidate-gate
+                                {:attributes {:release/candidate candidate}})
+                (is (= start-receipt
+                       (release/start-land! (attr-get start-step :code/params)))))
               (weaver/update! rt (:root start-receipt)
                               {:attributes {:workflow/context
                                             (assoc land-context :worktree "/tmp/wrong")}})

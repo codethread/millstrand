@@ -181,6 +181,7 @@
                      ["wrong PR branch" {:pr-branch "auto/other"}]
                      ["stale PR head" {:pr-head "1111111111111111111111111111111111111111"}]
                      ["incomplete review package" {:body "## Summary"}]])
+              review-step (role-step strands "worker-review")
               handoff-step (role-step strands "handoff-worker")
               finisher-step (role-step strands "finisher")]
           (testing "review depends on repository quality and PR verification"
@@ -206,6 +207,10 @@
           (is (not-any? #(= "millhouse.land.card-actions/review-card!"
                             (attr-get % :code/fn)) strands))
           (testing "repository policy delegates landing to separate custody roles"
+            (is (str/includes? (attr-get review-step :workflow/instruction)
+                               "`auto-run/landing-start`"))
+            (is (not (str/includes? (attr-get review-step :workflow/instruction)
+                                    "`land-auto-fixture-card`")))
             (is (some? handoff-step))
             (is (some? finisher-step))
             (is (not= (:id handoff-step) (:id finisher-step))))
@@ -254,15 +259,15 @@
                                                   (str "auto-run verified head: "
                                                        verified)}}))]
                     (prepare-start! "start-exact" "exact-key" head)
-                    (let [started (start! (assoc params :key "exact-key"))]
+                    (let [exact-run-id (str "land-auto-exact-card-" head)
+                          started (start! (assoc params :key "exact-key"))]
                       (is (= head (:head started)))
-                      (is (= head (:head (attr-get (workflow/current-root
-                                                    "land-auto-exact-card")
+                      (is (= head (:head (attr-get (workflow/current-root exact-run-id)
                                                    :workflow/context))))
                       (weaver/add! runtime
                                    {:title "Routed merge continuation" :state "active"
                                     :attributes
-                                    {"workflow/run-id" "land-auto-exact-card"
+                                    {"workflow/run-id" exact-run-id
                                      "workflow/definition-name" "land-merge"
                                      "workflow/context" params}})
                       (is (= (:root started)
@@ -272,12 +277,24 @@
                     (is (thrown-with-msg?
                          clojure.lang.ExceptionInfo #"differs from verified PR"
                          (start! (assoc params :card "stale-card" :key "stale-key"))))
-                    (workflow/start! "land-auto-mismatch-card" :land
+                    (workflow/start! (str "land-auto-mismatch-card-" head) :land
                                      (assoc params :card "mismatch-card"
                                             :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
                     (prepare-start! "start-mismatch" "mismatch-key" head)
                     (is (thrown-with-msg?
                          clojure.lang.ExceptionInfo #"does not match"
                          (start! (assoc params :card "mismatch-card"
-                                        :key "mismatch-key"))))))
+                                        :key "mismatch-key"))))
+                    (test-support/run-git! checkout "commit" "--allow-empty"
+                                           "-m" "repaired candidate")
+                    (test-support/run-git! checkout "push" "origin" "HEAD")
+                    (let [repaired-head (str/trim (test-support/run-git!
+                                                   checkout "rev-parse" "HEAD"))]
+                      (spit (io/file checkout marker) (str repaired-head "\n"))
+                      (prepare-start! "start-repaired" "repaired-key" repaired-head)
+                      (let [repaired (start! (assoc params :key "repaired-key"))]
+                        (is (= (str "land-auto-exact-card-" repaired-head)
+                               (:run-id repaired)))
+                        (is (not= (str "land-auto-exact-card-" head)
+                                  (:run-id repaired)))))))
                 (finally (test-support/delete-tree! root))))))))))

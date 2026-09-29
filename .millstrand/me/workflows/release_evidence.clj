@@ -38,7 +38,7 @@
                   :branch (:branch candidate)
                   :worktree (:worktree candidate)
                   :head (:head candidate)}
-        run-id (str "release-land-" version)
+        run-id (str "release-land-" version "-" (:head candidate))
         roots #(filter (fn [root]
                          (= "land" (attr-get root :workflow/definition-name)))
                        (weaver/list rt [:= [:attr "workflow/run-id"] run-id] {}))]

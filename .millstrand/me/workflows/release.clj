@@ -163,8 +163,9 @@
       (format-alpha/prose
        "
          Read `release/landing-start` from the prerequisite and drive that exact
-         `release-land-{version}` run through local review, sign-off, FIFO turn,
-         candidate-preserving preparation, and merge-commit landing. Do not
+         `release-land-{version}-<candidate-head>` run through local review,
+         sign-off, FIFO turn, candidate-preserving preparation, and merge-commit
+         landing. Do not
          substitute squash, rebase merge, a duplicate Land run, or a direct push
          to main.
 
