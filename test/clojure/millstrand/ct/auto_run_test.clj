@@ -103,7 +103,7 @@
             "  *'--json body'*) printf '%s\\n' '" body "' ;;\n"
             "  *) printf '" draft "\\t" state "\\t" base "\\t" pr-branch "\\t" pr-head "\\n' ;;\n"
             "esac\n"))
-      (run-command root bin argv)
+      (assoc (run-command root bin argv) :head head)
       (finally
         (test-support/delete-tree! root)))))
 
@@ -152,6 +152,7 @@
               quality (titled-strand strands "Pass repository quality checks")
               ci (titled-strand strands "Wait for the PR checks")
               verify-pr (titled-strand strands "Verify the ready PR and review package")
+              start-land (titled-strand strands "Start repository Land at the verified HEAD")
               quality-argv (attr-get quality :shell/argv)
               ci-argv (attr-get ci :shell/argv)
               verify-pr-argv (attr-get verify-pr :shell/argv)
@@ -169,26 +170,135 @@
                      ["wrong PR branch" {:pr-branch "auto/other"}]
                      ["stale PR head" {:pr-head "1111111111111111111111111111111111111111"}]
                      ["incomplete review package" {:body "## Summary"}]])
+              review-step (role-step strands "worker-review")
               handoff-step (role-step strands "handoff-worker")
-              finisher-step (role-step strands "finisher")]
+              finisher-step (role-step strands "finisher")
+              signoff-step (role-step strands "finisher-signoff")
+              observe-step (role-step strands "finisher-observe")]
           (testing "review depends on repository quality and PR verification"
             (is (= 1 (count (:ready result))))
             (doseq [[prerequisite step]
-                    (partition 2 1 [implement prepare-pr quality ci verify-pr])]
+                    (partition 2 1 [implement prepare-pr quality ci verify-pr start-land])]
               (is (= [(:id prerequisite)]
                      (mapv :to_strand_id
                            (graph/outgoing-edges runtime [(:id step)] "depends-on"))))))
           (testing "repository-owned quality and PR boundaries remain effective"
             (is (str/includes? (nth quality-argv 2) "millstrand-land-quality-head"))
+            (is (= "me.auto-run-workflows/start-land!"
+                   (attr-get start-land :code/fn)))
             (is (= ["pr-checks" "required" "auto/fixture-card" "120" "5"]
                    (subvec ci-argv (- (count ci-argv) 5))))
             (is (zero? (:exit ready-pr-result)) (:output ready-pr-result))
+            (is (str/includes? (:output ready-pr-result)
+                               (str "auto-run verified head: "
+                                    (:head ready-pr-result))))
             (doseq [[label rejected-pr-result] rejected-pr-results]
               (is (not (zero? (:exit rejected-pr-result)))
                   (str label ": " (:output rejected-pr-result)))))
           (is (not-any? #(= "millhouse.land.card-actions/review-card!"
                             (attr-get % :code/fn)) strands))
-          (testing "repository policy delegates landing to separate shared roles"
+          (testing "repository policy delegates landing to separate custody roles"
+            (is (str/includes? (attr-get review-step :workflow/instruction)
+                               "`auto-run/landing-start`"))
+            (is (not (str/includes? (attr-get review-step :workflow/instruction)
+                                    "`land-auto-fixture-card`")))
+            (doseq [step [signoff-step observe-step]]
+              (is (str/includes? (attr-get step :workflow/instruction)
+                                 "`auto-run/landing-start`"))
+              (is (not (str/includes? (attr-get step :workflow/instruction)
+                                      "land-auto-fixture-card"))))
+            (is (not (str/includes? (attr-get signoff-step :workflow/instruction)
+                                    "squash message")))
+            (is (str/includes? (attr-get signoff-step :workflow/instruction)
+                               "merge message"))
             (is (some? handoff-step))
             (is (some? finisher-step))
-            (is (not= (:id handoff-step) (:id finisher-step)))))))))
+            (is (not= (:id handoff-step) (:id finisher-step))))
+          (testing "the start gate binds autonomous Land to the quality-marked HEAD"
+            (let [root (test-support/temp-dir "auto-land-head")
+                  origin (io/file root "origin.git")
+                  checkout (doto (io/file root "checkout") .mkdirs)
+                  branch "feature/auto-head"]
+              (try
+                (test-support/run-git! root "init" "--bare" (.getPath origin))
+                (test-support/run-git! checkout "init" "-b" "main")
+                (test-support/run-git! checkout "config" "user.name" "Fixture")
+                (test-support/run-git! checkout "config" "user.email"
+                                       "fixture@example.invalid")
+                (spit (io/file checkout "file") "base")
+                (test-support/run-git! checkout "add" ".")
+                (test-support/run-git! checkout "commit" "-m" "base")
+                (test-support/run-git! checkout "remote" "add" "origin"
+                                       (.getPath origin))
+                (test-support/run-git! checkout "push" "origin" "HEAD:main")
+                (test-support/run-git! checkout "checkout" "-b" branch)
+                (spit (io/file checkout "file") "candidate")
+                (test-support/run-git! checkout "commit" "-am" "candidate")
+                (test-support/run-git! checkout "push" "-u" "origin" "HEAD")
+                (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+                      marker (str/trim (test-support/run-git!
+                                        checkout "rev-parse" "--git-path"
+                                        "millstrand-land-quality-head"))
+                      start! (requiring-resolve 'me.auto-run-workflows/start-land!)
+                      params {:card "exact-card" :feature "Exact candidate"
+                              :branch branch :worktree (.getPath checkout)}]
+                  (spit (io/file checkout marker) (str head "\n"))
+                  (letfn [(prepare-start! [run-id key verified]
+                            (workflow/start!
+                             run-id
+                             (workflow/workflow
+                              "Start proof"
+                              (workflow/step :verified "Record verified PR" :self)
+                              (workflow/gate
+                               :start "Start Land" :code :depends-on [:verified]
+                               :attributes {"code/fn" "me.auto-run-workflows/start-land!"
+                                            "delivery/key" key}))
+                             {})
+                            (workflow/complete!
+                             run-id {:attributes {"shell/output"
+                                                  (str "auto-run verified head: "
+                                                       verified)}}))]
+                    (prepare-start! "start-exact" "exact-key" head)
+                    (let [exact-run-id (str "land-auto-exact-card-" head)
+                          historical-root
+                          (weaver/add!
+                           runtime
+                           {:title "Aborted historical autonomous Land"
+                            :state "closed"
+                            :attributes
+                            {"workflow/run-id" exact-run-id
+                             "workflow/role" "root"
+                             "workflow/definition-name" "land"
+                             "workflow/context" (assoc params :head head)}})
+                          started (start! (assoc params :key "exact-key"))]
+                      (is (= head (:head started)))
+                      (is (not= (:id historical-root) (:root started)))
+                      (is (= head (:head (attr-get (workflow/current-root exact-run-id)
+                                                   :workflow/context))))
+                      (is (= started (start! (assoc params :key "exact-key")))))
+                    (prepare-start! "start-stale" "stale-key"
+                                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                    (is (thrown-with-msg?
+                         clojure.lang.ExceptionInfo #"differs from verified PR"
+                         (start! (assoc params :card "stale-card" :key "stale-key"))))
+                    (workflow/start! (str "land-auto-mismatch-card-" head) :land
+                                     (assoc params :card "mismatch-card"
+                                            :head "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+                    (prepare-start! "start-mismatch" "mismatch-key" head)
+                    (is (thrown-with-msg?
+                         clojure.lang.ExceptionInfo #"does not match"
+                         (start! (assoc params :card "mismatch-card"
+                                        :key "mismatch-key"))))
+                    (test-support/run-git! checkout "commit" "--allow-empty"
+                                           "-m" "repaired candidate")
+                    (test-support/run-git! checkout "push" "origin" "HEAD")
+                    (let [repaired-head (str/trim (test-support/run-git!
+                                                   checkout "rev-parse" "HEAD"))]
+                      (spit (io/file checkout marker) (str repaired-head "\n"))
+                      (prepare-start! "start-repaired" "repaired-key" repaired-head)
+                      (let [repaired (start! (assoc params :key "repaired-key"))]
+                        (is (= (str "land-auto-exact-card-" repaired-head)
+                               (:run-id repaired)))
+                        (is (not= (str "land-auto-exact-card-" head)
+                                  (:run-id repaired)))))))
+                (finally (test-support/delete-tree! root))))))))))

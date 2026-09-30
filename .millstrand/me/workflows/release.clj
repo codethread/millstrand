@@ -144,31 +144,52 @@
    (workflow/gate
     :freeze-candidate "Record the exact candidate" :code :depends-on [:build-identity]
     :attributes {"code/fn" "me.workflows.release-evidence/candidate!"
-                 "code/params" #(select-keys % [:version :branch :worktree])}
+                 "delivery/key" #(handoff/key-for "release-candidate" %)
+                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                                       :key (handoff/key-for "release-candidate" %))}
     "Record version, release commit and formula commit before any landing or approval.")
    (workflow/gate
-    :landing-policy "Resolve candidate-preserving shared landing" :human
+    :start-landing "Start the exact release Land run" :code
     :depends-on [:freeze-candidate]
-    (format-alpha/prose
-     "
-       STOP for the repository owner: shared Land currently squashes, whereas
-       this release must preserve the adjacent release and formula commits and
-       the formula's exact pin. Do not invent a direct-main push exception.
-       Record the policy decision and accepted shared landing run/PR receipt
-       here. Leave this boundary open until an authorized shared path preserves
-       the candidate on origin/main. No publication or cleanup while unresolved.
+    :attributes {"code/fn" "me.workflows.release-evidence/start-land!"
+                 "delivery/key" #(handoff/key-for "release-land" %)
+                 "code/params" #(hash-map :key (handoff/key-for "release-land" %)
+                                          :version (:version %))}
+    "Start or reuse one deterministic Land run with the complete frozen candidate context.")
+   (workflow/step
+    :landing "Land the exact candidate without rewriting its commits" :self
+    :depends-on [:start-landing]
+    (fn [{:keys [version]}]
+      (format-alpha/prose
+       "
+         Read `release/landing-start` from the prerequisite and drive that exact
+         `release-land-{version}-<candidate-head>` run through local review,
+         sign-off, FIFO turn, candidate-preserving preparation, and merge-commit
+         landing. Do not
+         substitute squash, rebase merge, a duplicate Land run, or a direct push
+         to main.
 
-       The authorized route must retain custody of the candidate checkout through
-       publication and remote verification: publish! reads Git there. Ordinary
-       shared Land cleanup must not delete it. Shared Land does not yet provide
-       this candidate-preserving landing and checkout-retention contract.
-     "))
+         Complete this step only after Land is done and origin/main contains the
+         frozen candidate HEAD unchanged. Record `release/land-receipt` here with
+         its `merge-commit`. The next code gate verifies the persisted start
+         custody, completed Land roots, complete frozen context, and preserved
+         merge parent. The frozen evidence retains the canonical repository
+         checkout needed for publication after feature cleanup.
+       " {:version version})))
+   (workflow/gate
+    :verify-landing "Verify completed candidate-preserving Land custody" :code
+    :depends-on [:landing]
+    :attributes {"code/fn" "me.workflows.release-evidence/landed!"
+                 "delivery/key" #(handoff/key-for "release-landing" %)
+                 "code/params" #(hash-map :version (:version %)
+                                          :key (handoff/key-for "release-landing" %))}
+    "Require the exact candidate's completed local Land run and merge commit before approval.")
    (workflow/gate
     :approve "Approve the exact landed release candidate" :human
-    :depends-on [:landing-policy]
+    :depends-on [:verify-landing]
     (format-alpha/prose
      "
-       Read freeze-candidate's code/result. Ask the user to approve that exact
+       Read verify-landing's `release/landing` evidence. Ask the user to approve that exact
        version and candidate SHA for publication. Record release/approval here
        with version, head and authorization (the actual conversation reference).
        A human gate label or actor string is not authorization. A changed
@@ -178,7 +199,7 @@
     :publish "Publish the approved annotated tag" :code :depends-on [:approve]
     :attributes {"code/fn" "me.workflows.release-evidence/publish!"
                  "delivery/key" #(handoff/key-for "release" %)
-                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
+                 "code/params" #(assoc (select-keys % [:version])
                                        :key (handoff/key-for "release" %))}
     (format-alpha/prose
      "
@@ -190,6 +211,5 @@
     :verify-remote "Verify the remote release receipt" :code :depends-on [:publish]
     :attributes {"code/fn" "me.workflows.release-evidence/verify-remote!"
                  "delivery/key" #(handoff/key-for "release" %)
-                 "code/params" #(assoc (select-keys % [:version :branch :worktree])
-                                       :key (handoff/key-for "release" %))}
+                 "code/params" #(hash-map :key (handoff/key-for "release" %))}
     "Require the remote annotated tag object and peeled candidate SHA to match the publication receipt.")))

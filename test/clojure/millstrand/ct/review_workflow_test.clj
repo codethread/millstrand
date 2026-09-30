@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [millhouse.harnesses.reviewers :as reviewers]
+            [me.workflows.land]
             [me.workflows.review]
             [me.workflows.review-evidence :as review]
             [me.workflows.evidence :as evidence]
@@ -267,8 +268,8 @@
         (test-support/delete-tree! root)
         (test-support/delete-tree! origin)))))
 
-(deftest shared-land-still-requires-basic-review-before-signoff
-  (let [definition (workflow-definition 'millhouse.land/land)
+(deftest local-land-requires-basic-review-before-signoff
+  (let [definition (workflow-definition 'me.workflows.land/land)
         steps (into {} (map (juxt :id identity)) (:steps definition))]
     (is (= [:resolve-pr] (:depends-on (steps :review))))
     (is (= [:review] (:depends-on (steps :signoff))))
@@ -327,8 +328,11 @@
               (weaver/update! rt (:id child) {:attributes patch})
               (is (thrown? clojure.lang.ExceptionInfo (verify!))))
             (weaver/update! rt (:id child) {:attributes {:harness/result "No findings"}})
-            (let [verified (verify!)]
+            (let [verified (verify!)
+                  verify-gate (weaver/show rt (:id (first (workflow/ready "verify-real"))))]
               (is (= "reviewed" (:status verified)))
+              (is (= verified
+                     (evidence/data (attr-get verify-gate :review/verification))))
               (is (= [{:run-id (:id child) :reviewer "correctness" :result "No findings"}]
                      (:results verified))))
             (weaver/update! rt (:id child)
@@ -394,6 +398,126 @@
             (weaver/update! rt prepare {:attributes {:handoff/request (assoc-in request [:params :branch] "other")}})
             (is (thrown-with-msg? clojure.lang.ExceptionInfo #"changed the recorded work identity"
                                   (handoff/launch! params)))))))))
+
+(deftest land-handoff-requires-the-quality-marked-head
+  (let [root (test-support/temp-dir "land-handoff")
+        origin (io/file root "origin.git")
+        checkout (doto (io/file root "checkout") .mkdirs)
+        branch "feature/handoff"]
+    (try
+      (test-support/run-git! root "init" "--bare" (.getPath origin))
+      (test-support/run-git! checkout "init" "-b" "main")
+      (test-support/run-git! checkout "config" "user.name" "Fixture")
+      (test-support/run-git! checkout "config" "user.email" "fixture@example.invalid")
+      (spit (io/file checkout "file") "base")
+      (test-support/run-git! checkout "add" ".")
+      (test-support/run-git! checkout "commit" "-m" "base")
+      (test-support/run-git! checkout "remote" "add" "origin" (.getPath origin))
+      (test-support/run-git! checkout "push" "origin" "HEAD:main")
+      (test-support/run-git! checkout "checkout" "-b" branch)
+      (spit (io/file checkout "file") "candidate")
+      (test-support/run-git! checkout "commit" "-am" "candidate")
+      (test-support/run-git! checkout "push" "-u" "origin" "HEAD")
+      (let [head (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+            marker (str/trim (test-support/run-git! checkout "rev-parse" "--git-path"
+                                                    "millstrand-land-quality-head"))
+            params {:feature "handoff-feature" :branch branch
+                    :worktree (.getPath checkout)}]
+        (spit (io/file checkout marker) (str head "\n"))
+        (with-runtime
+          (fn [rt _]
+            (test-support/activate-spool! rt :millhouse/workflow 'millhouse.workflow)
+            (workflow/register-workflow! :land-abort 'me.workflows.land/land-abort)
+            (workflow/register-workflow! :land-merge 'me.workflows.land/land-merge)
+            (workflow/register-workflow! :land 'me.workflows.land/land)
+            (workflow/start!
+             "freeze-delivery"
+             (workflow/workflow
+              "Freeze delivery proof"
+              (workflow/step :quality "Final quality" :self)
+              (workflow/gate
+               :freeze "Freeze delivery" :code :depends-on [:quality]
+               :attributes {"code/fn" "me.workflows.review-evidence/freeze-delivery!"
+                            "delivery/key" "freeze-delivery-fixture"
+                            "code/params" {:key "freeze-delivery-fixture"
+                                           :branch branch
+                                           :worktree (.getPath checkout)}}))
+             {})
+            (workflow/complete!
+             "freeze-delivery"
+             {:attributes {"shell/output"
+                           (str "land quality gate: passed at unchanged " branch
+                                " HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")}})
+            (let [freeze! (requiring-resolve
+                           'me.workflows.review-evidence/freeze-delivery!)
+                  freeze-gate (weaver/show rt (:id (first (workflow/ready
+                                                           "freeze-delivery"))))
+                  quality (evidence/dependency! freeze-gate)]
+              (is (thrown-with-msg?
+                   clojure.lang.ExceptionInfo #"Delivery HEAD differs"
+                   (freeze! {:key "freeze-delivery-fixture"
+                             :branch branch :worktree (.getPath checkout)})))
+              (weaver/update! rt (:id quality)
+                              {:attributes
+                               {:shell/output
+                                (str "land quality gate: passed at unchanged " branch
+                                     " HEAD " head)}}))
+            (let [freeze! (requiring-resolve
+                           'me.workflows.review-evidence/freeze-delivery!)
+                  delivery (freeze! {:key "freeze-delivery-fixture"
+                                     :branch branch :worktree (.getPath checkout)})
+                  parent
+                  (workflow/workflow
+                   "Parent"
+                   (workflow/step :freeze "Freeze delivery" :self
+                                  :attributes {"review/delivery" delivery})
+                   (workflow/checkpoint :decision "Select delivery"
+                                        :depends-on [:freeze]
+                                        :choices [{:key :land :label "Land"}])
+                   (workflow/step
+                    :prepare "Prepare delivery" :self :depends-on [:decision]
+                    :attributes {"handoff/identity"
+                                 #(select-keys % [:feature :branch :worktree])})
+                   (workflow/gate
+                    :accept "Accept delivery" :code :depends-on [:prepare]
+                    :attributes {"code/fn" "me.workflows.handoff/deliver!"
+                                 "delivery/key" "land-handoff-fixture"
+                                 "code/params" {:key "land-handoff-fixture"}}))]
+              (is (= head (:head delivery)))
+              (workflow/start! "land-handoff" parent params)
+              (workflow/complete! "land-handoff" {})
+              (workflow/choose! "land-handoff" :land {})
+              (let [prepare (:id (first (workflow/ready "land-handoff")))
+                    request {:workflow "land"
+                             :params (assoc params :head
+                                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                             :owner "receiving-coordinator"
+                             :authorization "fixture-user-message"}]
+                (workflow/complete! "land-handoff"
+                                    {:attributes {"handoff/request" request}})
+                (is (thrown-with-msg? clojure.lang.ExceptionInfo #"head does not match"
+                                      (handoff/deliver! {:key "land-handoff-fixture"})))
+                (weaver/update! rt prepare
+                                {:attributes {:handoff/request
+                                              (assoc-in request [:params :head] head)}})
+                (test-support/run-git! checkout "commit" "--allow-empty" "-m" "drift")
+                (test-support/run-git! checkout "push" "origin" "HEAD")
+                (spit (io/file checkout marker)
+                      (str (str/trim (test-support/run-git! checkout "rev-parse" "HEAD"))
+                           "\n"))
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo #"does not match the validated candidate"
+                     (handoff/deliver! {:key "land-handoff-fixture"})))
+                (test-support/run-git! checkout "reset" "--hard" head)
+                (test-support/run-git! checkout "push" "--force" "origin" "HEAD")
+                (spit (io/file checkout marker) (str head "\n"))
+                (let [receipt (handoff/deliver! {:key "land-handoff-fixture"})]
+                  (is (= "accepted" (:status receipt)))
+                  (is (= head (get-in receipt [:request :params :head])))
+                  (test-support/delete-tree! checkout)
+                  (is (= receipt
+                         (handoff/deliver! {:key "land-handoff-fixture"})))))))))
+      (finally (test-support/delete-tree! root)))))
 
 (deftest story-freeze-rejects-uncommitted-and-stale-revisions
   (let [root (test-support/temp-dir "story-freeze")]

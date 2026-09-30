@@ -2,10 +2,14 @@
   "Repository-owned delivery contract for automatically assigned features."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [me.workflows.evidence :as evidence]
             [millhouse.auto-run-land :as autonomous]
             [millhouse.land.support :as land-support]
             [millhouse.workflow :as workflow]
-            [millstrand.api.format.alpha :as format-alpha]))
+            [millstrand.api.current.alpha :as current]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 (s/def ::text (s/and string? (complement str/blank?)))
 (s/def ::card ::text)
@@ -48,7 +52,90 @@
        "case \"$body\" in\n"
        "  *'## Summary'*'## Walkthrough'*'## Verification'*) ;;\n"
        "  *) echo \"PR is missing its required review package\" >&2; exit 1 ;;\n"
-       "esac\n"))
+       "esac\n"
+       "printf 'auto-run verified head: %s\\n' \"$head\"\n"))
+
+(defn- start-key
+  [{:keys [card]}]
+  (str "auto-land-start/" card))
+
+(defn start-land!
+  "Start or verify the exact repository Land run for autonomous delivery."
+  [{:keys [key card feature branch worktree]}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.auto-run-workflows/start-land!" key)
+        verification (evidence/dependency! gate)
+        output (or (attr-get verification :shell/output) "")
+        verified-head (second (re-find #"(?m)^auto-run verified head: ([0-9a-f]{40})$"
+                                       output))
+        {:keys [head] :as current}
+        (evidence/quality-head! {:branch branch :worktree worktree})
+        _ (when-not (= verified-head head)
+            (fail! "Autonomous Land head differs from verified PR evidence"
+                   {:verified verified-head :current current}))
+        run-id (str "land-auto-" card "-" head)
+        expected {:card card :feature feature :branch branch
+                  :worktree worktree :head head}
+        roots #(evidence/reusable-land-roots rt run-id)]
+    (when (empty? (roots))
+      (workflow/start! run-id :land expected))
+    (let [root (evidence/single! (roots) "Autonomous Land root missing or ambiguous")
+          actual (evidence/data (attr-get root :workflow/context))]
+      (when-not (= expected (select-keys actual (keys expected)))
+        (fail! "Autonomous Land run does not match the verified candidate"
+               {:run-id run-id :expected expected :actual actual
+                :definition (attr-get root :workflow/definition-name)}))
+      (let [receipt {:run-id run-id :root (:id root) :head head}]
+        (weaver/update! rt (:id gate) {:attributes {:auto-run/landing-start receipt}})
+        receipt))))
+
+(defn- repository-autonomous-land
+  "Bind shared autonomous custody prose to this repository's start receipt."
+  []
+  (let [definition @#'autonomous/autonomous-land
+        receipt-text "the parent `auto-run/landing-start` receipt's exact `:run-id`"
+        rewrite
+        (fn [step]
+          (if-not (#{:review :authorize-land :observe-land} (:id step))
+            step
+            (update-in
+             step [:attributes "workflow/instruction"]
+             (fn [instruction]
+               (fn [{:keys [card] :as params}]
+                 (let [rendered (instruction params)
+                       legacy-id (str "land-auto-" card)
+                       revised
+                       (case (:id step)
+                         :review
+                         (str/replace
+                          rendered
+                          (re-pattern
+                           (str "(?s)Start or reuse the\\s+exact repository Land run "
+                                "`land-auto-.*?never replace an existing run\\."))
+                          (str "Read " receipt-text ". It already started or reused "
+                               "the repository Land run for the verified candidate. "
+                               "Drive that run; never reconstruct an ID from the card "
+                               "or replace the recorded run."))
+
+                         :authorize-land
+                         (-> rendered
+                             (str/replace legacy-id receipt-text)
+                             (str/replace "squash message" "merge message"))
+
+                         :observe-land
+                         (str/replace rendered legacy-id receipt-text))]
+                   (when (or (= rendered revised)
+                             (str/includes? revised legacy-id)
+                             (and (= :authorize-land (:id step))
+                                  (str/includes? revised "squash message")))
+                     (fail! "Shared autonomous instruction no longer exposes its repository policy seam"
+                            {:step (:id step)}))
+                   revised))))))]
+    (update definition :steps #(mapv rewrite %))))
+
+(def repository-land-handoff
+  "Shared custody phases with Millstrand's receipt-bound Land instruction."
+  (repository-autonomous-land))
 
 (defn- delivery
   "Return the one repository-approved autonomous delivery workflow."
@@ -109,12 +196,20 @@
        (fn [{:keys [branch]}]
          (land-support/sh-gate verify-pr-script "auto-run-verify-pr" branch))
        300 failure-instruction)
-      (workflow/call :land #'autonomous/autonomous-land {}
-                     :depends-on [:verify-pr]
+      (workflow/gate
+       :start-land "Start repository Land at the verified HEAD" :code
+       :depends-on [:verify-pr]
+       :attributes {"code/fn" "me.auto-run-workflows/start-land!"
+                    "delivery/key" start-key
+                    "code/params" #(assoc (select-keys % [:card :feature :branch :worktree])
+                                          :key (start-key %))}
+       "Start or verify land-auto-<card>-<head> and persist auto-run/landing-start as the authoritative custody receipt.")
+      (workflow/call :land #'repository-land-handoff {}
+                     :depends-on [:start-land]
                      :title "Review and hand off autonomous landing")])))
 
 (workflow/defworkflow! auto-full-land
-  "Implement, validate, review, and hand landing to an independent finisher."
+  "Implement, validate, review, and hand local landing to an independent finisher."
   {:entrypoints #{:start}
    :param-spec ::params
    :defaults {}

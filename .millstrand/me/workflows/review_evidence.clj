@@ -56,6 +56,27 @@
             (weaver/update! rt (:id gate) {:attributes {:review/dispatch snapshot}})
             (selection! snapshot)))))))
 
+(defn freeze-delivery!
+  "Persist the exact final quality-gate HEAD accepted for delivery."
+  [{:keys [key branch worktree]}]
+  (let [rt (current/runtime)
+        gate (evidence/gate! "me.workflows.review-evidence/freeze-delivery!" key)
+        quality (evidence/dependency! gate)
+        output (or (attr-get quality :shell/output) "")
+        verified-head
+        (second (re-find (re-pattern
+                          (str "(?m)^land quality gate: passed at unchanged "
+                               (java.util.regex.Pattern/quote branch)
+                               " HEAD ([0-9a-f]{40})$"))
+                         output))
+        frozen (evidence/quality-head! {:branch branch :worktree worktree})]
+    (when-not (= verified-head (:head frozen))
+      (fail! "Delivery HEAD differs from final review quality evidence"
+             {:verified verified-head :current frozen}))
+    (let [receipt (select-keys frozen [:base :head :branch :worktree])]
+      (weaver/update! rt (:id gate) {:attributes {:review/delivery receipt}})
+      receipt)))
+
 (defn verify!
   "Verify actual selected runs, results, settlement, and frozen change identity.
 
@@ -86,6 +107,10 @@
                (fail! "Reviewer lacks successful settled evidence for the dispatched change"
                       {:run-id id :reviewer reviewer}))
              {:run-id id :reviewer reviewer :result result}))
-         (:runs selection))]
-    {:status (if (seq results) "reviewed" "no-applicable-reviewer")
-     :dispatch (:id dispatch) :frozen frozen :selection selection :results results}))
+         (:runs selection))
+        verification
+        {:status (if (seq results) "reviewed" "no-applicable-reviewer")
+         :dispatch (:id dispatch) :frozen frozen
+         :selection selection :results results}]
+    (weaver/update! rt (:id gate) {:attributes {:review/verification verification}})
+    verification))

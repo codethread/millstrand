@@ -43,7 +43,7 @@ Every piece of work takes the same path:
 1. Create a non-`main` worktree for the branch.
 2. Claim the feature card and record that branch and worktree. See the [Kanban spool README](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban); half-formed ideas stay in refinement until promoted.
 3. Run the development workflow and its tasks. [Devflow](https://github.com/codethread/devflow.spool#readme) covers proposal, spec and plan, tasks, and implementation.
-4. Drive the shared `land` workflow. It validates the pushed HEAD, runs one basic review, admits approved work to the FIFO queue, merges the exact final HEAD, updates canonical `main`, finishes the card, and cleans the branch and worktree.
+4. Drive Millstrand's repository-owned `land` workflow, passing the exact pushed HEAD as `head`. It binds review and queue preparation to that commit, admits approved work to the FIFO queue, preserves its commits with a merge commit, updates canonical `main`, finishes the card, and cleans the branch and worktree.
 
 Millstrand also registers `millstrand-review` for changes that warrant the full repository roster. Use it when a development workflow requires that handoff or when the extra scrutiny is useful; it is not a prerequisite for every landing.
 

@@ -150,20 +150,20 @@ Registered by shared workspace modules and the repository modules under `.millst
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **review** | The shared Millhouse basic review workflow. One configured agent reviews an immutable range, then a coordinator resolves every finding and records the reviewed base and HEAD plus resolved-or-absent P1/P2 findings. The shared `land` workflow calls it before sign-off, so normal landing cannot bypass review. | Full roster review, sign-off |
-| **millstrand-review** | The repository-owned full review of implemented work: the change-review roster, findings resolution, and validation of the pushed HEAD. Story and fix work hand off here before shared landing. Completing this workflow does not authorize merging or replace land's basic **review** call. | Basic review, landing, proposal review, card review |
-| **land** | The shared Millhouse workflow that merges reviewed work from a draft or ready PR, or resolves a PR from a working branch. Sign-off authorizes FIFO admission, rebase, final-HEAD validation, squash merge and canonical-main fast-forward. The workflow releases the turn before finishing the card and cleaning the branch and worktree. | Deploy, release, publish |
-| **Merge lock** | The exclusion acquired by the FIFO head and held through rebase, final-HEAD validation, merge and canonical-main fast-forward. Failures retain it for repair; successful completion or explicit safe withdrawal releases it. | Branch protection, mutex, freeze |
+| **review** | Millstrand's basic landing review. One configured agent reviews an immutable range, then a coordinator resolves every finding and records the reviewed base and HEAD plus resolved-or-absent P1/P2 findings. The local `land` workflow calls it before sign-off; an invalidated candidate routes directly to abort. | Full roster review, sign-off |
+| **millstrand-review** | The repository-owned full review of implemented work: the change-review roster, findings resolution, and validation of the pushed HEAD. Story and fix work hand off here before landing. Completing this workflow does not authorize merging or replace land's basic **review** call. | Basic review, landing, proposal review, card review |
+| **land** | Millstrand's repository-owned workflow for reviewed work. Sign-off authorizes FIFO admission, unchanged-candidate validation, merge-commit landing, canonical-main fast-forward, card completion, and cleanup. It refuses an outdated branch rather than rewriting validated commits. | Deploy, release, publish |
+| **Merge lock** | The exclusion acquired by the FIFO head and held through unchanged-candidate validation, merge and canonical-main fast-forward. Failures retain it for repair; successful completion or explicit safe withdrawal releases it. | Branch protection, mutex, freeze |
 | **Merge queue** | Strict FIFO reservations for approved land runs. A failed head keeps its position; timeouts never evict or requeue it. Any trusted agent may explicitly withdraw a reservation with a reason after stopping its merge work. | Auto-merge, approval queue, scheduler |
-| **Sign-off** | The coordinator checkpoint on a land run. Names the reviewed, pushed branch and its open PR, whether draft or ready, plus the squash message. Authorizes queue admission and automatic landing, including repairs and focused review; the agent may still abort over major changes. | Approval, review, LGTM, merge |
+| **Sign-off** | The coordinator checkpoint on a land run. Names the reviewed, pushed branch and its open PR, whether draft or ready, plus the merge-commit message and actual user-authorization reference. Authorizes queue admission and automatic landing; the agent may still abort over major changes. | Approval, review, LGTM, merge |
 | **explore** | The zero-ceremony exploration workflow: a card + worktree trail, note discipline while exploring, and a human checkpoint that decides the thread's fate — promote to a devflow brief, park, or abandon. | Spike, research task, investigation, poking around |
 | **fix** | The light bug-fix workflow: a card + worktree trail, a regression-locked implementation step, a docs-sync judgment backed by a `make docs-check` gate, then handoff to **millstrand-review** before **land**. | Hotfix, patch, bugfix flow, quick fix |
-| **release** | Prepare a two-commit candidate on an ordinary branch, validate it, obtain shared landing that preserves its identity, then get user approval of the exact version/SHA before publishing an annotated tag and verifying the remote receipt. Publication is blocked pending resolution of shared Land's squash policy versus the required two-commit identity; editing or pushing main is not an exception. | Deploy, land, publish bare |
+| **release** | Prepare and validate a two-commit candidate, require a completed Land receipt whose merge commit retains that candidate as a parent, then get user approval of the exact version/SHA before publishing an annotated tag and verifying the remote receipt. The durable canonical checkout retains publication custody after feature cleanup. | Deploy, land, publish bare |
 | **HITL** | Human-in-the-loop. The `hitl=true` attribute means stop and ask the user. Interactive work uses a tracking strand plus `agent delegate --interactive`. | Manual, human review, interactive, blocked |
 | **Coordinator** | The agent that plans the work, delegates it, verifies the result, and closes it. Only a coordinator drives **land**. | Orchestrator, manager, parent agent, lead |
 | **Worker** | A delegated agent doing one slice of work. Workers stop at implemented and committed; they do not land. | Subagent, agent, child, slave |
 
-The agreed landing contract validates the final branch HEAD incorporating current main, and requires that exact PR head at merge. Squashing changes commit identity; canonical main does not receive a duplicate quality run. The merge turn serializes cooperating landings until main is fast-forwarded. The workflow's own instructions describe retry and withdrawal behavior.
+The landing contract freezes the exact pushed `head` parameter, supplies that commit to basic review, and requires the same HEAD through queue preparation with current main already contained. It uses a merge commit so branch commits retain identity; an outdated candidate fails instead of rebasing. The merge turn serializes cooperating landings until main is fast-forwarded. The workflow's own instructions describe retry and withdrawal behavior.
 
 ## Relationships
 
@@ -201,7 +201,7 @@ The agreed landing contract validates the final branch HEAD incorporating curren
 
 ## Flagged ambiguities
 
-- "Run" means at least five things: a **workflow run**, plus the agent, devflow, land, and bench runs their own spools define. A workflow run and an agent run are different kinds of object, not one thing at two scales — always qualify.
+- "Run" means at least five things: a **workflow run**; the agent, devflow, and bench runs their spools define; and the land runs repository workspace definitions own. A workflow run and an agent run are different kinds of object, not one thing at two scales — always qualify.
 - "Task" is not a Millstrand term at all. It belongs to kanban, delegation, and AFK queues, which each mean something different by it. Qualify it or say **strand**.
 - "Strand" means both the graph node and the Go CLI. Write **`strand` CLI** in code font when you mean the binary.
 - "Feature" means a **feat folder** here, and a card type or lifecycle key in the kanban and devflow spools. These coincide often enough to hide the times they do not.
@@ -210,7 +210,7 @@ The agreed landing contract validates the final branch HEAD incorporating curren
 - "Battery" means an operational relation and the **batteries** spool. Unrelated; qualify when both are in scope.
 - "Spool" can mean the trusted Clojure code or its repository. Name the repository or tools.deps library when that distinction matters.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
-- **millstrand-review** is the repository's full final-code-review workflow. The shared **review** workflow, proposal review, card review, delegation reviews, the kanban review lane, and land sign-off are separate surfaces; name the one intended.
+- **millstrand-review** is the repository's full final-code-review workflow. The local basic **review**, proposal review, card review, delegation reviews, the kanban review lane, and land sign-off are separate surfaces; name the one intended.
 - "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
 - "Agent" means the `agent` op family, a spawned run, the **harness** behind it, and the **coordinator** reading the sentence. Use **harness** for the provider and a spool's own run term for the invocation.
 - "Gate" means a workflow step and a CI quality check in `make`. Only the first is a strand.

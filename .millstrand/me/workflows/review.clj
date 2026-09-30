@@ -1,5 +1,5 @@
 (ns me.workflows.review
-  "Millstrand's full repository review, before shared landing."
+  "Millstrand's full repository review before local landing."
   (:require [clojure.spec.alpha :as s]
             [me.workflows.handoff :as handoff]
             [me.workflows.review-evidence]
@@ -74,8 +74,8 @@
     :synthesize "Synthesize the verified findings" :self :depends-on [:verify]
     (format-alpha/prose
      "
-       Read code/result from the verify prerequisite. Deduplicate its actual
-       reviewer results into a P1/P2 verdict with paths and lines. Record that
+       Read `review/verification` from the verify prerequisite. Deduplicate its
+       actual reviewer results into a P1/P2 verdict with paths and lines. Record that
        synthesis on this step, naming the frozen base/head and every run id.
        For no-applicable-reviewer, explicitly record that no reviewer ran;
        do not manufacture a no-findings verdict.
@@ -95,8 +95,16 @@
     (fn [{:keys [branch]}]
       (land-support/sh-gate land-support/land-quality-gate-script "land-quality" branch))
     5400 "Validate the actual pushed HEAD after resolution. Fix failures and clear gate/error to retry.")
+   (workflow/gate
+    :freeze-delivery-head "Freeze the final reviewed delivery HEAD" :code
+    :depends-on [:final-ci-green]
+    :attributes {"code/fn" "me.workflows.review-evidence/freeze-delivery!"
+                 "delivery/key" key-for
+                 "code/params" #(assoc (select-keys % [:branch :worktree])
+                                       :key (key-for %))}
+    "Persist the exact quality-gated HEAD that the delivery request must carry.")
    (workflow/checkpoint
-    :delivery "Select authorized delivery" :depends-on [:final-ci-green] :kind :agent
+    :delivery "Select authorized delivery" :depends-on [:freeze-delivery-head] :kind :agent
     :choices [{:key :land :label "User authorized landing"}
               {:key :report :label "Return validated work to the coordinator"}]
     :attributes {"workflow/instruction"
@@ -112,9 +120,11 @@
     (format-alpha/prose
      "
        Read the delivery checkpoint's recorded outcome, not a remembered prompt.
-       For land, prepare handoff/request with workflow=land, explicit params,
-       receiving owner and the actual user authorization reference. The launch
-       gate reuses handoff-<this-step-id> and records acceptance.
+       For land, read `review/delivery` from the delivery checkpoint's code-gate
+       prerequisite and prepare handoff/request with workflow=land, explicit params
+       including that exact `head`, receiving owner, and the actual user
+       authorization reference. The launch gate reuses
+       handoff-<this-step-id> and records acceptance.
 
        For report, record handoff/report with owner, evidence (the coordinator's
        acknowledgment reference) and the validated head. Keep the card open and

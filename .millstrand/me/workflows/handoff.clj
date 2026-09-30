@@ -22,7 +22,7 @@
   routed. A mismatched request fails rather than silently launching more work.
   Acceptance means the workflow engine accepted custody, not that review or
   landing is finished. The named coordinator retains driving responsibility."
-  [gate target]
+  [gate target & [reviewed-head]]
   (let [rt (current/runtime)
         source (evidence/dependency! gate)
         request (evidence/data (attr-get source :handoff/request))
@@ -37,11 +37,21 @@
              {:source (:id source) :target target}))
     (when-not (= expected (select-keys params (keys expected)))
       (fail! "Handoff changed the recorded work identity" {:expected expected :params params}))
-    (when (and (= "land" target)
-               (not (support/non-blank-string? (:authorization request))))
-      (fail! "Landing handoff requires a reference to actual user authorization"
-             {:source (:id source)}))
+    (when (= "land" target)
+      (when-not (support/non-blank-string? (:authorization request))
+        (fail! "Landing handoff requires a reference to actual user authorization"
+               {:source (:id source)}))
+      (when (and reviewed-head (not= reviewed-head (:head params)))
+        (fail! "Landing handoff head does not match final review evidence"
+               {:source (:id source) :reviewed reviewed-head
+                :requested (:head params)})))
     (when (empty? (roots))
+      (when (= "land" target)
+        (let [candidate (evidence/quality-head! expected)]
+          (when-not (= (:head params) (:head candidate))
+            (fail! "Landing handoff head does not match the validated candidate"
+                   {:source (:id source) :requested (:head params)
+                    :candidate candidate}))))
       (workflow/start! run-id (keyword target) params
                        {:root-attributes {"delivery/source" (:id source)
                                           "delivery/request" request}}))
@@ -66,7 +76,12 @@
         decision (evidence/dependency! source)
         choice (attr-get decision :workflow/outcome)]
     (case choice
-      "land" (accept-request! gate "land")
+      "land" (let [review-proof (evidence/dependency! decision)
+                   reviewed (evidence/data (attr-get review-proof :review/delivery))]
+               (when-not (support/non-blank-string? (:head reviewed))
+                 (fail! "Landing handoff lacks final reviewed HEAD evidence"
+                        {:source (:id source) :review-proof (:id review-proof)}))
+               (accept-request! gate "land" (:head reviewed)))
       "report" (let [receipt (evidence/data (attr-get source :handoff/report))]
                  (when-not (every? support/non-blank-string?
                                    ((juxt :owner :evidence :head) receipt))
@@ -95,8 +110,9 @@
         step with workflow `{target}`, explicit `params`, and the receiving
         coordinator's `owner`. For Land also record `authorization`, a reference
         to the user's actual permission; a human label is not permission.
-        Carry card, feature, branch and worktree from the work record. For review,
-        supply review-target and a unique review-id. Commit and push first.
+        Carry card, feature, branch and worktree from the work record. For Land,
+        also supply `head` from the exact pushed quality-marked candidate. For
+        review, supply review-target and a unique review-id. Commit and push first.
 
         The next code gate starts or reuses `handoff-<this-step-id>` and persists
         acceptance here as `handoff/receipt`. Do not launch it separately. Engine
@@ -115,4 +131,4 @@
    :attributes {"code/fn" "me.workflows.handoff/launch!"
                 "delivery/key" #(key-for phase %)
                 "code/params" #(hash-map :key (key-for phase %) :target target)}
-   "Read code/result and the preparation step's handoff/receipt on resume. A mismatch blocks handoff; do not invent a new run id."))
+   "Read the preparation step's handoff/receipt on resume. A mismatch blocks handoff; do not invent a new run id."))

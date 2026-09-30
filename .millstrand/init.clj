@@ -23,8 +23,8 @@
                  {:ns 'millstrand.spools.unsafe-text-search})
 
 ;; Register shared identity, Workflow, Harnesses, aliases, reviewers, Kanban,
-;; and landing before repository-specific policy. Executor activation remains
-;; deliberately last.
+;; and landing infrastructure before repository-specific policy. The local Land
+;; definition is selected by :me/config. Executor activation remains last.
 (codethread/register! runtime)
 
 ;; Devflow is an ordinary workspace dependency. Its contribution is the stage
@@ -98,7 +98,7 @@
                           :millhouse/harnesses]
                   :required? true})
 
-;; Activate the consolidated providers after every workflow definition so the
+;; Activate the consolidated providers after every local workflow definition so the
 ;; executor's initial scan can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/workflow-providers
                  {:ns 'millhouse.workflow.spool

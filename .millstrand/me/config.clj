@@ -6,7 +6,7 @@
             [me.workflows.common :as common]
             [me.workflows.explore :as explore]
             [me.workflows.fix :as fix]
-            [me.workflows.land]
+            [me.workflows.land :as land]
             [me.workflows.review :as review]
             [me.workflows.release :as release]
             [me.workflows.story :as story]
@@ -28,6 +28,7 @@
 (millstrand/use-pattern! common/macros-demo)
 (millstrand/use-pattern! common/delegate-pipeline)
 
+(workflow/use-workflow! land/review land/land land/land-merge land/land-abort)
 (workflow/use-workflow! review/millstrand-review)
 (workflow/use-workflow! story-review/story-review)
 (workflow/use-workflow! story/story-fold)

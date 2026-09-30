@@ -25,37 +25,37 @@
          ;; Keep the test classpath aligned with the workspace's direct
          ;; Millhouse consumer contract.
          :override-deps {millhouse/auto-run {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                             :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                             :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                              :deps/root "spools/auto-run"}
                          millhouse/chime {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                          :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                          :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                           :deps/root "spools/chime"}
                          millhouse/config {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                           :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                           :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                            :deps/root "spools/config"}
                          millhouse/cron {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                         :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                         :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                          :deps/root "spools/cron"}
                          millhouse/devflow {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                            :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                            :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                             :deps/root "spools/devflow"}
                          millhouse/devflow-kanban-adapter {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                                           :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                                           :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                                            :deps/root "spools/devflow/kanban-adapter"}
                          millhouse/harnesses {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                              :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                              :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                               :deps/root "spools/harnesses"}
                          millhouse/identity {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                             :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                             :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                              :deps/root "spools/identity"}
                          millhouse/kanban {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                           :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                           :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                            :deps/root "spools/kanban"}
                          millhouse/land {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                         :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                         :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                          :deps/root "spools/land"}
                          millhouse/workflow {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                             :git/sha "f13312133daf46e57d510fc0ea289850373264c6"
+                                             :git/sha "fc0f1fe877f658ad146416eed6ae24ce76ccf5b3"
                                              :deps/root "spools/workflow"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
@@ -74,10 +74,12 @@
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
         :main-opts ["-m" "millstrand.e2e"]}
+  ;; Keep workspace sources explicit: clj-kondo writes ignored generated hook
+  ;; sources under .millstrand/.clj-kondo while land-quality checks run in parallel.
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand"]}
+           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand/init.clj" ".millstrand/me"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand"]}
+               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts" ".millstrand/init.clj" ".millstrand/me"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
