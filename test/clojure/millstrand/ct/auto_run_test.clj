@@ -36,6 +36,17 @@
    :init-clj (slurp (io/file workspace-root "init.clj"))
    :files (workspace-files)})
 
+(deftest workflow-providers-load-before-repository-consumers
+  (let [forms (read-string (str "[" (:init-clj (world-options)) "\n]"))
+        module-keys (vec (keep #(when (= 'runtime/module! (first %)) (nth % 2))
+                               forms))
+        position (fn [module-key] (.indexOf module-keys module-key))
+        providers (position :millhouse/workflow-providers)]
+    (is (<= 0 providers))
+    (is (< providers (position :millstrand/spools-devflow)))
+    (is (< providers (position :me/config)))
+    (is (< providers (position :me/auto-run-workflows)))))
+
 (defn- role-step
   "Return the materialized autonomous-delivery step with `role`."
   [strands role]

@@ -27,11 +27,18 @@
 ;; definition is selected by :me/config. Executor activation remains last.
 (codethread/register! runtime)
 
+;; Load Workflow's complete provider surface before repository modules can
+;; transitively load its namespaces outside the provider's collection scope.
+(runtime/module! runtime :millhouse/workflow-providers
+                 {:ns 'millhouse.workflow.spool
+                  :after [:millhouse/workflow]
+                  :required? true})
+
 ;; Devflow is an ordinary workspace dependency. Its contribution is the stage
 ;; `defworkflow` entries its load collects.
 (runtime/module! runtime :millstrand/spools-devflow
                  {:ns 'millhouse.devflow
-                  :after [:millhouse/workflow]
+                  :after [:millhouse/workflow-providers]
                   :required? true})
 
 ;; --- repo policy over the peer spools ---------------------------------------
@@ -66,7 +73,7 @@
 (runtime/module! runtime :me/config
                  {:file "me/config.clj"
                   :after [:millstrand/spools-batteries
-                          :millhouse/workflow
+                          :millhouse/workflow-providers
                           :millhouse/kanban
                           :millhouse/land
                           :millhouse/chime
@@ -96,16 +103,6 @@
                  {:file "me/auto_run.clj"
                   :after [:me/auto-run-workflows
                           :millhouse/harnesses]
-                  :required? true})
-
-;; Activate the consolidated providers after every local workflow definition so the
-;; executor's initial scan can resolve all persisted gate symbols.
-(runtime/module! runtime :millhouse/workflow-providers
-                 {:ns 'millhouse.workflow.spool
-                  :after [:millhouse/workflow
-                          :millhouse/land
-                          :me/config
-                          :me/auto-run-workflows]
                   :required? true})
 
 ;; Activate the sole Harnesses agent executor after all shared and local
