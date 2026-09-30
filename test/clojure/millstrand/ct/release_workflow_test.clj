@@ -895,7 +895,7 @@
                    (git! repository "ls-remote" "origin" "refs/tags/v0.5.3*")))))))))
 
 (deftest publication-retries-refuse-mismatches-and-uncertain-remote-reads
-  (doseq [failure [:local :local-after-push :remote :intent :unreachable]]
+  (doseq [failure [:local :local-after-push :remote :intent :tag-name :unreachable]]
     (testing (name failure)
       (with-publication-fixture
         (fn [{:keys [rt gate repository origin head params]}]
@@ -912,6 +912,19 @@
               :intent (weaver/update! rt gate
                                       {:attributes {:release/push-intent
                                                     (assoc intent :head "wrong-candidate")}})
+              :tag-name
+              (let [other-object
+                    (evidence/git-input!
+                     repository
+                     (str "object " head "\n"
+                          "type commit\n"
+                          "tag v9.9.9\n"
+                          "tagger " (git! repository "var" "GIT_COMMITTER_IDENT") "\n\n"
+                          "Different tag name\n")
+                     "mktag")]
+                (weaver/update! rt gate
+                                {:attributes {:release/push-intent
+                                              (assoc intent :object other-object)}}))
               :unreachable nil)
             (with-redefs [evidence/git!
                           (fn [repository & args]
@@ -921,7 +934,8 @@
                               (throw (ex-info "remote unavailable" {})))
                             (apply git! repository args))]
               (is (thrown-with-msg?
-                   clojure.lang.ExceptionInfo #"does not match|remote unavailable"
+                   clojure.lang.ExceptionInfo
+                   #"does not (match|identify)|remote unavailable"
                    (release/publish! params))))
             (is (empty? @effects))
             (is (= (if (#{:local :local-after-push} failure) head "")

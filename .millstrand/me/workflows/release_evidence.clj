@@ -142,9 +142,18 @@
   (require-matching-remote! (remote-tag worktree tag) receipt))
 
 (defn- complete-push! [{:keys [repository tag object head] :as receipt}]
-  (when-not (and (= "tag" (evidence/git! repository "cat-file" "-t" object))
-                 (= head (evidence/git! repository "rev-parse" (str object "^{commit}"))))
-    (fail! "Push intent does not identify the annotated candidate" {:intent receipt}))
+  (let [object-type (evidence/git! repository "cat-file" "-t" object)
+        tag-names (when (= "tag" object-type)
+                    (->> (evidence/git! repository "cat-file" "tag" object)
+                         str/split-lines
+                         (take-while (complement str/blank?))
+                         (keep #(some-> (re-matches #"tag (.+)" %) second))
+                         vec))]
+    (when-not (and (= "tag" object-type)
+                   (= [tag] tag-names)
+                   (= head (evidence/git! repository "rev-parse" (str object "^{commit}"))))
+      (fail! "Push intent does not identify the named annotated candidate"
+             {:intent receipt :tag-names tag-names})))
   (let [remote (remote-tag repository tag)
         local (evidence/git! repository "tag" "--list" "--format=%(objectname)" tag)
         ref (str "refs/tags/" tag)]
