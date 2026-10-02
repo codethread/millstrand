@@ -4,6 +4,7 @@
   payload-ref attributes, loud failures, and JSON-shape equivalence with the
   underlying weaver API the old socket dispatch delegates to."
   (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -17,6 +18,7 @@
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.specs :as specs]
             [millstrand.spools.batteries :as batteries]
+            [millstrand.spools.batteries.internal.primer :as primer-config]
             [millstrand.spools.test-support :as test-support :refer [with-runtime]]
             [millstrand.test.alpha :as t]))
 
@@ -33,8 +35,11 @@
   [f]
   (with-runtime
     (fn [rt _config-dir]
-      (test-support/activate-spool! rt :millstrand/spools-batteries 'millstrand.spools.batteries)
-      (f rt))))
+      (let [rt (assoc-in rt [:generation-basis :reserved-deps
+                             'io.millstrand/millstrand :local/root]
+                         (str (t/spool-checkout-root "millstrand/api/runtime/alpha.clj")))]
+        (test-support/activate-spool! rt :millstrand/spools-batteries 'millstrand.spools.batteries)
+        (f rt)))))
 
 (defn- op-entry [rt op-name]
   (some #(when (= (name op-name) (:name %)) %) (weaver/ops rt)))
@@ -73,7 +78,7 @@
     (fn [rt]
       (testing "all shipped ops are registered under batteries provenance"
         (doseq [op-name ['add 'update 'show 'supersede 'burn 'list 'ready 'await 'subgraph
-                         'weave 'query 'pattern 'note 'notes]]
+                         'weave 'query 'pattern 'note 'notes 'primer]]
           (let [entry (op-entry rt op-name)]
             (is (some? entry) (str op-name " should be registered"))
             (is (= 'millstrand.spools.batteries (:provenance entry)))
@@ -94,7 +99,8 @@
                                       'subgraph :read
                                       'weave :mutating
                                       'note :mutating
-                                      'notes :read}]
+                                      'notes :read
+                                      'primer :read}]
           (let [entry (op-entry rt op-name)]
             (is (= hook-class (get-in entry [:arg-spec :hook-class])))
             (is (= (if (= 'await op-name) :unbounded :standard)
@@ -189,6 +195,7 @@
         (check! 'pattern "list" (weaver/op! rt 'pattern ["list"]))
         (check! 'pattern "explain" (weaver/op! rt 'pattern ["explain" "task"]))
         (check! 'notes (weaver/op! rt 'notes [(:id first-row)]))
+        (check! 'primer (weaver/op! rt 'primer []))
         (check! 'supersede (weaver/op! rt 'supersede [(:id first-row) (:id replacement)]))
         (check! 'burn (weaver/op! rt 'burn [(:id burnable)]))
         (let [{:keys [missing required unchecked]} (owner-return-coverage rt @checked)]
@@ -1049,3 +1056,59 @@
           (is (str/includes? text "failure-modes-glossary:"))
           (is (str/includes? text
                              "glossary:  strand help --json add | jq '.glossary'")))))))
+
+(deftest primer-default-and-runtime-scoped-customization
+  (test-support/assert-state-shape primer-config/new-state #{:options})
+  (with-batteries
+    (fn [rt]
+      (let [default (batteries/default-primer rt)
+            source (str (t/spool-checkout-root "millstrand/api/runtime/alpha.clj"))
+            invoke #(weaver/op! rt 'primer [])]
+        (is (= {:primer default} (invoke)))
+        (doseq [text ["strand --help" "strand help <op>" "strand prime <op>"
+                      "strand about <op>" (str "Millstrand source: " source)
+                      (str "Millstrand reference: " (io/file source "docs/reference.md"))]]
+          (is (str/includes? default text)))
+        (batteries/set-primer! rt {:append "Workspace rules."})
+        (batteries/set-primer! rt {:append "Workspace rules."})
+        (is (= {:primer (str default "\n\nWorkspace rules.")} (invoke))
+            "reapplying config does not accumulate appended text")
+        (with-runtime
+          (fn [other _]
+            (is (= {:primer ""}
+                   (do (batteries/set-primer! other {:replace ""})
+                       (batteries/primer {:op/runtime other}))))))
+        (is (= {:primer (str default "\n\nWorkspace rules.")} (invoke))
+            "another runtime's settings are independent")
+        (batteries/set-primer! rt {:replace "Only our own instructions.\n"})
+        (is (= {:primer "Only our own instructions.\n"} (invoke)))
+        (doseq [opts [nil {:unknown "x"} {:append nil} {:replace 5}
+                      {:append "x" :replace "y"}]]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid primer options"
+                                (batteries/set-primer! rt opts))))
+        (is (= {:primer "Only our own instructions.\n"} (invoke))
+            "invalid settings leave the last good configuration intact")
+        (batteries/set-primer! rt {})
+        (is (= {:primer default} (invoke)))
+        (is (thrown? clojure.lang.ExceptionInfo (weaver/op! rt 'primer ["extra"])))))))
+
+(deftest primer-references-fail-loudly-unless-replaced
+  (with-runtime
+    (fn [rt config-dir]
+      (let [rt (assoc-in rt [:generation-basis :reserved-deps
+                             'io.millstrand/millstrand :local/root]
+                         (.getCanonicalPath ^java.io.File config-dir))
+            reference (io/file config-dir "docs/reference.md")]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"canonical reference"
+                              (batteries/primer {:op/runtime rt})))
+        (.mkdirs reference)
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"canonical reference"
+                              (batteries/default-primer rt)))
+        (.delete reference)
+        (spit reference "# Local source reference")
+        (is (str/includes? (batteries/default-primer rt)
+                           (.getCanonicalPath reference)))
+        (batteries/set-primer! rt {:replace "Independent instructions."})
+        (is (= {:primer "Independent instructions."}
+               (batteries/primer {:op/runtime (dissoc rt :generation-basis)}))
+            "complete replacement neither appends nor resolves shipped references")))))
