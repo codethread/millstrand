@@ -114,7 +114,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	}
 	depsPath := filepath.Join(cfg, "deps.edn")
 	deps := string(mustReadFile(t, depsPath))
-	for _, want := range []string{"io.millstrand/batteries", "d0284a70b63be4ea6e050dc5a116b90550ec814e"} {
+	for _, want := range []string{"io.millstrand/batteries", "44b332fe42a025d4d30d6ff9a3a82d3a93111cba"} {
 		if !strings.Contains(deps, want) {
 			t.Fatalf("deps.edn missing %q, got:\n%s", want, deps)
 		}

@@ -175,7 +175,7 @@ Example:
 
 ## The discovery surface your spool ships
 
-Millstrand's discovery convention has three tiers — generated `help`, authored `about`, run-first `prime` — described in [`docs/reference.md`](../reference.md) ("Discovery tiers"). For a spool op this means:
+Millstrand's per-operation discovery convention has three tiers — generated `help`, authored `about`, run-first `prime` — described in [`docs/reference.md`](../reference.md) ("Discovery"). Batteries also ships the separate workspace-wide `primer`; do not conflate it with an operation's `prime`. For a spool op this means:
 
 1. **Declare your verbs as recursive `:subcommands` arg-spec data; never hand-roll dispatch or usage errors.** A node may nest to the depth your command needs. `strand help <op> <verb> [<verb> ...]` slices any declared node, a trailing `strand <op> <verb> --help`/`-h` rewrites to it, and missing/unknown-verb failures become structured parser errors carrying the walked path and available names. `help`, `-h`, `--help`, and the arg name `subcommand` are reserved and rejected at registration. The old sole-token `<op> help` alias is retired — a bare `<op> help` word now fails with a loud redirect to `strand help <op>`. Bare `<op>` stays a loud non-zero error — never exit-0 help.
 2. **Author leaf classes and per-verb annotations on the arg-spec node, not prose blobs.** Every invocable leaf carries `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`). Interior nodes carry neither. A flat op's root is its leaf. Each subcommand's spec may carry a closed `use-when`/`notes`/`failure-modes` sub-map (string arrays; `failure-modes` holds glossary outcome **names**). The projection folds them into that verb's node, so `help` stays the single non-drifting source for anything derivable from a verb's shape.
@@ -209,7 +209,7 @@ Moving a spool from an `about`/`prime` _subcommand_ to `:about`/`:prime` _op-met
 
 ## CLI style
 
-The authoritative [discovery-tier contract](../reference.md#discovery-tiers-help-about-prime) applies to shared-spool CLIs.
+The authoritative [discovery contract](../reference.md#discovery-primer-help-about-prime) applies to shared-spool CLIs.
 
 - Verbs follow role, and a role a primitive already names is never renamed. For entity lifecycles: `start`, `finish --outcome`, `abort` only for real teardown, `status <id>`, and `list`. For workflow steps: `start`, `next`, `complete`, `choose`, and `status`. For processes: `spawn`, `kill`, `retry`, `await`, `logs`, and `ps`. An op that fronts one of these behaviors takes the role's verb — a subcommand that reaches `workflow/advance!` is `next`, not a domain synonym. A workflow may use `ready` for a projection containing only its current actionable frontier, distinct from a broader lifecycle `status`. It may use `defer` when a worker selects an allowed returning routine at run time: the current root stays active and the routine returns to it. These are the two workflow exceptions; do not use their names as general-purpose synonyms.
 - Use `--by-identity` for actor attribution, storing `identity/by-identity`. Name attribute-stamping flags after the attribute: `--owner`, `--branch`, `--worktree`, and `--feature`. Prefer seconds-first, unit-suffixed durations such as `--timeout-secs`, and use `--outcome` for closing state.

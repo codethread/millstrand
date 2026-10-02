@@ -53,11 +53,8 @@ Farm work out as tracked agent runs (`strand agent assign`/`run`); never harness
 
 Load `strand prime agent` before delegating — run success never closes the served task.
 
-<!-- mill:millstrand-prime -->
-
 ## Millstrand / strand
 
-This repo uses Millstrand strands to track work. Orientation ships in the `mill` CLI:
+This repo uses Millstrand strands to track work. Orientation starts with the `strand` CLI:
 
-Start with `strand --help`. Run `mill prime millstrand` on demand when building on this repo's `.millstrand/` config or spools.
-<!-- /mill:millstrand-prime -->
+Start with `strand primer`, then `strand --help`, when working with this repo's `.millstrand/` config or spools.

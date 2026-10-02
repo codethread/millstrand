@@ -64,13 +64,14 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 - Watch progress with `make dash` (interactive kanban board), `strand --workspace "$workspace" kanban board`, `strand --workspace "$workspace" branches [branch]`, and `strand --workspace "$workspace" workflow ready <run-id>`. For an ASCII board: `printf "(do (require '[millstrand.api.current.alpha :as current] '[millhouse.kanban :as kanban]) (kanban/print-board! (current/runtime)))\n" | mill weaver repl --workspace "$workspace" --stdin`.
 - `strand --workspace "$workspace" agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the shared alias definitions in Codethread's agents root.
 
-## Discovery: help, about, prime
+## Discovery: primer, help, about, prime
 
-Millstrand has one convention for "how do I find out?", in three escalating tiers (canonical write-up: [`docs/reference.md`](./docs/reference.md) "Discovery tiers"):
+Start with the workspace-wide primer. Per-operation discovery has three tiers: help, about, and prime. The [reference](./docs/reference.md#discovery-primer-help-about-prime) describes their contracts:
 
 - **`help`** — generated from arg-spec data, never hand-written: `strand --workspace "$workspace" help [<op>]`.
 - **`about`** — the authored per-op manual, such as `strand --workspace "$workspace" about agent` and `strand --workspace "$workspace" about kanban`.
-- **`prime`** — run-first orientation: `mill prime millstrand`, `strand --help`, `strand --workspace "$workspace" prime kanban`.
+- **`primer`** — workspace orientation: `strand --workspace "$workspace" primer`.
+- **`prime`** — run-first orientation for an operation: `strand --workspace "$workspace" prime kanban`.
 
 ## Working by hand
 

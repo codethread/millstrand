@@ -426,7 +426,7 @@ func (s *server) handle(conn net.Conn) {
 			world, report, err = config.BootstrapStealthWorld(req.World.CWD)
 			stealth = &report
 		} else {
-			world, err = config.BootstrapWorld(req.World.CWD, req.World.ConfigDir, req.World.Source)
+			world, err = config.BootstrapWorld(req.World.CWD, req.World.ConfigDir)
 		}
 		if err != nil {
 			var refusal *config.StealthRefusal

@@ -1,5 +1,5 @@
 {:deps
  {io.millstrand/batteries
   {:git/url "https://github.com/codethread/millstrand.git"
-   :git/sha "d0284a70b63be4ea6e050dc5a116b90550ec814e"
+   :git/sha "44b332fe42a025d4d30d6ff9a3a82d3a93111cba"
    :deps/root "spools/batteries"}}}

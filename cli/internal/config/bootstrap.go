@@ -20,11 +20,7 @@ const (
 	gitignoreTemplate = "templates/.millstrand/.gitignore"
 )
 
-func BootstrapWorld(cwd, configDir, source string) (World, error) {
-	return bootstrapWorld(cwd, configDir, source)
-}
-
-func bootstrapWorld(cwd, configDir, source string) (World, error) {
+func BootstrapWorld(cwd, configDir string) (World, error) {
 	world, err := BootstrapTargetWorld(cwd, configDir)
 	if err != nil {
 		return World{}, err

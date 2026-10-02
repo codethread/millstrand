@@ -21,7 +21,7 @@ func TestBootstrapDoesNotWriteOrChangeInstructionFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		world, err := BootstrapWorld(repo, "", "")
+		world, err := BootstrapWorld(repo, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,7 +35,7 @@ func TestBootstrapDoesNotWriteOrChangeInstructionFiles(t *testing.T) {
 		assertFileBytes(t, agents, agentsOriginal)
 		assertFileBytes(t, claude, claudeOriginal)
 
-		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+		if _, err := BootstrapWorld(repo, ""); err != nil {
 			t.Fatal(err)
 		}
 		assertFileBytes(t, agents, agentsOriginal)
@@ -44,7 +44,7 @@ func TestBootstrapDoesNotWriteOrChangeInstructionFiles(t *testing.T) {
 
 	t.Run("missing guidance", func(t *testing.T) {
 		repo := initGitRepo(t)
-		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+		if _, err := BootstrapWorld(repo, ""); err != nil {
 			t.Fatal(err)
 		}
 		for _, name := range []string{"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md"} {
@@ -66,7 +66,7 @@ func TestBootstrapDoesNotWriteOrChangeInstructionFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+		if _, err := BootstrapWorld(repo, ""); err != nil {
 			t.Fatal(err)
 		}
 		assertFileBytes(t, agents, original)
@@ -93,7 +93,7 @@ func assertFileBytes(t *testing.T, path string, want []byte) {
 
 func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T) {
 	directory := t.TempDir()
-	world, err := bootstrapWorld(directory, filepath.Join(directory, "world"), "")
+	world, err := BootstrapWorld(directory, filepath.Join(directory, "world"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"io.millstrand/batteries", "d0284a70b63be4ea6e050dc5a116b90550ec814e"} {
+	for _, want := range []string{"io.millstrand/batteries", "44b332fe42a025d4d30d6ff9a3a82d3a93111cba"} {
 		if !strings.Contains(string(deps), want) {
 			t.Fatalf("deps.edn missing %q: %s", want, deps)
 		}
@@ -131,7 +131,7 @@ func TestBootstrapNeverOverwritesDependencyOrActivationOverlays(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := bootstrapWorld(directory, worldPath, ""); err != nil {
+	if _, err := BootstrapWorld(directory, worldPath); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"deps.edn", "deps.local.edn", "init.local.clj"} {

@@ -122,7 +122,7 @@ func BootstrapStealthWorld(cwd string) (World, StealthReport, error) {
 	if err != nil {
 		return World{}, StealthReport{}, err
 	}
-	world, err := bootstrapWorld(cwd, "", "")
+	world, err := BootstrapWorld(cwd, "")
 	if err != nil {
 		return World{}, StealthReport{}, err
 	}
