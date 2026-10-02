@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `mill weaver start --temp` starts a discoverable, disposable Weaver without remembered-start registration or restart history. Stop, process exit, failed startup, and graceful Mill shutdown remove its private runtime state and database while preserving workspace source and existing persistent data.
+
 ## 0.5.3 - 2026-09-14
 
 - `mill` can manage opt-in named JVM pools, including host-scoped membership, status, restart admission, and continuity across Millstrand restarts.

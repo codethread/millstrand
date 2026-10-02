@@ -2,7 +2,7 @@
 
 - **Document ID:** `SPEC-004`
 - **Status:** Implemented
-- **Last Updated:** 2026-09-11
+- **Last Updated:** 2026-10-02
 - **Related RFCs:** [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md)
 - **Code:** `src/millstrand/core/weaver`, `src/millstrand/core/client.clj`, `src/millstrand/api/weaver/alpha.clj`, `cli/`
 
@@ -30,7 +30,8 @@ The weaver runtime is the long-lived local Clojure process that owns strand stor
 ## SPEC-004.P3 Runtime metadata and discovery
 
 - **SPEC-004.C9a:** The mill router publishes its entrypoint under Millstrand's XDG state root: `$XDG_STATE_HOME/millstrand` or `~/.local/state/millstrand` when `XDG_STATE_HOME` is unset. Mill metadata lives at `mill.json`, and the mill JSON socket lives at `mill.sock`.
-- **SPEC-004.C9b:** Mill derives per-workspace runtime directories under `<state-root>/weavers/<hash>`, where `<hash>` is a filesystem-safe hash of the canonical selected config identity.
+- **SPEC-004.C9b:** Mill derives persistent per-workspace runtime directories under `<state-root>/weavers/<hash>`, where `<hash>` is a filesystem-safe hash of the canonical selected config identity. Temporary Weaver directories follow C9c instead.
+- **SPEC-004.C9c (temporary lifetime):** A temporary Weaver uses a uniquely allocated Mill-owned directory under `<state-root>/weavers`, separate from the selected workspace's persistent directory and visible to ordinary metadata discovery. Mill retains its ownership in memory, not as a restart or remembered-start record. After its process exits, Mill shuts down its owned native-process custody and removes the complete temporary directory, including SQLite files, metadata, sockets, logs, diagnostics, and private runtime caches. Direct stop waits for cleanup; graceful Mill shutdown also joins in-flight starts before completing teardown. Failed startup returns available diagnostics before discarding its artifacts. Cleanup failures are reported rather than treated as success. Workspace source files, pre-existing persistent state and registrations, and shared dependency caches are not temporary artifacts and remain untouched. No cleanup or recovery is promised after abrupt Mill death.
 - **SPEC-004.C10:** The JSON socket path is fixed within the selected state workspace as `weaver.sock`.
 - **SPEC-004.C11:** Runtime metadata is published beside the fixed socket as `weaver.json` for Go clients and `weaver.edn` for Clojure clients.
 - **SPEC-004.C12:** Runtime metadata records enough identity for clients to connect and verify intent: pid, weaver id, opaque `generation_id`, product version, protocol version, friendly name, selected workspace, selected state dir, selected data dir, storage kind and label plus weaver-owned database path (file storage only) for status/debugging, nREPL endpoint data, JSON socket path, and startup time. The Weaver reads its product version from the reserved Millstrand source root's `VERSION` file during startup and validates the version supplied by its launching Mill independently; the value is independent of protocol version and the generation basis fingerprint. The friendly name defaults to the selected workspace basename unless launch supplied an explicit name or the selected workspace config declared one (SPEC-002.C2/C2a). Metadata does not record source as selected workspace identity; source is mill-owned launch context.
