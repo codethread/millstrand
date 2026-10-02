@@ -286,6 +286,45 @@ func TestLoadRejectsNonBooleanAutoStart(t *testing.T) {
 	}
 }
 
+func TestLoadAppliesLocalAutoStartOverlay(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		base  string
+		local string
+		want  bool
+	}{
+		{name: "local enables", base: `{"configFormat":"alpha"}`, local: `{"autoStart":true}`, want: true},
+		{name: "local overrides false", base: `{"configFormat":"alpha","autoStart":false}`, local: `{"autoStart":true}`, want: true},
+		{name: "local overrides true", base: `{"configFormat":"alpha","autoStart":true}`, local: `{"autoStart":false}`},
+		{name: "omitted preserves true", base: `{"configFormat":"alpha","autoStart":true}`, local: `{}`, want: true},
+		{name: "omitted preserves false", base: `{"configFormat":"alpha","autoStart":false}`, local: `{}`},
+		{name: "both omitted", base: `{"configFormat":"alpha"}`, local: `{}`},
+		{name: "missing overlay", base: `{"configFormat":"alpha","autoStart":true}`, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := t.TempDir()
+			if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(tc.base), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.local != "" {
+				if err := os.WriteFile(filepath.Join(d, LocalConfigFileName), []byte(tc.local), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			c, _, err := Load(d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.AutoStart != tc.want {
+				t.Fatalf("autoStart = %v, want %v", c.AutoStart, tc.want)
+			}
+			if len(c.Warnings) != 0 {
+				t.Fatalf("unexpected config warnings: %#v", c.Warnings)
+			}
+		})
+	}
+}
+
 func TestLoadAppliesLocalNameOverlay(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, ConfigFileName), []byte(`{"configFormat":"alpha","name":"shared"}`), 0o644); err != nil {
@@ -333,7 +372,9 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 	}{
 		{"config-format", `{"configFormat":"alpha"}`, "local client config must not declare configFormat", ""},
 		{"unknown-key", `{"where":"x"}`, "", "where"},
-		{"unknown-auto-start", `{"autoStart":true}`, "", "autoStart"},
+		{"null-auto-start", `{"autoStart":null}`, "local client config autoStart must be a boolean", ""},
+		{"string-auto-start", `{"autoStart":"true"}`, "local client config autoStart must be a boolean", ""},
+		{"number-auto-start", `{"autoStart":1}`, "local client config autoStart must be a boolean", ""},
 		{"blank-name", `{"name":""}`, "local client config name must be a non-blank string", ""},
 		{"non-string-name", `{"name":false}`, "local client config name must be a non-blank string", ""},
 		{"blank-jvm-pool", `{"JVMPool":""}`, "local client config JVMPool must be a non-blank string or null", ""},
