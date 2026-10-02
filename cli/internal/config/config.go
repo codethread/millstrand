@@ -128,12 +128,11 @@ func Load(configDir string) (Config, World, error) {
 		c.Name = name
 	}
 	if v, ok := raw["autoStart"]; ok {
-		if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-			return Config{}, World{}, fmt.Errorf("client config autoStart must be a boolean")
+		autoStart, err := parseAutoStart("client config autoStart", v)
+		if err != nil {
+			return Config{}, World{}, err
 		}
-		if err := json.Unmarshal(v, &c.AutoStart); err != nil {
-			return Config{}, World{}, fmt.Errorf("client config autoStart must be a boolean")
-		}
+		c.AutoStart = autoStart
 	}
 	if v, ok := raw["JVMPool"]; ok {
 		pool, err := parseJVMPool("client config JVMPool", v)
@@ -259,6 +258,17 @@ func parseConfigName(label string, raw json.RawMessage) (string, error) {
 	return name, nil
 }
 
+func parseAutoStart(label string, raw json.RawMessage) (bool, error) {
+	var enabled bool
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return false, fmt.Errorf("%s must be a boolean", label)
+	}
+	if err := json.Unmarshal(raw, &enabled); err != nil {
+		return false, fmt.Errorf("%s must be a boolean", label)
+	}
+	return enabled, nil
+}
+
 func parseJVMPool(label string, raw json.RawMessage) (*string, error) {
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return nil, nil
@@ -296,16 +306,26 @@ func applyLocalOverlay(c *Config, path string) error {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return fmt.Errorf("malformed local client config: %w", err)
 	}
+	if raw == nil {
+		return fmt.Errorf("malformed local client config: expected a JSON object")
+	}
 	if _, ok := raw["configFormat"]; ok {
 		return fmt.Errorf("local client config must not declare configFormat")
 	}
-	c.Warnings = append(c.Warnings, unknownKeyWarnings(path, raw, map[string]bool{"name": true, "JVMPool": true})...)
+	c.Warnings = append(c.Warnings, unknownKeyWarnings(path, raw, map[string]bool{"name": true, "autoStart": true, "JVMPool": true})...)
 	if v, ok := raw["name"]; ok {
 		name, err := parseConfigName("local client config name", v)
 		if err != nil {
 			return err
 		}
 		c.Name = name
+	}
+	if v, ok := raw["autoStart"]; ok {
+		autoStart, err := parseAutoStart("local client config autoStart", v)
+		if err != nil {
+			return err
+		}
+		c.AutoStart = autoStart
 	}
 	if v, ok := raw["JVMPool"]; ok {
 		pool, err := parseJVMPool("local client config JVMPool", v)

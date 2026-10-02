@@ -14,21 +14,30 @@ import (
 	"millstrand-strand-cli/internal/config"
 )
 
-func TestWeaverStartRegistersOnlyExplicitSharedAutoStart(t *testing.T) {
+func TestWeaverStartRegistersOnlyEffectiveAutoStart(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		config     string
+		local      string
 		registered bool
 	}{
 		{name: "true", config: `{"configFormat":"alpha","autoStart":true}`, registered: true},
 		{name: "false", config: `{"configFormat":"alpha","autoStart":false}`},
 		{name: "omitted", config: `{"configFormat":"alpha"}`},
+		{name: "local true", config: `{"configFormat":"alpha"}`, local: `{"autoStart":true}`, registered: true},
+		{name: "local overrides false", config: `{"configFormat":"alpha","autoStart":false}`, local: `{"autoStart":true}`, registered: true},
+		{name: "local overrides true", config: `{"configFormat":"alpha","autoStart":true}`, local: `{"autoStart":false}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 			cfg := t.TempDir()
 			if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(tc.config), 0o644); err != nil {
 				t.Fatal(err)
+			}
+			if tc.local != "" {
+				if err := os.WriteFile(filepath.Join(cfg, config.LocalConfigFileName), []byte(tc.local), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			world, err := config.RuntimeWorld(cfg)
 			if err != nil {
@@ -272,17 +281,25 @@ func TestStartAutostartPreservesFailureEvidenceWhenShutdownCancelsPass(t *testin
 func TestAutoStartPrunesRegistrationWhenConfigDisablesIt(t *testing.T) {
 	for _, fixture := range []struct {
 		name      string
+		config    string
+		local     string
 		cancelled bool
 	}{
-		{"running", false},
-		{"cancelled", true},
+		{name: "running", config: `{"configFormat":"alpha","autoStart":false}`},
+		{name: "cancelled", config: `{"configFormat":"alpha","autoStart":false}`, cancelled: true},
+		{name: "local false", config: `{"configFormat":"alpha","autoStart":true}`, local: `{"autoStart":false}`},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			state := filepath.Join(t.TempDir(), "state")
 			t.Setenv("XDG_STATE_HOME", state)
 			cfg := t.TempDir()
-			if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(`{"configFormat":"alpha","autoStart":false}`), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(cfg, config.ConfigFileName), []byte(fixture.config), 0o644); err != nil {
 				t.Fatal(err)
+			}
+			if fixture.local != "" {
+				if err := os.WriteFile(filepath.Join(cfg, config.LocalConfigFileName), []byte(fixture.local), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			world := config.World{ConfigDir: cfg}
 			if err := registerAutoStart(world, cfg, "disabled"); err != nil {
