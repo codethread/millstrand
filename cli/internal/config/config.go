@@ -306,6 +306,9 @@ func applyLocalOverlay(c *Config, path string) error {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return fmt.Errorf("malformed local client config: %w", err)
 	}
+	if raw == nil {
+		return fmt.Errorf("malformed local client config: expected a JSON object")
+	}
 	if _, ok := raw["configFormat"]; ok {
 		return fmt.Errorf("local client config must not declare configFormat")
 	}

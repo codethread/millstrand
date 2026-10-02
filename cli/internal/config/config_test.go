@@ -380,6 +380,7 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 		{"blank-jvm-pool", `{"JVMPool":""}`, "local client config JVMPool must be a non-blank string or null", ""},
 		{"non-string-jvm-pool", `{"JVMPool":false}`, "local client config JVMPool must be a non-blank string or null", ""},
 		{"malformed", `{"name":`, "malformed local client config", ""},
+		{"null-overlay", `null`, "malformed local client config: expected a JSON object", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
