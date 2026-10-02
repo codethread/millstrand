@@ -90,11 +90,12 @@ What a module may contribute once it is active.
 
 ## Discovery
 
-Three tiers answer every "how do I find out" question, and the distinction is load-bearing.
+The workspace-wide primer is separate from the three per-operation discovery tiers: help, about, and prime.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **prime** | An area's working discipline. Read it before working inside that area. | Readme, onboarding, help, about |
+| **primer** | Workspace-wide orientation supplied by Batteries. It points to the selected Millstrand source and reference and may carry workspace-specific text. | offline orientation command, onboarding prose |
+| **prime** | An operation's working discipline. Read it before working inside that area. | Readme, onboarding, help, about |
 | **about** | One op's manual: semantics, conventions, and attribute contracts. A machine-readable man page. | Help, docs, description, summary |
 | **help** | Exact invocation: the registered ops, and one op's flags, positionals, and subcommands. | About, manual, usage docs |
 | **Help envelope** | The versioned machine schema behind all three, and the single contract. `--json` is the raw floor the CLI always relays. | Output format, response, JSON schema |
@@ -211,7 +212,7 @@ The landing contract freezes the exact pushed `head` parameter, supplies that co
 - "Spool" can mean the trusted Clojure code or its repository. Name the repository or tools.deps library when that distinction matters.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
 - **millstrand-review** is the repository's full final-code-review workflow. The local basic **review**, proposal review, card review, delegation reviews, the kanban review lane, and land sign-off are separate surfaces; name the one intended.
-- "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
+- "Prime" means the discovery tier and the `strand prime <op>` run-first context for an operation.
 - "Agent" means the `agent` op family, a spawned run, the **harness** behind it, and the **coordinator** reading the sentence. Use **harness** for the provider and a spool's own run term for the invocation.
 - "Gate" means a workflow step and a CI quality check in `make`. Only the first is a strand.
 - "Hook" was used for both **event handlers** and **lifecycle hooks**. Handlers are async and reactive; hooks are synchronous and may reject.

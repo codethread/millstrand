@@ -61,7 +61,8 @@
             [millstrand.api.runtime.glossary.alpha :as glossary]
             [millstrand.api.millstrand.alpha :as millstrand]
             [millstrand.api.spool.alpha :as spool]
-            [millstrand.api.weaver.alpha :as weaver])
+            [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.spools.batteries.internal.primer :as primer-config])
   (:import [java.io PushbackReader StringReader]
            [java.time Duration]))
 
@@ -133,6 +134,52 @@
   (let [limit (validate-read-limit limit)]
     (reset! (:limit (read-limit-state rt)) limit)
     limit))
+
+(defn default-primer
+  "Return the shipped orientation with the selected Weaver's source references.
+
+  The source is the generation coordinate supplied by Mill's launch-source
+  resolver. An unavailable source or docs/reference.md fails loudly."
+  [rt]
+  (primer-config/render-default (runtime-api/millstrand-source rt)))
+
+(defn set-primer!
+  "Set the selected runtime's primer customization from trusted config.
+
+  Pass `{:append text}` to add text after the shipped primer, or
+  `{:replace text}` to replace it entirely. Text must be a string; an empty
+  replacement is allowed. The two options are mutually exclusive and unknown
+  keys fail. Pass `{}` to restore defaults.
+
+  Each call replaces the settings rather than accumulating appends, so a
+  repeated startup-file refresh is idempotent. Settings survive refresh until
+  explicitly changed; persist the call in init.clj or init.local.clj."
+  [rt opts]
+  (spool/require-valid! ::primer-config/options opts "Invalid primer options")
+  (reset! (:options (primer-config/state rt)) opts))
+
+(millstrand/defop! primer
+  "Return the selected workspace's Millstrand orientation."
+  {:arg-spec {:op "primer"
+              :doc "Show workspace orientation and resolved Millstrand references."
+              :hook-class :read
+              :deadline-class :standard}
+   :returns {:type :map :required {:primer :string}}
+   :about (format-alpha/prose
+           "
+             primer is the workspace-wide entry point for Millstrand orientation.
+             It is supplied by Batteries, independently of the per-op prime and
+             about discovery tiers. Trusted config can append to or replace its
+             text with millstrand.spools.batteries/set-primer!.
+             ")}
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        opts @(:options (primer-config/state rt))]
+    {:primer (if (contains? opts :replace)
+               (:replace opts)
+               (str (default-primer rt)
+                    (when (seq (:append opts))
+                      (str "\n\n" (:append opts)))))}))
 
 (defn- effective-read-limit [rt explicit-limit]
   (validate-read-limit (or explicit-limit (read-limit rt))))

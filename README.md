@@ -280,6 +280,7 @@ mill changelog
     git init
     mill init
     mill weaver start
+    strand primer
     strand help
     ```
 

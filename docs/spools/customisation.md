@@ -6,7 +6,7 @@ If you have not met the weaver, workspaces, or the strand model yet, read the [t
 
 ## The files mill init gives you
 
-`mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary repo-local `.millstrand` workspace (or its `.ms` alias):
+`mill init` bootstraps missing workspace files without overwriting existing ones. It never creates or edits agent instruction files. Run `strand primer` for the workspace's orientation after starting its Weaver. It does not initialize database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary repo-local `.millstrand` workspace (or its `.ms` alias):
 
 ```text
 .millstrand/
@@ -77,20 +77,22 @@ Temporary startup never registers for remembered startup, even if the config has
 
 ## A private repo-local workspace
 
-Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make, Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates `.millstrand`; with one accepted marker, it keeps that marker. Mill adds its paths to `.git/info/exclude`, which is private to that clone, and reports each file it created, updated, skipped, or left unchanged.
+Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make, Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates `.millstrand`; with one accepted marker, it keeps that marker. Mill adds only the workspace paths to `.git/info/exclude`, which is private to that clone, and reports whether that file was created, updated, or unchanged.
 
-Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance. If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing anything.
+Neither ordinary nor stealth init writes `AGENTS.md`, `CLAUDE.md`, or `CLAUDE.local.md`. Stealth init does not supply harness-specific suggestions or ignore rules. If `.millstrand` or `.ms` is already tracked or a mill-owned exclude block differs from the current block, it refuses before changing anything. To replace an older exclude block, remove that marked block and rerun `mill init --stealth`; unrelated exclusions remain untouched.
 
 Keep generated startup small. Put personal activation in `init.local.clj` and personal dependencies in `deps.local.edn`. For workspace-owned code, add a file and activate it with `runtime/module!` and `:file`; use a local library when code needs its own repository. `.millstrand` remains the repo-local entry point.
 
 ## Startup files
 
-The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Missing files are skipped; present failing files fail loudly with file context. The generated `init.clj` is intentionally small:
+The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Missing files are skipped; present failing files fail loudly with file context. Generated `deps.edn` pins Batteries to an immutable Git revision. When developing inside a Millstrand checkout, a local override can instead point at its spool directory:
 
 ```clojure
-;; deps.edn
-{:deps {millstrand.spools/batteries {:local/root "../spools/batteries"}}}
+;; deps.local.edn in this checkout's .millstrand workspace
+{:deps {io.millstrand/batteries {:local/root "../spools/batteries"}}}
 ```
+
+The generated `init.clj` is intentionally small:
 
 ```clojure
 ;; init.clj
@@ -105,14 +107,15 @@ The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Miss
 ;; you can omit this `module!` and build entirely your own way, see
 ;; https://codethread.github.io/millstrand/docs/spools/customisation/
 (runtime/module! runtime :millstrand/spools-batteries
-  {:ns 'millstrand.spools.batteries})
+  {:ns 'millstrand.spools.batteries
+   :required? true})
 
 (runtime/module! runtime :module-me-help
   {:file "me/help.clj"
    :after [:millstrand/spools-batteries]})
 ```
 
-The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded modules then publish no batteries ops.
+The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. Bootstrap persists no absolute checkout path. To opt out of Batteries, remove its activation and the dependent help-adapter activation. Its ops, including `primer`, disappear on refresh. Removing its dependency too changes the basis and requires a new Weaver generation.
 
 `millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand — not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
 
@@ -136,6 +139,33 @@ The module source owns the query or other registry entries, so refresh and resta
 ```
 
 Inside the weaver REPL, `millstrand.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, choose a workspace module for repo policy or a local spool for reusable classpath code. The [workspace modules and local spools section](#workspace-modules-and-local-spools) explains the boundary.
+
+## Customising the primer
+
+Batteries provides `strand primer` as one workspace-wide orientation command. It is separate from the per-operation `strand prime <op>` runbooks. The default includes the source and reference paths selected by Mill when it launched the Weaver; it does not re-resolve them from the caller's cwd.
+
+Append workspace instructions in `init.clj` or `init.local.clj`:
+
+```clojure
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.spools.batteries :as batteries])
+
+(batteries/set-primer! (current/runtime)
+  {:append "Run strand prime kanban before picking up work."})
+```
+
+Or replace the entire text:
+
+```clojure
+(batteries/set-primer! (current/runtime)
+  {:replace "Read our project handbook before starting work."})
+```
+
+Use one option, not both. Values must be strings; an empty replacement is allowed. Each call replaces the runtime's settings, so refreshing the same append configuration does not duplicate text. Settings survive refresh: removing the call alone does not reset them. Call `(batteries/set-primer! (current/runtime) {})` to restore the default. Each Weaver keeps its own settings, including members of a JVM pool.
+
+Apply startup-file edits with `runtime/refresh!`. `batteries/default-primer` takes the runtime and returns the uncustomized text. Complete replacement does not resolve or include the shipped reference paths.
+
+`mill init` leaves instruction files from older releases untouched. Remove old injected guidance yourself, or replace it with a short pointer to `strand primer` in whichever instruction file your project maintains.
 
 ## Trying config changes in a disposable world
 

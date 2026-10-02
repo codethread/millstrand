@@ -114,7 +114,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	}
 	depsPath := filepath.Join(cfg, "deps.edn")
 	deps := string(mustReadFile(t, depsPath))
-	for _, want := range []string{"io.millstrand/batteries", "d0284a70b63be4ea6e050dc5a116b90550ec814e"} {
+	for _, want := range []string{"io.millstrand/batteries", "44b332fe42a025d4d30d6ff9a3a82d3a93111cba"} {
 		if !strings.Contains(deps, want) {
 			t.Fatalf("deps.edn missing %q, got:\n%s", want, deps)
 		}
@@ -280,18 +280,16 @@ func TestStealthInitIsIdempotentAndLeavesNoTrackedChanges(t *testing.T) {
 			t.Fatalf("unexpected result keys/paths: %#v", result)
 		}
 		stealth, ok := result["stealth"].(map[string]any)
-		if !ok || len(stealth) != 3 {
+		if !ok || len(stealth) != 1 {
 			t.Fatalf("unexpected stealth shape: %#v", result["stealth"])
 		}
-		gitExclude := stealth["git_exclude"].(map[string]any)
-		claude := stealth["claude_guidance"].(map[string]any)
-		codex := stealth["codex_guidance"].(map[string]any)
-		if len(gitExclude) != 2 || len(claude) != 2 || len(codex) != 2 || codex["status"] != "manual-required" || codex["suggested_text"] == "" {
-			t.Fatalf("unexpected action shapes: %#v", stealth)
+		gitExclude, ok := stealth["git_exclude"].(map[string]any)
+		if !ok || len(gitExclude) != 2 {
+			t.Fatalf("unexpected git exclude shape: %#v", stealth)
 		}
 		if attempt == 0 {
 			first = stealth
-		} else if gitExclude["status"] != "unchanged" || claude["status"] != "unchanged" {
+		} else if gitExclude["status"] != "unchanged" {
 			t.Fatalf("second init not unchanged: first=%#v second=%#v", first, stealth)
 		}
 	}

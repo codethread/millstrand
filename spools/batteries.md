@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-`millstrand.spools.batteries` is the shipped _core strand command surface_. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query` and `pattern` — through `millstrand.api.millstrand.alpha/defop!`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `millstrand.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
+`millstrand.spools.batteries` is the shipped _core strand command surface_. It declares the workspace `primer`, the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query` and `pattern` — through `millstrand.api.millstrand.alpha/defop!`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `millstrand.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
 
 These `defop!` declarations are the durable, owner-complete source for the command surface. Dynamic spool code and tests may use `millstrand.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `millstrand.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop!` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
 
@@ -14,20 +14,14 @@ Each op delegates to exactly the `millstrand.api.*.alpha` call the old JSON sock
 
 This doc is the standing contract. Stable ids here use the `BAT-` prefix. The migration notes retain useful differences from the retired builtin CLI without treating its removed clauses as current contracts.
 
-`mill init` makes batteries available in the workspace basis and activates it explicitly:
-
-```clojure
-{:deps {millstrand.spools/batteries {:local/root "../spools/batteries"}}}
-```
-
-Its generated `init.clj` activates the module:
+`mill init` pins the `io.millstrand/batteries` Git dependency in the workspace's `deps.edn`. Its generated `init.clj` activates the module:
 
 ```clojure
 (runtime/module! runtime :millstrand/spools-batteries
   {:ns 'millstrand.spools.batteries})
 ```
 
-Dependency presence alone does not activate code. Delete the seeded dependency or declaration to opt out; dependency-basis changes require generation replacement.
+Dependency presence alone does not activate code. Remove the Batteries activation and its dependent help-adapter activation to opt out. Its ops disappear on refresh; removing the dependency too requires generation replacement.
 
 The contribution owns every op below plus its glossary outcomes. Each op carries `{:doc … :arg-spec … :returns …}` metadata; its invocable `:arg-spec` leaves carry `:hook-class` and `:deadline-class`. Owner-complete refresh replaces the whole batteries partition atomically.
 
@@ -42,6 +36,12 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
 - **BAT-C4 (result shapes):** Handlers return JSON-safe data (strings, numbers, booleans, nil, vectors, string/keyword-keyed maps). `attributes` and `state` are normalized; the retired lifecycle fields `active` / `inactive_at` are never emitted. Every batteries op declares `:returns`; use `strand help <op>` for the live flat, subcommand, or stream-channel shape.
 
 ## 3. Op reference
+
+### `primer` — BAT-C28
+
+`strand primer` returns `{"primer": <markdown string>}` with workspace orientation. The default text names the selected Millstrand source and its canonical `docs/reference.md`, and points at `strand --help`, `strand help`, `strand prime`, and `strand about`. It reads the source coordinate frozen into the running Weaver generation, so it does not resolve the caller's cwd or environment.
+
+The default text can be customized from trusted workspace config with `millstrand.spools.batteries/set-primer!`. `{:append text}` adds text after the default, `{:replace text}` replaces it, and `{}` restores the default. Settings are runtime-scoped, replace the previous setting, survive refresh, and fail loudly for unknown or malformed options. A missing Millstrand source or canonical reference fails loudly unless the setting uses `:replace`. The op takes no arguments, is read-only, and uses the standard deadline. Append and replace are mutually exclusive string options; empty replacement is valid. Removing a config call does not reset live settings: call `{}` explicitly. See [customising the primer](../docs/spools/customisation.md#customising-the-primer) for startup examples.
 
 ### `runbook`
 
@@ -213,12 +213,14 @@ strand pattern explain <name>
 
 Read-only introspection of registered weave patterns. `pattern` declares `list` and `explain` as parser-owned subcommands, so help rendering and missing/unknown-subcommand failures are handled by the blessed arg-spec parser. `list` takes no arguments and returns registered pattern metadata ordered by name. `explain <name>` returns input-spec guidance (`name`, `fn`, `input-spec`, `spec-form`, `summary`, and expanded `required`/`optional` key specs for a `clojure.spec.alpha/keys` input spec, plus optional `doc`). Registry names are canonical strings (e.g. `"task"`). A missing/blank name on `explain` and unknown pattern names fail loudly. Pattern _registration_ stays a trusted config/REPL workflow — never exposed here.
 
-### 3.3 Discovery — help, about, prime — BAT-C25
+### 3.3 Discovery — primer, help, about, prime — BAT-C25
+
+`strand primer` is the Batteries workspace-orientation op. It is separate from the built-in per-operation discovery tiers and is available when the selected workspace activates Batteries.
 
 Every batteries op is discoverable through the three built-in meta-verbs (see [cli.md](../devflow/specs/cli.md) SPEC-002.C39 and the discovery-tier deltas). The behavior batteries opts into:
 
 - **`strand help <op>`** projects the op's declared arg-spec into the canonical help envelope. Where it adds value, an op's arg-spec also declares a closed `:annotations` sub-map — `use-when` (when to reach for the op), `notes` (a subtlety the flag docs do not cover), and `failure-modes` (the named outcomes the op can produce). For a subcommand op, annotations sit on the routed child, so `strand help add` shows only that operation's failure modes. `--help` after an op (`strand add --help`) is sugar for the same projection.
-- **`strand about <op>`** returns the op's cross-verb narrative — how it relates to its sibling verbs — for the ops that declare `:about` prose (`add`, `weave`, `list`, and `ready`). The selection manuals include the JSON predicate grammar and examples. Reach for `help` for the invocation shape.
+- **`strand about <op>`** returns the op's cross-verb narrative — how it relates to its sibling verbs — for the ops that declare `:about` prose (`primer`, `add`, `weave`, `list`, and `ready`). The selection manuals include the JSON predicate grammar and examples. Reach for `help` for the invocation shape.
 - **`strand prime <op>`** returns the op's orientation prose for the ops that declare `:prime` (today `add` and `weave`): what to run first, what to prefer.
 
 `failure-modes` carry glossary outcome **names** only; the envelope resolves each to its definition once, in its `glossary` map. Batteries owns and seeds these outcomes (for example, `batteries/state-invalid`, `batteries/query-unknown`, and `batteries/spool-release-unresolved`) through a process-lifetime `lifecycle/defseed` declaration, so the definitions travel with the spool.
