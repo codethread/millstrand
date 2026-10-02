@@ -273,6 +273,17 @@ func waitForLifecycleTransitionContext(ctx context.Context, t *weaverTransition,
 }
 
 func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any, *weaverTransition, *client.ResponseError) {
+	if child := s.children[world.ConfigDir]; child != nil && child.temporary {
+		status, stale := readStatus(child.world)
+		if status == nil {
+			return nil, nil, &client.ResponseError{Type: "domain", Code: "mill/no-selected-weaver", Message: "no running weaver for selected workspace", Details: map[string]any{"config_dir": world.ConfigDir}}
+		}
+		if stale {
+			return nil, nil, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}}
+		}
+		decorateTemporaryStatus(status, child)
+		return status, nil, nil
+	}
 	if host := poolHostForConfigLocked(s, world.ConfigDir); host != nil && host.Live {
 		status := s.poolStatusForMember(host, world.ConfigDir)
 		if status == nil {

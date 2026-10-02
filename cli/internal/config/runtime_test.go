@@ -34,6 +34,45 @@ func TestStateRootUsesHomeFallback(t *testing.T) {
 	}
 }
 
+func TestTemporaryRuntimeWorldAllocatesFreshOwnedState(t *testing.T) {
+	xdg := filepath.Join(t.TempDir(), "state")
+	t.Setenv("XDG_STATE_HOME", xdg)
+	configDir, err := CanonicalConfigIdentity(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := TemporaryRuntimeWorld(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := TemporaryRuntimeWorld(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.StateDir == second.StateDir {
+		t.Fatalf("temporary worlds shared state directory %q", first.StateDir)
+	}
+	for _, world := range []World{first, second} {
+		if !IsTemporaryRuntimeDir(world.StateDir) {
+			t.Fatalf("temporary state directory was not recognized as owned: %q", world.StateDir)
+		}
+		if world.ConfigDir != configDir || world.DataDir != filepath.Join(world.StateDir, "data") || world.DBPath != filepath.Join(world.DataDir, DefaultDBFileName) {
+			t.Fatalf("unexpected temporary world: %#v", world)
+		}
+		if info, err := os.Stat(world.StateDir); err != nil || !info.IsDir() {
+			t.Fatalf("temporary state directory was not allocated: info=%#v err=%v", info, err)
+		}
+	}
+	persistent, err := RuntimeWorld(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if IsTemporaryRuntimeDir(persistent.StateDir) {
+		t.Fatalf("persistent state directory was classified as temporary: %q", persistent.StateDir)
+	}
+}
+
 func TestRuntimeWorldUsesSafeHashedDirectory(t *testing.T) {
 	xdg := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", xdg)

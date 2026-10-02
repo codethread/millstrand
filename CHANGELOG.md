@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `mill weaver start --temp` starts a discoverable, disposable Weaver without remembered-start registration or restart history. Stop, process exit, failed startup, and graceful Mill shutdown remove its private runtime state and database while preserving workspace source and existing persistent data.
+
 ## 0.6.0 - 2026-10-02
 
 - Breaking: removed `mill prime`. Batteries now supplies `strand primer`, with orientation and source/reference paths from the selected Weaver generation. Per-operation `strand prime` and `strand about` are unchanged.

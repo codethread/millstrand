@@ -319,16 +319,26 @@ func (s *server) admitControlCaller(weaverID, launchToken string, callerPID int)
 func (s *server) custodyFor(world config.World) (*process.Custody, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.isStopping() {
+		return nil, errors.New("mill process custody is shutting down")
+	}
+	if config.IsTemporaryRuntimeDir(world.StateDir) {
+		child := s.children[world.ConfigDir]
+		if child == nil || !child.temporary || child.world.StateDir != world.StateDir ||
+			child.cmd == nil || child.cmd.Process == nil || !processAlive(child.cmd.Process.Pid) {
+			return nil, errors.New("temporary Weaver lifetime has ended")
+		}
+	}
 	if s.custodies == nil {
 		s.custodies = make(map[string]*process.Custody)
 	}
-	if custody := s.custodies[world.ConfigDir]; custody != nil {
+	if custody := s.custodies[world.StateDir]; custody != nil {
 		return custody, nil
 	}
 	custody, err := process.NewCustody(filepath.Join(world.StateDir, "processes"))
 	if err != nil {
 		return nil, err
 	}
-	s.custodies[world.ConfigDir] = custody
+	s.custodies[world.StateDir] = custody
 	return custody, nil
 }

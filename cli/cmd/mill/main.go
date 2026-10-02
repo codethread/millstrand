@@ -57,6 +57,9 @@ type server struct {
 	shutdown     chan struct{}
 	shutdownOnce sync.Once
 	autostartWG  sync.WaitGroup
+	startWG      sync.WaitGroup
+	startMu      sync.Mutex
+	stopping     bool // guarded by startMu; closes start admission before shutdown joins
 	// controlPeerPID is injectable only for in-process tests. Production reads
 	// the kernel-authenticated PID from each Unix control connection.
 	controlPeerPID func(net.Conn) (int, error)
@@ -74,12 +77,14 @@ type server struct {
 }
 
 type weaverChild struct {
-	cmd      *exec.Cmd
-	world    config.World
-	name     string
-	done     chan error
-	waitDone chan struct{}
-	identity weaverIdentity
+	cmd        *exec.Cmd
+	world      config.World
+	name       string
+	done       chan error
+	waitDone   chan struct{}
+	identity   weaverIdentity
+	temporary  bool
+	cleanupErr error // temporary teardown failure, guarded by server.mu
 	// unsupervised means this child was discovered from runtime metadata rather
 	// than launched and owned by this mill.  Such a child needs endpoint-backed
 	// identity proof before mill may signal its recorded PID.
@@ -249,12 +254,20 @@ Environment:
 		if cmd.Flags().Changed("name") && strings.TrimSpace(name) == "" {
 			return errors.New("--name requires a non-empty value")
 		}
+		operation := "weaver-start"
+		temporary, _ := cmd.Flags().GetBool("temp")
+		if temporary {
+			// A distinct operation makes an older mill fail loudly instead of
+			// silently interpreting this request as a persistent start.
+			operation = "weaver-start-temp"
+		}
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, "weaver-start", workspace, name, readyTimeout, false)
+		return runWeaverLifecycle(cmd.OutOrStdout(), jsonOutput, operation, workspace, name, readyTimeout, false)
 	}}
 	start.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
 	start.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
+	start.Flags().Bool("temp", false, "use fresh disposable runtime and database state for this weaver lifetime")
 	start.Flags().Bool("json", false, "print the full result as JSON without progress messages")
 	weaver.AddCommand(start)
 	restart := &cobra.Command{Use: "restart", Short: "Probe and replace the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
@@ -516,8 +529,15 @@ func (s *server) handle(conn net.Conn) {
 			result["weaver"] = started
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
-	case "weaver-start":
-		result, err := s.startWeaver(req.World)
+	case "weaver-start", "weaver-start-temp":
+		temporary := req.Operation == "weaver-start-temp"
+		var result map[string]any
+		var err error
+		if temporary {
+			result, err = s.startTemporaryWeaver(req.World)
+		} else {
+			result, err = s.startWeaver(req.World)
+		}
 		if err != nil {
 			var responseErr *client.ResponseError
 			if errors.As(err, &responseErr) {
@@ -532,20 +552,22 @@ func (s *server) handle(conn net.Conn) {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", err.Error()))
 			return
 		}
-		world, worldErr := resolveLifecycleWorld(req.World)
-		if worldErr != nil {
-			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", worldErr.Error()))
-			return
-		}
-		cfg, _, configErr := config.Load(world.ConfigDir)
-		if configErr != nil {
-			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start config read failed", configErr.Error()))
-			return
-		}
-		if cfg.AutoStart {
-			if registerErr := registerAutoStart(world, req.World.CWD, req.World.Name); registerErr != nil {
-				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start registration failed", registerErr.Error()))
+		if !temporary {
+			world, worldErr := resolveLifecycleWorld(req.World)
+			if worldErr != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", worldErr.Error()))
 				return
+			}
+			cfg, _, configErr := config.Load(world.ConfigDir)
+			if configErr != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start config read failed", configErr.Error()))
+				return
+			}
+			if cfg.AutoStart {
+				if registerErr := registerAutoStart(world, req.World.CWD, req.World.Name); registerErr != nil {
+					_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start registration failed", registerErr.Error()))
+					return
+				}
 			}
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})

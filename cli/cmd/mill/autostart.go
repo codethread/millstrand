@@ -187,9 +187,18 @@ func clearAutostartFailure() error {
 }
 
 func (s *server) signalShutdown() {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	s.stopping = true
 	if s.shutdown != nil {
 		s.shutdownOnce.Do(func() { close(s.shutdown) })
 	}
+}
+
+func (s *server) isStopping() bool {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	return s.stopping
 }
 
 func (s *server) shuttingDown() bool {

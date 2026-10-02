@@ -59,6 +59,22 @@ If a registration is pruned, changing the effective config to `"autoStart": true
 
 Unknown keys in `config.json` and `config.local.json` are ignored for compatibility. When the Weaver starts, Mill logs a warning for each file and its unknown key names, including during remembered startup. Config reads for status and invoke retain those warnings but do not log them. Known value types still fail validation, and `config.local.json` rejects the known misplaced `configFormat` key.
 
+## Temporary weavers
+
+Use `--temp` for an experiment that should leave no runtime state behind:
+
+```nu
+mill weaver start --temp --workspace ./scratch-workspace --name scratch
+strand --workspace scratch help
+mill weaver stop --workspace ./scratch-workspace
+```
+
+The workspace must already be initialized. The temporary Weaver loads its config but starts with a fresh SQLite database in a private runtime directory. Status, list, named Strand selection, and REPL attachment work as usual. Its existing persistent database and workspace files are untouched.
+
+When the Weaver exits, Mill removes its database, logs, metadata, diagnostics, and private runtime caches. `mill weaver stop` waits for that cleanup. Graceful Mill shutdown cleans temporary Weavers too, including starts still in progress. Startup failures return their diagnostics and discard the temporary files. Abrupt Mill death cannot guarantee cleanup. Shared dependency caches are not removed.
+
+Temporary startup never registers for remembered startup, even if the config has `autoStart: true`. It leaves any earlier persistent registration unchanged. A temporary Weaver cannot join a JVM pool or use `mill weaver restart`; stop it and start with `--temp` again for a fresh database. Stop before switching between temporary and persistent starts. A Mill built before this option fails the request rather than starting a persistent Weaver.
+
 ## A private repo-local workspace
 
 Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make, Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates `.millstrand`; with one accepted marker, it keeps that marker. Mill adds only the workspace paths to `.git/info/exclude`, which is private to that clone, and reports whether that file was created, updated, or unchanged.
@@ -159,11 +175,11 @@ Config runs with weaver authority, and startup failures fail loudly — so try c
 ws="$(mktemp -d)"
 mill init --workspace "${ws:?}"
 # copy or write your candidate deps.edn and init.clj into "$ws", then:
-mill weaver start --workspace "${ws:?}"
+mill weaver start --temp --workspace "${ws:?}"
 mill weaver stop --workspace "${ws:?}"
 ```
 
-The `${ws:?}` guard makes an empty variable fail the command instead of silently resolving to your real workspace. If the candidate config is wrong, startup tells you with file context, and you throw the directory away.
+The `${ws:?}` guard makes an empty variable fail the command instead of silently resolving to your real workspace. `--temp` removes the runtime state when the Weaver stops; the config directory remains yours to inspect or delete. If the candidate config is wrong, startup tells you with file context and discards the failed runtime's files.
 
 Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md) weaver worlds take `:deps-edn`, `:init-clj`, and `:files` fixtures, so a test exercises exactly the artifacts this page has you writing.
 

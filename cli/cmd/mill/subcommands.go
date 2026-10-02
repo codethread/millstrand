@@ -89,9 +89,10 @@ func runWeaverLifecycle(out io.Writer, jsonOutput bool, operation, workspace, na
 	ui := newStatusOutput(out)
 	started := time.Now()
 	message := map[string]string{
-		"weaver-start":   "Starting weaver…",
-		"weaver-restart": "Restarting weaver…",
-		"weaver-stop":    "Stopping weaver…",
+		"weaver-start":      "Starting weaver…",
+		"weaver-start-temp": "Starting temporary weaver…",
+		"weaver-restart":    "Restarting weaver…",
+		"weaver-stop":       "Stopping weaver…",
 	}[operation]
 	ui.event(started, message)
 	type lifecycleOutcome struct {

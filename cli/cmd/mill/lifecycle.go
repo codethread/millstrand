@@ -143,10 +143,36 @@ func friendlyName(world config.World, requested string) (string, error) {
 }
 
 func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error) {
-	return s.startWeaverWithShutdown(req, nil)
+	return s.startWeaverMode(req, nil, false)
+}
+
+func (s *server) startTemporaryWeaver(req client.MillWorldRequest) (map[string]any, error) {
+	return s.startWeaverMode(req, nil, true)
 }
 
 func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <-chan struct{}) (map[string]any, error) {
+	return s.startWeaverMode(req, shutdown, false)
+}
+
+func (s *server) startWeaverMode(req client.MillWorldRequest, shutdown <-chan struct{}, temporary bool) (map[string]any, error) {
+	s.startMu.Lock()
+	if s.stopping {
+		s.startMu.Unlock()
+		return nil, errors.New("weaver start cancelled during mill shutdown")
+	}
+	if s.shutdown == nil {
+		s.shutdown = make(chan struct{})
+	}
+	if shutdown == nil {
+		shutdown = s.shutdown
+	}
+	s.startWG.Add(1)
+	s.startMu.Unlock()
+	defer s.startWG.Done()
+	return s.startWeaverAttempt(req, shutdown, temporary)
+}
+
+func (s *server) startWeaverAttempt(req client.MillWorldRequest, shutdown <-chan struct{}, temporary bool) (result map[string]any, err error) {
 	world, err := resolveLifecycleWorldWithWarnings(req, true)
 	if err != nil {
 		return nil, err
@@ -158,25 +184,46 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		if !waitForStartClaimWithShutdown(claim, shutdown) {
 			return nil, errors.New("weaver start cancelled during mill shutdown")
 		}
-		return s.startWeaverWithShutdown(req, shutdown)
+		return s.startWeaverAttempt(req, shutdown, temporary)
 	}
-	if live, liveErr := s.livePoolHostForConfig(world.ConfigDir); liveErr != nil {
+	s.mu.Lock()
+	modeErr := s.checkStartModeLocked(world, temporary)
+	s.mu.Unlock()
+	if modeErr != nil {
+		return nil, modeErr
+	}
+	live, liveErr := s.livePoolHostForConfig(world.ConfigDir)
+	if liveErr != nil {
 		return nil, liveErr
-	} else if live != nil && live.Live {
-		desired, desiredErr := configuredPool(world)
-		if desiredErr != nil {
-			return nil, desiredErr
+	}
+	pool, poolErr := configuredPool(world)
+	if poolErr != nil {
+		return nil, poolErr
+	}
+	if temporary {
+		if _, registered, err := s.registeredPoolForConfig(world.ConfigDir); err != nil {
+			return nil, err
+		} else if registered {
+			return nil, errors.New("temporary weavers cannot use registered JVM pool membership")
 		}
-		if live.Pool != desired {
+		if pool != "" {
+			return nil, fmt.Errorf("temporary weavers cannot use JVM pool %q", pool)
+		}
+		if live != nil && live.Live {
+			return nil, fmt.Errorf("temporary weavers cannot replace live JVM pool member %s; stop pool %q first", world.ConfigDir, live.Pool)
+		}
+	} else {
+		if live != nil && live.Live && live.Pool != pool {
 			return nil, poolStopRequiredError(world.ConfigDir, live.Pool, live.HostID)
 		}
-	}
-	if pool, poolErr := configuredPool(world); poolErr != nil {
-		return nil, poolErr
-	} else if pool != "" {
-		return s.startPooledWeaver(req, world, pool, shutdown)
+		if pool != "" {
+			return s.startPooledWeaver(req, world, pool, shutdown)
+		}
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
+		if temporary {
+			return nil, fmt.Errorf("cannot start temporary weaver while selected workspace restart is %s", transition.state())
+		}
 		// A probe leaves the admitted old generation serving.  Starting during
 		// cutover joins the one shared replacement instead of launching a second
 		// child; failed state is retained for an explicit restart recovery.
@@ -185,12 +232,14 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		}
 		return waitForLifecycleTransitionShutdown(transition, readyTimeoutFor(req.ReadyTimeoutMs), shutdown)
 	}
-	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		return nil, recordErr
-	} else if ok && record.State == restartStateFailed {
-		status := record.status(world)
-		status["operation"] = "start"
-		return status, nil
+	if !temporary {
+		if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+			return nil, recordErr
+		} else if ok && record.State == restartStateFailed {
+			status := record.status(world)
+			status["operation"] = "start"
+			return status, nil
+		}
 	}
 	s.mu.Lock()
 	if claim := s.startClaims[world.ConfigDir]; claim != nil {
@@ -198,24 +247,33 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		if !waitForStartClaimWithShutdown(claim, shutdown) {
 			return nil, errors.New("weaver start cancelled during mill shutdown")
 		}
-		return s.startWeaverWithShutdown(req, shutdown)
+		return s.startWeaverAttempt(req, shutdown, temporary)
+	}
+	if err := s.checkStartModeLocked(world, temporary); err != nil {
+		s.mu.Unlock()
+		return nil, err
 	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		s.mu.Unlock()
+		if temporary {
+			return nil, fmt.Errorf("cannot start temporary weaver while selected workspace restart is %s", transition.state())
+		}
 		if transition.state() == restartStateProbing {
 			return s.admittedGenerationStatus(world, transition), nil
 		}
 		return waitForLifecycleTransitionShutdown(transition, readyTimeoutFor(req.ReadyTimeoutMs), shutdown)
 	}
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
-		status, stale := readStatus(world)
+		status, stale := readStatus(child.world)
 		if status != nil && !stale {
 			status["generation_id"] = child.generationID
+			decorateTemporaryStatus(status, child)
 			s.mu.Unlock()
 			return status, nil
 		}
 		if status == nil {
-			status = baseStatusWithName(world, "starting", child.name)
+			status = baseStatusWithName(child.world, "starting", child.name)
+			decorateTemporaryStatus(status, child)
 			status["pid"] = child.cmd.Process.Pid
 		}
 		if stale {
@@ -228,6 +286,9 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	if status, stale := readStatus(world); status != nil {
 		s.mu.Unlock()
 		if !stale {
+			if temporary {
+				return nil, errors.New("persistent weaver is already running; stop it before starting with --temp")
+			}
 			return status, nil
 		}
 		return nil, fmt.Errorf("stale weaver metadata for selected workspace: %v", status["stale_reason"])
@@ -251,14 +312,29 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	if err != nil {
 		return nil, err
 	}
+	name, err := friendlyName(world, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	allocatedTemporary := false
+	if temporary {
+		world, err = config.TemporaryRuntimeWorld(world.ConfigDir)
+		if err != nil {
+			return nil, err
+		}
+		allocatedTemporary = true
+		// Until a launched child takes custody, every later failure owns this
+		// freshly allocated directory and must remove it.
+		defer func() {
+			if allocatedTemporary {
+				err = errors.Join(err, removeTemporaryRuntimeWorld(world))
+			}
+		}()
+	}
 	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(world.DataDir, 0o755); err != nil {
-		return nil, err
-	}
-	name, err := friendlyName(world, req.Name)
-	if err != nil {
 		return nil, err
 	}
 	if shutdown != nil {
@@ -281,7 +357,7 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	launchToken := newOpaqueID("launch")
 	done := make(chan error, 1)
 	waitDone := make(chan struct{})
-	registered := &weaverChild{world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken}
+	registered := &weaverChild{world: world, name: name, done: done, waitDone: waitDone, generationID: newOpaqueID("generation"), launchToken: launchToken, temporary: temporary}
 	register := func(cmd *exec.Cmd) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -302,12 +378,8 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 		_ = logFile.Close()
 		return nil, err
 	}
-	go func() {
-		defer close(waitDone)
-		err := cmd.Wait()
-		_ = logFile.Close()
-		done <- err
-	}()
+	allocatedTemporary = false
+	go s.observeWeaverChild(registered, logFile, claim)
 	// Weaver startup includes JVM boot plus trusted config evaluation
 	// (spool sync and module loads), which can far exceed a bare boot.
 	readyTimeout := defaultWeaverReadyTimeout
@@ -316,37 +388,90 @@ func (s *server) startWeaverWithShutdown(req client.MillWorldRequest, shutdown <
 	}
 	status, err := waitForReadyStatusContext(world, cmd.Process.Pid, done, readyTimeout, shutdown)
 	if err != nil {
-		terminateProcess(cmd.Process)
-		waitForStartedChild(cmd, done, waitDone, 5*time.Second)
-		// The ready wait runs unlocked, so a sibling start may have replaced
-		// this entry after our weaver died; only the still-registered owner
-		// may remove supervision state and world artifacts, or a failed
-		// early start would tear down its successor's healthy weaver.
-		if s.releaseChild(world.ConfigDir, registered) && registered.identity.WeaverID != "" {
-			_ = cleanupWorldArtifactsOwned(world, registered.identity)
-		}
-		if diagnostic, diagnosticErr := readDependencyDiagnostic(world); diagnosticErr != nil {
-			return nil, diagnosticErr
-		} else if diagnostic != nil {
-			return nil, &dependencyLaunchError{diagnostic: *diagnostic, err: err}
-		}
-		if tail := tailOfFile(logPath, 4096); tail != "" {
-			return nil, fmt.Errorf("%w; weaver log tail (%s):\n%s", err, logPath, tail)
-		}
-		return nil, fmt.Errorf("%w; weaver log: %s", err, logPath)
+		stopStartedChild(registered)
+		// Preserve the diagnostic before temporary teardown removes the log and
+		// diagnostic file. The exit observer waits for this start claim to end.
+		launchErr := weaverStartupError(world, logPath, err)
+		cleanupErr := s.discardStartedChild(registered)
+		return nil, errors.Join(launchErr, cleanupErr)
 	}
 	identity, err := identityFromStatus(status)
 	if err != nil {
-		return nil, fmt.Errorf("weaver ready metadata identity is invalid: %w", err)
+		cleanupErr := s.discardStartedChild(registered)
+		return nil, errors.Join(fmt.Errorf("weaver ready metadata identity is invalid: %w", err), cleanupErr)
 	}
 	if identity.PID != cmd.Process.Pid {
-		return nil, fmt.Errorf("weaver ready metadata pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
+		cleanupErr := s.discardStartedChild(registered)
+		return nil, errors.Join(fmt.Errorf("weaver ready metadata pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid), cleanupErr)
 	}
+	s.mu.Lock()
 	registered.identity = identity
 	registered.generationID = identity.GenerationID
-	status["generation_id"] = registered.generationID
+	s.mu.Unlock()
+	status["generation_id"] = identity.GenerationID
+	decorateTemporaryStatus(status, registered)
 	millLogf("Weaver %s ready (PID %v). Workspace: %s. Logs: %s", name, status["pid"], world.ConfigDir, logPath)
 	return status, nil
+}
+
+func weaverStartupError(world config.World, logPath string, err error) error {
+	if diagnostic, diagnosticErr := readDependencyDiagnostic(world); diagnosticErr != nil {
+		return errors.Join(err, diagnosticErr)
+	} else if diagnostic != nil {
+		return &dependencyLaunchError{diagnostic: *diagnostic, err: err}
+	}
+	if tail := tailOfFile(logPath, 4096); tail != "" {
+		return fmt.Errorf("%w; weaver log tail (%s):\n%s", err, logPath, tail)
+	}
+	return fmt.Errorf("%w; weaver log: %s", err, logPath)
+}
+
+func stopStartedChild(child *weaverChild) {
+	select {
+	case <-child.waitDone:
+		return
+	default:
+	}
+	terminateProcess(child.cmd.Process)
+	waitForStartedChild(child.cmd, child.done, child.waitDone, 5*time.Second)
+}
+
+func (s *server) discardStartedChild(child *weaverChild) error {
+	stopStartedChild(child)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.children[child.world.ConfigDir] != child {
+		return nil
+	}
+	if child.temporary {
+		return s.cleanupTemporaryChildLocked(child)
+	}
+	delete(s.children, child.world.ConfigDir)
+	if child.identity.WeaverID != "" {
+		return cleanupWorldArtifactsOwned(child.world, child.identity)
+	}
+	return nil
+}
+
+func (s *server) observeWeaverChild(child *weaverChild, logFile *os.File, startDone <-chan struct{}) {
+	waitErr := child.cmd.Wait()
+	_ = logFile.Close()
+	child.done <- waitErr
+	close(child.waitDone)
+	if !child.temporary {
+		return
+	}
+	// Startup reads failure diagnostics before giving the exit observer
+	// ownership. Keep the child registered until its teardown has finished,
+	// so stop and Mill shutdown cannot overlook pending cleanup.
+	<-startDone
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.children[child.world.ConfigDir] == child {
+		if err := s.cleanupTemporaryChildLocked(child); err != nil {
+			millLogf("Temporary weaver cleanup failed for %s: %v", child.world.ConfigDir, err)
+		}
+	}
 }
 
 // waitForStartedChild joins the cmd.Wait goroutine after a failed or cancelled
@@ -431,6 +556,13 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	s.mu.Lock()
+	if child := s.children[world.ConfigDir]; child != nil && child.temporary {
+		status := s.temporaryChildStatusLocked(child)
+		s.mu.Unlock()
+		return status, nil
+	}
+	s.mu.Unlock()
 	if pooled, ok, poolErr := s.poolStatusForWorldWithDetails(world, req.Details); poolErr != nil {
 		return nil, poolErr
 	} else if ok {
@@ -445,6 +577,9 @@ func (s *server) weaverStatus(req client.MillWorldRequest) (map[string]any, erro
 func (s *server) weaverStatusDetailedForWorld(world config.World) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if child := s.children[world.ConfigDir]; child != nil && child.temporary {
+		return s.temporaryChildStatusLocked(child)
+	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		if transition.state() == restartStateFailed {
 			return transitionResultStatusDetailed(transition)
@@ -654,6 +789,9 @@ func (s *server) weaverStatusForWorld(world config.World) map[string]any {
 }
 
 func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
+	if child := s.children[world.ConfigDir]; child != nil && child.temporary {
+		return s.temporaryChildStatusLocked(child)
+	}
 	if host := poolHostForConfigLocked(s, world.ConfigDir); host != nil && host.Live {
 		if status := s.poolStatusForMember(host, world.ConfigDir); status != nil {
 			return status
@@ -697,6 +835,30 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 	return baseStatus(world, "none")
 }
 
+func (s *server) temporaryChildStatusLocked(child *weaverChild) map[string]any {
+	if status, stale := readStatus(child.world); status != nil {
+		if stale {
+			status["state"] = "stale"
+		}
+		decorateTemporaryStatus(status, child)
+		return status
+	}
+	state := "stopped"
+	if child.cmd != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
+		state = "starting"
+	}
+	status := baseStatusWithName(child.world, state, child.name)
+	if state == "starting" {
+		status["pid"] = child.cmd.Process.Pid
+		status["generation_id"] = child.generationID
+	}
+	decorateTemporaryStatus(status, child)
+	if child.cleanupErr != nil {
+		status["cleanup_error"] = child.cleanupErr.Error()
+	}
+	return status
+}
+
 func (s *server) readStatusCached(world config.World) (map[string]any, bool) {
 	if s.restartSummaryCache == nil {
 		s.restartSummaryCache = map[string]restartSummaryCacheEntry{}
@@ -732,14 +894,23 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	if pool, poolErr := configuredPool(world); poolErr != nil {
-		return nil, poolErr
-	} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
-		return s.stopPooledWeaver(world)
-	} else if recorded, recordErr := s.poolMembershipRecorded(world.ConfigDir); recordErr != nil {
-		return nil, recordErr
-	} else if recorded {
-		return s.stopPooledWeaver(world)
+	s.mu.Lock()
+	selectedChild := s.children[world.ConfigDir]
+	temporary := selectedChild != nil && selectedChild.temporary
+	if temporary {
+		world = selectedChild.world
+	}
+	s.mu.Unlock()
+	if !temporary {
+		if pool, poolErr := configuredPool(world); poolErr != nil {
+			return nil, poolErr
+		} else if pool != "" || s.poolMemberRecorded(world.ConfigDir) {
+			return s.stopPooledWeaver(world)
+		} else if recorded, recordErr := s.poolMembershipRecorded(world.ConfigDir); recordErr != nil {
+			return nil, recordErr
+		} else if recorded {
+			return s.stopPooledWeaver(world)
+		}
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		waitForStartClaim(claim)
@@ -751,6 +922,18 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	child := s.children[world.ConfigDir]
+	if child != nil && child.temporary {
+		world = child.world
+		stopStartedChild(child)
+		if err := s.cleanupTemporaryChildLocked(child); err != nil {
+			return nil, fmt.Errorf("temporary weaver teardown cleanup failed: %w", err)
+		}
+		status := baseStatus(world, "stopped")
+		status["pid"] = child.cmd.Process.Pid
+		decorateTemporaryStatus(status, child)
+		millLogf("Temporary weaver stopped. Workspace: %s", world.ConfigDir)
+		return status, nil
+	}
 	if child == nil || child.cmd.Process == nil || !processAlive(child.cmd.Process.Pid) {
 		delete(s.children, world.ConfigDir)
 		if status, stale := readStatus(world); status != nil {
@@ -810,21 +993,26 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 		_ = child.cmd.Process.Kill()
 		<-child.done
 	}
-	if err := cleanupWorldArtifactsOwned(world, child.identity); err != nil {
+	if err := cleanupWorldArtifactsOwned(child.world, child.identity); err != nil {
 		return nil, fmt.Errorf("weaver stopped but teardown cleanup failed: %w", err)
 	}
 	delete(s.children, world.ConfigDir)
-	status := baseStatus(world, "stopped")
+	status := baseStatus(child.world, "stopped")
 	status["pid"] = pid
 	millLogf("Weaver stopped (PID %d). Workspace: %s", pid, world.ConfigDir)
 	return status, nil
 }
 
 func (s *server) stopAll() error {
+	s.signalShutdown()
+	s.startWG.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var failures []error
-	for _, custody := range s.custodies {
+	for stateDir, custody := range s.custodies {
+		if config.IsTemporaryRuntimeDir(stateDir) {
+			continue // temporary custody is joined with its Weaver below
+		}
 		if err := custody.Shutdown(); err != nil {
 			failures = append(failures, err)
 		}
@@ -848,6 +1036,13 @@ func (s *server) stopAll() error {
 	}
 	s.poolMembers = map[string]*weaverHost{}
 	for _, child := range s.children {
+		if child.temporary {
+			stopStartedChild(child)
+			if err := s.cleanupTemporaryChildLocked(child); err != nil {
+				failures = append(failures, err)
+			}
+			continue
+		}
 		if child.cmd != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 			terminateProcess(child.cmd.Process)
 			select {
@@ -856,7 +1051,11 @@ func (s *server) stopAll() error {
 				_ = child.cmd.Process.Kill()
 				<-child.done
 			}
-			_ = cleanupWorldArtifactsOwned(child.world, child.identity)
+		}
+		if child.identity.WeaverID != "" {
+			if err := cleanupWorldArtifactsOwned(child.world, child.identity); err != nil {
+				failures = append(failures, err)
+			}
 		}
 	}
 	return errors.Join(failures...)

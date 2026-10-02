@@ -8,7 +8,7 @@ help:
 		'  make land-quality       Build and run the local landing quality DAG' \
 		'    LAND_QUALITY_HEAVY_LIMIT=N sets its positive heavy-job cap (default 2)' \
 		'  make test-go            Run Go tests in every Go module' \
-		'  make test-restart-acceptance  Run built-binary restart and JVM-pool acceptance' \
+		'  make test-restart-acceptance  Run built-binary restart, JVM-pool, and temporary lifecycle acceptance' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure, Go, and Markdown formatting' \
 		'  make fmt-markdown       Format every tracked Markdown file with oxfmt' \
@@ -133,18 +133,18 @@ fmt-check-markdown:
 test-go:
 	bash scripts/go-quality test
 
-# The restart and JVM-pool acceptances control real Mill and Weaver processes.
+# Lifecycle acceptances control real Mill and Weaver processes.
 # Keep them out of the normal Go suite, but make their explicit land-quality
 # invocation mandatory.
 test-restart-acceptance: build
 	@output=$$(mktemp); \
 	trap 'rm -f "$$output"' EXIT; \
-	if ! (cd cli && go test -json -tags=integration -count=1 -run '^(TestDisposableWeaverRestartAcceptance|TestJVMPoolLifecycleAcceptance|TestJVMPoolProbeFailureAcceptance)$$' ./...) >"$$output"; then \
+	if ! (cd cli && go test -json -tags=integration -count=1 -run '^(TestDisposableWeaverRestartAcceptance|TestJVMPoolLifecycleAcceptance|TestJVMPoolProbeFailureAcceptance|TestTemporaryWeaverAcceptance)$$' ./...) >"$$output"; then \
 		cat "$$output"; \
 		exit 1; \
 	fi; \
 	cat "$$output"; \
-	for test_name in TestDisposableWeaverRestartAcceptance TestJVMPoolLifecycleAcceptance TestJVMPoolProbeFailureAcceptance; do \
+	for test_name in TestDisposableWeaverRestartAcceptance TestJVMPoolLifecycleAcceptance TestJVMPoolProbeFailureAcceptance TestTemporaryWeaverAcceptance; do \
 		if ! grep -F '"Action":"pass"' "$$output" | grep -F "\"Test\":\"$$test_name\"" >/dev/null; then \
 			echo "test-restart-acceptance: $$test_name did not run and pass" >&2; \
 			exit 1; \

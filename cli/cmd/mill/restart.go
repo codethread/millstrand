@@ -483,6 +483,12 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 		waitForStartClaim(claim)
 		return s.restartWeaver(req)
 	}
+	s.mu.Lock()
+	temporary := s.children[world.ConfigDir] != nil && s.children[world.ConfigDir].temporary
+	s.mu.Unlock()
+	if temporary {
+		return nil, errors.New("temporary weavers cannot be restarted; stop it and start a new temporary weaver")
+	}
 	if live, liveErr := s.livePoolHostForConfig(world.ConfigDir); liveErr != nil {
 		return nil, liveErr
 	} else if live != nil && live.Live {
@@ -539,6 +545,10 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 		}
 	}
 	old := s.children[world.ConfigDir]
+	if old != nil && old.temporary {
+		s.mu.Unlock()
+		return nil, errors.New("temporary weavers cannot be restarted; stop it and start a new temporary weaver")
+	}
 	if old != nil && (old.cmd == nil || old.cmd.Process == nil || !processAlive(old.cmd.Process.Pid)) {
 		delete(s.children, world.ConfigDir)
 		old = nil
