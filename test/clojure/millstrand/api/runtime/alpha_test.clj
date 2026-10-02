@@ -84,3 +84,13 @@
     (is (not (s/valid? ::runtime/refresh-opts {:only ["demo"]})))
     (is (s/valid? ::runtime/collect-entry-opts {:override? true}))
     (is (not (s/valid? ::runtime/collect-entry-opts {:override? :yes})))))
+
+(deftest millstrand-source-uses-the-selected-generation
+  (let [source (.getCanonicalPath (java.io.File. "."))
+        selected (fn [root]
+                   {:generation-basis
+                    {:reserved-deps {'io.millstrand/millstrand {:local/root root}}}})]
+    (is (= source (runtime/millstrand-source (selected source))))
+    (doseq [root [nil "" "." "relative/source" (str source "/missing-source")]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Millstrand source directory"
+                            (runtime/millstrand-source (selected root)))))))

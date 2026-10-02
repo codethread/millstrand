@@ -20,7 +20,8 @@
   the sharp code-only tool. Component sub-specs live in
   `millstrand.api.runtime.internal.shapes`; every registered key stays
   alpha-qualified."
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.clock.alpha :as clock-api]
             [millstrand.api.registry.alpha :as registry]
@@ -434,6 +435,23 @@
   :ret ::reload-code-result)
 
 ;; --- runtime-owned services for trusted spools ------------------------------
+
+(defn millstrand-source
+  "Return the absolute Millstrand source directory selected for `runtime`.
+
+  Mill's launch-source resolver supplies this coordinate when it constructs
+  the generation basis. Read that frozen selection rather than resolving the
+  caller's cwd, environment, or another installed CLI again. Missing,
+  relative, or unavailable source directories fail loudly."
+  [runtime]
+  (let [source (get-in runtime [:generation-basis :reserved-deps
+                                'io.millstrand/millstrand :local/root])]
+    (when-not (and (string? source) (not (str/blank? source))
+                   (.isAbsolute (io/file source))
+                   (.isDirectory (io/file source)))
+      (throw (ex-info "Runtime has no available absolute Millstrand source directory"
+                      {:code "runtime/source-unavailable" :source source})))
+    (.getCanonicalPath (io/file source))))
 
 (s/def ::resolvable-symbol qualified-symbol?)
 

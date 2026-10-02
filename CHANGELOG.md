@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 - 2026-10-02
+
+- Breaking: removed `mill prime`. Batteries now supplies `strand primer`, with orientation and source/reference paths from the selected Weaver generation. Per-operation `strand prime` and `strand about` are unchanged.
+- Trusted config can append to or replace the primer with `batteries/set-primer!`. Settings belong to one runtime; repeated config refresh does not duplicate appended text.
+- Breaking: `mill init` no longer creates or edits agent instruction files. Stealth init no longer writes or excludes `CLAUDE.local.md`, supplies Codex suggestions, or returns `claude_guidance` and `codex_guidance` fields. Existing instruction files are untouched. See [workspace customisation](./docs/spools/customisation.md#customising-the-primer) for the new entry point and older exclude-block cleanup.
+
 ## 0.5.3 - 2026-09-14
 
 - `mill` can manage opt-in named JVM pools, including host-scoped membership, status, restart admission, and continuity across Millstrand restarts.

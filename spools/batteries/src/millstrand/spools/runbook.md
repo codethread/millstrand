@@ -2,7 +2,7 @@
 
 Use the `strand` CLI to plan and track multi-step work as a small explicit DAG of strands. If `strand` fails because it cannot reach a weaver, run `mill weaver start`.
 
-This is the batteries tracking loop. Commands are workspace-registered; this page assumes the batteries surface (`add`, `update`, `list`, `ready`, `show`) plus whatever else the workspace elected. Verify with `strand help`.
+This is the batteries tracking loop. Commands are workspace-registered; this page assumes the batteries surface (`primer`, `add`, `update`, `list`, `ready`, `show`) plus whatever else the workspace elected. Verify with `strand primer` and `strand help`.
 
 ## When to use strands
 
@@ -12,9 +12,10 @@ This is the batteries tracking loop. Commands are workspace-registered; this pag
 
 ## Discover the surface
 
-Start from `strand --help`, then load help, then prime, then about:
+Start from `strand primer`, then load help, then prime, then about:
 
-```sh
+```nu
+strand primer            # workspace orientation
 strand help              # list commands
 strand help <op>         # what you can type
 strand prime <op>        # runbook for that command
@@ -65,4 +66,4 @@ Before reporting success:
 - Completed strands are closed; newly discovered work is represented by active strands; dependencies reflect actual blocking relationships.
 - Relevant checks pass.
 
-Branching, delegation, review, and landing discipline are repo policy, not batteries: take them from repo conventions and from the `prime`/`about` surfaces of the ops the repo registers. Building on `.millstrand` itself — config, spools, the source docs — is covered by `mill prime millstrand`.
+Branching, delegation, review, and landing discipline are repo policy, not batteries: take them from repo conventions and from the `prime`/`about` surfaces of the ops the repo registers. For workspace config, spools, and REPL work, use the source and canonical reference paths returned by `strand primer`.

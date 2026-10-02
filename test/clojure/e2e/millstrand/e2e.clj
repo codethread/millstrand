@@ -396,10 +396,6 @@
         product-version (clojure.string/trim
                          (slurp (java.io.File. checkout-root "VERSION")))
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
-        ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve
-        ;; the source paths.
-        millstrand-prime (run-process! "mill prime millstrand succeeds" (outside-repo-dir) nil
-                                       [mill-bin "prime" "millstrand"])
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
@@ -409,15 +405,64 @@
              "version output has the complete release identity")
     (assert= product-version (:version strand-version) "version output uses the source product version")
     (assert-contains changelog (str "## " product-version) "mill changelog reports the installed release")
-    (doseq [needle ["init" "weaver" "start" "prime" "changelog"]]
-      (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
-    (assert= (str "Millstrand source: " checkout-root "\n"
-                  "Millstrand reference: "
-                  (.normalize (.toPath (java.io.File. checkout-root "docs/reference.md"))) "\n")
-             millstrand-prime
-             "mill prime millstrand prints the source and canonical reference paths")
+    (doseq [needle ["init" "weaver" "start" "changelog"]]
+      (assert-contains mill-root needle "Go mill root help shows the lifecycle commands"))
+    (assert-contains (run-process-fails! "mill orientation command is removed" (outside-repo-dir)
+                                         [mill-bin "prime" "millstrand"])
+                     "unknown command" "removed mill orientation command fails loudly")
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
       (assert-contains dry-run needle "Go CLI --dry-run prints the assembled invoke envelope without contacting a weaver"))))
+
+(defn- smoke-primer!
+  [workspace]
+  (let [initial (:primer (parse-json (run-strand-config! workspace "primer")))
+        source (.getCanonicalPath (io/file checkout-root))
+        local-init (io/file workspace "init.local.clj")
+        refresh! #(run-process! "primer config refresh succeeds" (outside-repo-dir)
+                                "(runtime/refresh! (current/runtime))\n"
+                                [mill-bin "weaver" "repl" "--stdin" "--workspace" workspace])
+        configure! (fn [opts]
+                     (spit local-init
+                           (str (pr-str '(require 'millstrand.spools.batteries)) "\n"
+                                (pr-str (list 'millstrand.spools.batteries/set-primer!
+                                              '(current/runtime) opts)) "\n"))
+                     (refresh!))]
+    (assert-contains initial (str "Millstrand source: " source)
+                     "primer uses Mill's resolved launch source from outside the repo")
+    (assert-contains initial (str "Millstrand reference: " (io/file source "docs/reference.md"))
+                     "primer points to the selected generation's reference")
+    (configure! {:append "Workspace-specific instructions."})
+    (refresh!)
+    (assert= {:primer (str initial "\n\nWorkspace-specific instructions.")}
+             (parse-json (run-strand-config! workspace "primer"))
+             "startup customization is refreshable without duplicate appends")
+    (configure! {:replace "Only workspace instructions."})
+    (assert= {:primer "Only workspace instructions."}
+             (parse-json (run-strand-config! workspace "primer"))
+             "replacement removes all shipped primer text")
+    (configure! {})
+    (assert= {:primer initial} (parse-json (run-strand-config! workspace "primer"))
+             "empty configuration restores the default primer")))
+
+(defn- smoke-primer-world!
+  [db-file]
+  (let [path (smoke-workspace (str db-file ".primer"))
+        workspace (.getCanonicalPath (.toFile path))]
+    (delete-tree! path)
+    (run-mill-config! workspace "init")
+    (write-smoke-deps! workspace)
+    (start-weaver-config! workspace)
+    (try
+      (smoke-primer! workspace)
+      (spit (io/file workspace "init.clj") "")
+      (run-process! "remove batteries by activation omission" (outside-repo-dir)
+                    "(runtime/refresh! (current/runtime))\n"
+                    [mill-bin "weaver" "repl" "--stdin" "--workspace" workspace])
+      (assert-contains (run-strand-config-fails! workspace "primer") "Operation not found"
+                       "removing batteries removes primer without a CLI fallback")
+      (finally
+        (stop-weaver-config! workspace)
+        (delete-tree! path)))))
 
 (defn smoke-dispatcher-surface! [db-file]
   (let [workspace (.getCanonicalPath (.toFile (smoke-workspace (str db-file ".dispatcher"))))
@@ -668,6 +713,7 @@
     (let [mill-process (start-mill!)]
       (try
         (smoke-dispatcher-surface! db-file)
+        (smoke-primer-world! db-file)
         (smoke-await-cli! db-file)
         (smoke-local-coordinate-replacement! db-file)
         (finally

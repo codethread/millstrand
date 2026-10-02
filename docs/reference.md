@@ -32,14 +32,14 @@ The weaver REPL is the rich surface for inspection, customisation, and trusted C
 - [Clojure crash course](./clojure-crash-course.md) introduces the Clojure needed for Millstrand work.
 - [IDE REPL guide](./ide-repl/) covers editor connections to a running weaver.
 
-## Discovery tiers: help, about, prime
+## Discovery: primer, help, about, prime
 
 Use the live discovery commands before relying on prose that may describe a different workspace:
 
+- `strand primer` prints Batteries' workspace orientation, including the selected Millstrand source and reference paths.
 - `strand help` lists registered operations. `strand help <op>` shows exact arguments generated from that operation's declaration.
 - `strand about <op>` explains an operation's purpose and conventions when its author provides a manual.
 - `strand prime <op>` supplies run-first working context when an operation carries a discipline that must be read before use. It returns the op author's authoritative prime first, followed by active module-owned advice in module and source declaration order; each appendix includes provenance.
-- `mill prime millstrand` locates the Millstrand source and this reference without requiring a running weaver.
 - `mill changelog` prints the release notes retained with the resolved Millstrand source. It does not require a running mill or weaver.
 
 ## Customising and extending

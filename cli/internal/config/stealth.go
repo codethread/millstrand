@@ -11,16 +11,14 @@ import (
 const (
 	stealthExcludeStart = "# mill:millstrand-stealth"
 	stealthExcludeEnd   = "# /mill:millstrand-stealth"
-	stealthExcludeBlock = stealthExcludeStart + "\n/.millstrand\n/.ms\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
+	stealthExcludeBlock = stealthExcludeStart + "\n/.millstrand\n/.ms\n" + stealthExcludeEnd + "\n"
 
-	StealthStatusCreated        = "created"
-	StealthStatusUpdated        = "updated"
-	StealthStatusUnchanged      = "unchanged"
-	StealthStatusSkippedTracked = "skipped-tracked"
+	StealthStatusCreated   = "created"
+	StealthStatusUpdated   = "updated"
+	StealthStatusUnchanged = "unchanged"
 
 	StealthTargetTrackedMillstrand = "tracked-millstrand"
 	StealthTargetGitExclude        = "git-exclude"
-	StealthTargetClaudeGuidance    = "claude-guidance"
 	StealthStateTracked            = "tracked"
 	StealthStateStartOnly          = "start-only"
 	StealthStateEndOnly            = "end-only"
@@ -28,25 +26,15 @@ const (
 	StealthStateDuplicateEnd       = "duplicate-end"
 	StealthStateReversed           = "reversed"
 	StealthStateEdited             = "edited"
-	StealthCodexManualRequired     = "manual-required"
 )
-
-const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. " + agentOrientation
 
 type StealthFileAction struct {
 	Path   string `json:"path"`
 	Status string `json:"status"`
 }
 
-type StealthCodexGuidance struct {
-	Status        string `json:"status"`
-	SuggestedText string `json:"suggested_text"`
-}
-
 type StealthReport struct {
-	GitExclude     StealthFileAction    `json:"git_exclude"`
-	ClaudeGuidance StealthFileAction    `json:"claude_guidance"`
-	CodexGuidance  StealthCodexGuidance `json:"codex_guidance"`
+	GitExclude StealthFileAction `json:"git_exclude"`
 }
 
 type StealthInitResult struct {
@@ -65,12 +53,6 @@ func (r StealthInitResult) Validate() error {
 func (r StealthReport) Validate() error {
 	if strings.TrimSpace(r.GitExclude.Path) == "" || !oneOf(r.GitExclude.Status, StealthStatusCreated, StealthStatusUpdated, StealthStatusUnchanged) {
 		return fmt.Errorf("invalid stealth git_exclude report: %#v", r.GitExclude)
-	}
-	if strings.TrimSpace(r.ClaudeGuidance.Path) == "" || !oneOf(r.ClaudeGuidance.Status, StealthStatusCreated, StealthStatusUpdated, StealthStatusUnchanged, StealthStatusSkippedTracked) {
-		return fmt.Errorf("invalid stealth claude_guidance report: %#v", r.ClaudeGuidance)
-	}
-	if r.CodexGuidance.Status != StealthCodexManualRequired || strings.TrimSpace(r.CodexGuidance.SuggestedText) == "" {
-		return fmt.Errorf("invalid stealth codex_guidance report: %#v", r.CodexGuidance)
 	}
 	return nil
 }
@@ -93,7 +75,7 @@ func (d StealthRefusalDetails) Validate() error {
 	if strings.TrimSpace(d.Path) == "" || strings.TrimSpace(d.Remediation) == "" {
 		return fmt.Errorf("invalid stealth refusal details: %#v", d)
 	}
-	if !oneOf(d.Target, StealthTargetTrackedMillstrand, StealthTargetGitExclude, StealthTargetClaudeGuidance) {
+	if !oneOf(d.Target, StealthTargetTrackedMillstrand, StealthTargetGitExclude) {
 		return fmt.Errorf("invalid stealth refusal target: %q", d.Target)
 	}
 	if !oneOf(d.State, StealthStateTracked, StealthStateStartOnly, StealthStateEndOnly, StealthStateDuplicateStart, StealthStateDuplicateEnd, StealthStateReversed, StealthStateEdited) {
@@ -129,7 +111,6 @@ type markedFilePlan struct {
 
 type stealthPlan struct {
 	exclude markedFilePlan
-	claude  markedFilePlan
 }
 
 func BootstrapStealthWorld(cwd string) (World, StealthReport, error) {
@@ -141,20 +122,15 @@ func BootstrapStealthWorld(cwd string) (World, StealthReport, error) {
 	if err != nil {
 		return World{}, StealthReport{}, err
 	}
-	world, err := bootstrapWorld(cwd, "", "", false)
+	world, err := BootstrapWorld(cwd, "")
 	if err != nil {
 		return World{}, StealthReport{}, err
 	}
 	if err := applyMarkedFilePlan(plan.exclude); err != nil {
 		return World{}, StealthReport{}, err
 	}
-	if err := applyMarkedFilePlan(plan.claude); err != nil {
-		return World{}, StealthReport{}, err
-	}
 	report := StealthReport{
-		GitExclude:     StealthFileAction{Path: plan.exclude.path, Status: plan.exclude.status},
-		ClaudeGuidance: StealthFileAction{Path: plan.claude.path, Status: plan.claude.status},
-		CodexGuidance:  StealthCodexGuidance{Status: StealthCodexManualRequired, SuggestedText: stealthCodexSuggestedText},
+		GitExclude: StealthFileAction{Path: plan.exclude.path, Status: plan.exclude.status},
 	}
 	if err := report.Validate(); err != nil {
 		return World{}, StealthReport{}, err
@@ -178,19 +154,7 @@ func preflightStealth(repoRoot string) (stealthPlan, error) {
 	if err != nil {
 		return stealthPlan{}, err
 	}
-	claudePath := filepath.Join(repoRoot, "CLAUDE.local.md")
-	tracked, err := gitTracked(repoRoot, "CLAUDE.local.md")
-	if err != nil {
-		return stealthPlan{}, err
-	}
-	if tracked {
-		return stealthPlan{exclude: exclude, claude: markedFilePlan{path: claudePath, status: StealthStatusSkippedTracked}}, nil
-	}
-	claude, err := preflightMarkedFile(claudePath, markerSpec{target: StealthTargetClaudeGuidance, start: agentGuidanceMarker, end: agentGuidanceEndMarker, block: agentGuidanceSection})
-	if err != nil {
-		return stealthPlan{}, err
-	}
-	return stealthPlan{exclude: exclude, claude: claude}, nil
+	return stealthPlan{exclude: exclude}, nil
 }
 
 func trackedWorkspacePath(repoRoot string) (string, error) {
@@ -295,7 +259,7 @@ func markerState(text string, spec markerSpec, starts, ends int) string {
 }
 
 func applyMarkedFilePlan(plan markedFilePlan) error {
-	if plan.status == StealthStatusUnchanged || plan.status == StealthStatusSkippedTracked {
+	if plan.status == StealthStatusUnchanged {
 		return nil
 	}
 	return os.WriteFile(plan.path, plan.content, 0o644)
