@@ -7,33 +7,93 @@ import (
 	"testing"
 )
 
-func TestEnsureAgentGuidanceAppendsToExisting(t *testing.T) {
-	d := t.TempDir()
-	path := filepath.Join(d, "AGENTS.md")
-	if err := os.WriteFile(path, []byte("# Repo\n\nExisting prose.\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureAgentGuidance(d); err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile(path)
+func TestBootstrapDoesNotWriteOrChangeInstructionFiles(t *testing.T) {
+	t.Run("existing guidance", func(t *testing.T) {
+		repo := initGitRepo(t)
+		agents := filepath.Join(repo, "AGENTS.md")
+		claude := filepath.Join(repo, "CLAUDE.md")
+		agentsOriginal := []byte("existing agent instructions\n")
+		claudeOriginal := []byte("existing Claude instructions\n")
+		if err := os.WriteFile(agents, agentsOriginal, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(claude, claudeOriginal, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		world, err := BootstrapWorld(repo, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		root, err := filepath.EvalSymlinks(repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := filepath.Join(root, ".millstrand"); world.ConfigDir != want {
+			t.Fatalf("config dir = %q, want %q", world.ConfigDir, want)
+		}
+		assertFileBytes(t, agents, agentsOriginal)
+		assertFileBytes(t, claude, claudeOriginal)
+
+		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+			t.Fatal(err)
+		}
+		assertFileBytes(t, agents, agentsOriginal)
+		assertFileBytes(t, claude, claudeOriginal)
+	})
+
+	t.Run("missing guidance", func(t *testing.T) {
+		repo := initGitRepo(t)
+		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md"} {
+			if _, err := os.Stat(filepath.Join(repo, name)); !os.IsNotExist(err) {
+				t.Fatalf("bootstrap wrote %s: %v", name, err)
+			}
+		}
+	})
+
+	t.Run("Claude symlink", func(t *testing.T) {
+		repo := initGitRepo(t)
+		agents := filepath.Join(repo, "AGENTS.md")
+		claude := filepath.Join(repo, "CLAUDE.md")
+		original := []byte("shared instructions\n")
+		if err := os.WriteFile(agents, original, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("AGENTS.md", claude); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := BootstrapWorld(repo, "", ""); err != nil {
+			t.Fatal(err)
+		}
+		assertFileBytes(t, agents, original)
+		info, err := os.Lstat(claude)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatal("CLAUDE.md symlink was replaced")
+		}
+	})
+}
+
+func assertFileBytes(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := string(b)
-	if !strings.Contains(got, "Existing prose.") {
-		t.Fatalf("existing prose was dropped: %q", got)
-	}
-	for _, want := range []string{agentGuidanceMarker, agentGuidanceEndMarker, "mill prime millstrand", "strand --help"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("missing %q in %q", want, got)
-		}
+	if string(got) != string(want) {
+		t.Fatalf("bootstrap changed %s: got %q want %q", path, got, want)
 	}
 }
 
 func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T) {
 	directory := t.TempDir()
-	world, err := bootstrapWorld(directory, filepath.Join(directory, "world"), "", false)
+	world, err := bootstrapWorld(directory, filepath.Join(directory, "world"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +131,7 @@ func TestBootstrapNeverOverwritesDependencyOrActivationOverlays(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := bootstrapWorld(directory, worldPath, "", false); err != nil {
+	if _, err := bootstrapWorld(directory, worldPath, ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"deps.edn", "deps.local.edn", "init.local.clj"} {
@@ -79,66 +139,5 @@ func TestBootstrapNeverOverwritesDependencyOrActivationOverlays(t *testing.T) {
 		if err != nil || string(content) != name+" sentinel\n" {
 			t.Fatalf("bootstrap overwrote %s: content=%q err=%v", name, content, err)
 		}
-	}
-}
-
-func TestEnsureAgentGuidanceIdempotent(t *testing.T) {
-	d := t.TempDir()
-	path := filepath.Join(d, "AGENTS.md")
-	if err := os.WriteFile(path, []byte("# Repo\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := ensureAgentGuidance(d); err != nil {
-			t.Fatal(err)
-		}
-	}
-	b, _ := os.ReadFile(path)
-	if n := strings.Count(string(b), agentGuidanceMarker); n != 1 {
-		t.Fatalf("expected marker exactly once, got %d", n)
-	}
-}
-
-func TestEnsureAgentGuidanceCreatesWhenNoneExist(t *testing.T) {
-	d := t.TempDir()
-	if err := ensureAgentGuidance(d); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(d, "CLAUDE.md")); !os.IsNotExist(err) {
-		t.Fatalf("CLAUDE.md should not be created, stat err=%v", err)
-	}
-	b, err := os.ReadFile(filepath.Join(d, "AGENTS.md"))
-	if err != nil {
-		t.Fatalf("AGENTS.md not created: %v", err)
-	}
-	if !strings.Contains(string(b), "mill prime millstrand") {
-		t.Fatalf("created AGENTS.md missing guidance: %q", string(b))
-	}
-}
-
-// CLAUDE.md commonly symlinks to AGENTS.md; injection must write once through the
-// shared target and leave the symlink intact.
-func TestEnsureAgentGuidanceSymlinkSafe(t *testing.T) {
-	d := t.TempDir()
-	agents := filepath.Join(d, "AGENTS.md")
-	if err := os.WriteFile(agents, []byte("# Repo\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("AGENTS.md", filepath.Join(d, "CLAUDE.md")); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureAgentGuidance(d); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := os.ReadFile(agents)
-	if n := strings.Count(string(b), agentGuidanceMarker); n != 1 {
-		t.Fatalf("expected marker exactly once through symlink, got %d", n)
-	}
-	fi, err := os.Lstat(filepath.Join(d, "CLAUDE.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatal("CLAUDE.md symlink was replaced by a regular file")
 	}
 }

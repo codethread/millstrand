@@ -280,18 +280,16 @@ func TestStealthInitIsIdempotentAndLeavesNoTrackedChanges(t *testing.T) {
 			t.Fatalf("unexpected result keys/paths: %#v", result)
 		}
 		stealth, ok := result["stealth"].(map[string]any)
-		if !ok || len(stealth) != 3 {
+		if !ok || len(stealth) != 1 {
 			t.Fatalf("unexpected stealth shape: %#v", result["stealth"])
 		}
-		gitExclude := stealth["git_exclude"].(map[string]any)
-		claude := stealth["claude_guidance"].(map[string]any)
-		codex := stealth["codex_guidance"].(map[string]any)
-		if len(gitExclude) != 2 || len(claude) != 2 || len(codex) != 2 || codex["status"] != "manual-required" || codex["suggested_text"] == "" {
-			t.Fatalf("unexpected action shapes: %#v", stealth)
+		gitExclude, ok := stealth["git_exclude"].(map[string]any)
+		if !ok || len(gitExclude) != 2 {
+			t.Fatalf("unexpected git exclude shape: %#v", stealth)
 		}
 		if attempt == 0 {
 			first = stealth
-		} else if gitExclude["status"] != "unchanged" || claude["status"] != "unchanged" {
+		} else if gitExclude["status"] != "unchanged" {
 			t.Fatalf("second init not unchanged: first=%#v second=%#v", first, stealth)
 		}
 	}

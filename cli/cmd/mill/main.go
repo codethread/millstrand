@@ -229,7 +229,7 @@ Environment:
 		return runInit(workspace, stealth, autoStart, jvmPool)
 	}}
 	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
-	initCmd.Flags().Bool("stealth", false, "keep repo-local .millstrand/.ms and Claude guidance untracked through .git/info/exclude")
+	initCmd.Flags().Bool("stealth", false, "keep the repo-local workspace untracked through .git/info/exclude")
 	initCmd.Flags().Bool("auto-start", false, "enable and register this workspace for automatic weaver startup")
 	initCmd.Flags().String("jvm-pool", "", "register this workspace in the named JVM pool (local config override)")
 	root.AddCommand(initCmd)
@@ -295,13 +295,6 @@ Environment:
 	weaver.AddCommand(repl)
 	root.AddCommand(weaver)
 
-	prime := &cobra.Command{Use: "prime", Short: "Print agent orientation", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Help()
-	}}
-	prime.AddCommand(&cobra.Command{Use: "millstrand", Short: "Print orientation for building on .millstrand: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return runMillstrandPrime()
-	}})
-	root.AddCommand(prime)
 	root.AddCommand(&cobra.Command{Use: "changelog", Short: "Print the resolved Millstrand changelog", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return runChangelog()
 	}})

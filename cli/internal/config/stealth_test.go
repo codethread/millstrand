@@ -19,8 +19,14 @@ func initGitRepo(t *testing.T) string {
 	return repo
 }
 
-func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
+func TestBootstrapStealthWorldKeepsWorkspaceGitExclusionWithoutInstructionFiles(t *testing.T) {
 	repo := initGitRepo(t)
+	claude := filepath.Join(repo, "CLAUDE.local.md")
+	claudeOriginal := []byte("existing local instructions\n")
+	if err := os.WriteFile(claude, claudeOriginal, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	world, report, err := BootstrapStealthWorld(repo)
 	if err != nil {
 		t.Fatal(err)
@@ -32,36 +38,37 @@ func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
 	if world.ConfigDir != wantConfig {
 		t.Fatalf("config dir = %q", world.ConfigDir)
 	}
-	if report.GitExclude.Status != StealthStatusUpdated || report.ClaudeGuidance.Status != StealthStatusCreated || report.CodexGuidance.Status != StealthCodexManualRequired {
+	if report.GitExclude.Status != StealthStatusUpdated {
 		t.Fatalf("unexpected first report: %#v", report)
 	}
 	if err := report.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if got := report.CodexGuidance.SuggestedText; got != "This repository uses a local, gitignored .millstrand workspace. "+agentOrientation {
-		t.Fatalf("unexpected Codex guidance: %q", got)
-	}
 	if got := string(mustRead(t, report.GitExclude.Path)); !strings.Contains(got, stealthExcludeBlock) {
 		t.Fatalf("exclude missing owned block:\n%s", got)
 	}
-	if got := string(mustRead(t, report.ClaudeGuidance.Path)); got != agentGuidanceSection {
-		t.Fatalf("unexpected Claude guidance:\n%s", got)
+	if got := mustRead(t, claude); string(got) != string(claudeOriginal) {
+		t.Fatalf("stealth changed existing Claude instructions: %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "AGENTS.md")); !os.IsNotExist(err) {
-		t.Fatalf("stealth init must not create AGENTS.md: %v", err)
+		t.Fatalf("stealth init created AGENTS.md: %v", err)
 	}
 
 	_, second, err := BootstrapStealthWorld(repo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.GitExclude.Status != StealthStatusUnchanged || second.ClaudeGuidance.Status != StealthStatusUnchanged {
+	if second.GitExclude.Status != StealthStatusUnchanged {
 		t.Fatalf("repeat init not idempotent: %#v", second)
 	}
-	cmd := exec.Command("git", "status", "--short", "--untracked-files=all")
+	cmd := exec.Command("git", "-c", "core.excludesFile=/dev/null", "status", "--short", "--untracked-files=all")
 	cmd.Dir = repo
-	if out, err := cmd.CombinedOutput(); err != nil || len(out) != 0 {
-		t.Fatalf("stealth files visible to Git: err=%v out=%q", err, out)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status failed: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "?? CLAUDE.local.md"; got != want {
+		t.Fatalf("unexpected visible changes: got %q want %q", got, want)
 	}
 }
 
@@ -86,9 +93,6 @@ func TestBootstrapStealthWorldRejectsTrackedWorkspaceBeforeWrites(t *testing.T) 
 			if _, err := os.Stat(filepath.Join(repo, ".millstrand", "config.json")); !os.IsNotExist(err) {
 				t.Fatalf("tracked refusal wrote bootstrap config: %v", err)
 			}
-			if _, err := os.Stat(filepath.Join(repo, "CLAUDE.local.md")); !os.IsNotExist(err) {
-				t.Fatalf("tracked refusal wrote Claude guidance: %v", err)
-			}
 		})
 	}
 }
@@ -111,27 +115,6 @@ func TestBootstrapStealthWorldRejectsMalformedMarkerBeforeWrites(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".millstrand")); !os.IsNotExist(err) {
 		t.Fatalf("malformed preflight created .millstrand: %v", err)
-	}
-}
-
-func TestBootstrapStealthWorldSkipsTrackedClaudeGuidance(t *testing.T) {
-	repo := initGitRepo(t)
-	path := filepath.Join(repo, "CLAUDE.local.md")
-	original := []byte("tracked project guidance\n")
-	if err := os.WriteFile(path, original, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	gitAdd(t, repo, "CLAUDE.local.md")
-
-	_, report, err := BootstrapStealthWorld(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.ClaudeGuidance.Status != StealthStatusSkippedTracked {
-		t.Fatalf("tracked Claude status = %q", report.ClaudeGuidance.Status)
-	}
-	if got := mustRead(t, path); string(got) != string(original) {
-		t.Fatalf("tracked Claude guidance changed: %q", got)
 	}
 }
 

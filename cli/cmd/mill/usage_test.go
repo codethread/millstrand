@@ -53,6 +53,13 @@ func TestMillUnknownCommandRendersOnceAndPointsAtHelp(t *testing.T) {
 	}
 }
 
+func TestMillPrimeCommandIsRejected(t *testing.T) {
+	got := runMillFailure(t, "prime")
+	if !strings.Contains(got, `unknown command "prime" for "mill"`) {
+		t.Fatalf("removed prime command was accepted: %q", got)
+	}
+}
+
 func TestMillInitHelpExposesJVMPoolFlag(t *testing.T) {
 	root := newMillCommand()
 	init, _, err := root.Find([]string{"init"})
