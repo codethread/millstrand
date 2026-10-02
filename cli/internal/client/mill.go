@@ -111,7 +111,7 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 				deadline = defaultWeaverReadyTimeout + 5*time.Second
 			}
 		}
-	case "weaver-start":
+	case "weaver-start", "weaver-start-temp":
 		// Weaver startup waits for the child process to publish ready metadata.
 		// The client protocol deadline must cover the mill-side ready wait plus
 		// a small cushion for response delivery.

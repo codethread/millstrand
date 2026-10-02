@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
-	MillMetadataFileName = "mill.json"
-	MillSocketFileName   = "mill.sock"
+	MillMetadataFileName      = "mill.json"
+	MillSocketFileName        = "mill.sock"
+	temporaryRuntimeDirPrefix = "temp-"
 )
 
 // StateRoot returns Millstrand's XDG state root. When XDG_STATE_HOME is unset,
@@ -72,6 +74,41 @@ func RuntimeWorld(configDir string) (World, error) {
 	}
 	runtimeDir := filepath.Join(root, "weavers", WorldHash(identity))
 	return world(canonicalConfigDir, runtimeDir, filepath.Join(runtimeDir, "data")), nil
+}
+
+// TemporaryRuntimeWorld allocates one private runtime directory for a single
+// isolated Weaver lifetime. The workspace remains the canonical config source;
+// all mutable runtime and database state lives below the returned StateDir.
+func TemporaryRuntimeWorld(configDir string) (World, error) {
+	canonicalConfigDir, err := CanonicalConfigIdentity(configDir)
+	if err != nil {
+		return World{}, err
+	}
+	root, err := StateRoot()
+	if err != nil {
+		return World{}, err
+	}
+	weaversDir := filepath.Join(root, "weavers")
+	if err := os.MkdirAll(weaversDir, 0o755); err != nil {
+		return World{}, err
+	}
+	runtimeDir, err := os.MkdirTemp(weaversDir, temporaryRuntimeDirPrefix)
+	if err != nil {
+		return World{}, err
+	}
+	return world(canonicalConfigDir, runtimeDir, filepath.Join(runtimeDir, "data")), nil
+}
+
+// IsTemporaryRuntimeDir validates the directory shape minted by
+// TemporaryRuntimeWorld. Callers still need in-memory ownership before removal;
+// this check prevents an ownership bug from widening into arbitrary deletion.
+func IsTemporaryRuntimeDir(stateDir string) bool {
+	root, err := StateRoot()
+	if err != nil {
+		return false
+	}
+	parent := filepath.Join(root, "weavers")
+	return filepath.Dir(filepath.Clean(stateDir)) == parent && strings.HasPrefix(filepath.Base(stateDir), temporaryRuntimeDirPrefix)
 }
 
 func markerNeutralIdentity(identity string) string {

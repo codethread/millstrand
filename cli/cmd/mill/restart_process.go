@@ -384,6 +384,11 @@ func waitForReadyStatusContext(world config.World, pid int, done <-chan error, t
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		select {
+		case <-shutdown:
+			return nil, errors.New("weaver start cancelled during mill shutdown")
+		default:
+		}
 		status, stale := readStatus(world)
 		if status != nil && !stale {
 			identity, err := identityFromStatus(status)

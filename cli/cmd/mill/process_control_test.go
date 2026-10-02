@@ -195,7 +195,7 @@ func TestProcessControlServesStartingWeaver(t *testing.T) {
 		t.Fatalf("starting weaver could not launch its own process: %+v", launched.Error)
 	}
 	t.Cleanup(func() {
-		if custody := s.custodies[world.ConfigDir]; custody != nil {
+		if custody := s.custodies[world.StateDir]; custody != nil {
 			_ = custody.Shutdown()
 		}
 	})

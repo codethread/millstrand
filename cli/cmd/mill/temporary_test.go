@@ -259,6 +259,54 @@ func TestTemporaryWeaverDirectChildExitCleansPrivateRoot(t *testing.T) {
 	assertNoTemporaryRuntimeDirs(t)
 }
 
+func TestTemporaryCustodyStopsWithoutTouchingPersistentCustody(t *testing.T) {
+	s, req, configDir := newTemporaryTestServer(t)
+	installTemporaryFakeLauncher(t, false)
+	persistentWorld, err := config.RuntimeWorld(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistentCustody, err := s.custodyFor(persistentWorld)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.startTemporaryWeaver(req); err != nil {
+		t.Fatal(err)
+	}
+	world := temporarySelectedChild(t, s, req.ConfigDir).world
+	custody, err := s.custodyFor(world)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if custody == persistentCustody {
+		t.Fatal("temporary Weaver reused persistent custody")
+	}
+	spec := process.LaunchSpec{Argv: []string{"sleep", "60"}, CWD: req.CWD}
+	record, err := custody.Launch("temp-test", "child", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.stopWeaver(req); err != nil {
+		t.Fatal(err)
+	}
+	terminal, err := custody.Get(record.Handle)
+	if err != nil || terminal.Phase != "terminal" || terminal.Cancellation == nil {
+		t.Fatalf("temporary custody was not joined: %#v, %v", terminal, err)
+	}
+	if _, err := custody.Launch("temp-test", "late", spec); err == nil {
+		t.Fatal("ended temporary custody accepted a late launch")
+	}
+	if _, err := s.custodyFor(world); err == nil {
+		t.Fatal("late control request recreated ended temporary custody")
+	}
+	if temporaryPathExists(world.StateDir) {
+		t.Fatal("ended temporary custody recreated runtime state")
+	}
+	if _, err := persistentCustody.Launch("persistent-test", "still-open", process.LaunchSpec{Argv: []string{"true"}, CWD: req.CWD}); err != nil {
+		t.Fatalf("temporary cleanup closed persistent custody: %v", err)
+	}
+}
+
 func TestTemporaryWeaverStopAllCancelsInFlightStart(t *testing.T) {
 	s, req, _ := newTemporaryTestServer(t)
 	entered := make(chan string, 1)
@@ -291,9 +339,14 @@ func TestTemporaryWeaverStopAllCancelsInFlightStart(t *testing.T) {
 	stopDone := make(chan error, 1)
 	go func() { stopDone <- s.stopAll() }()
 	select {
+	case <-s.shutdown:
+	case <-time.After(time.Second):
+		t.Fatal("stopAll did not close start admission")
+	}
+	select {
 	case err := <-stopDone:
 		t.Fatalf("stopAll returned before joining in-flight temporary start: %v", err)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 	close(release)
 

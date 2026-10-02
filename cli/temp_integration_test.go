@@ -60,8 +60,7 @@ func TestTemporaryWeaverAcceptance(t *testing.T) {
 	if err := waitProcessExit(requiredPID(t, first), 20*time.Second); err != nil {
 		t.Fatal(err)
 	}
-	waitForPathGone(t, firstStateDir, 20*time.Second)
-	if pathExists(firstDataDir) || pathExists(firstDB) {
+	if pathExists(firstStateDir) || pathExists(firstDataDir) || pathExists(firstDB) {
 		t.Fatalf("temporary stop retained runtime state: state=%q data=%q db=%q", firstStateDir, firstDataDir, firstDB)
 	}
 	if got := snapshotAutostartFiles(t); !sameBytesMap(autostartBefore, got) {
@@ -124,8 +123,8 @@ func TestTemporaryWeaverAcceptance(t *testing.T) {
 	}
 	failureRoots := snapshotWeaverRoots(t)
 	out, err = h.run("weaver", "start", "--temp", "--workspace", failureWorkspace)
-	if err == nil || !strings.Contains(strings.ToLower(out), "weaver start failed") {
-		t.Fatalf("temporary startup failure lost its returned error: err=%v out=%q", err, out)
+	if err == nil || !strings.Contains(out, "temporary startup failure") {
+		t.Fatalf("temporary startup failure lost its diagnostic: err=%v out=%q", err, out)
 	}
 	if got := snapshotWeaverRoots(t); !sameStringSet(failureRoots, got) {
 		t.Fatalf("temporary startup failure leaked runtime directories: before=%v after=%v", mapKeys(failureRoots), mapKeys(got))
@@ -162,7 +161,9 @@ func TestTemporaryWeaverAcceptance(t *testing.T) {
 	if err := waitProcessExit(thirdPID, 20*time.Second); err != nil {
 		t.Fatal(err)
 	}
-	waitForPathGone(t, thirdStateDir, 20*time.Second)
+	if pathExists(thirdStateDir) {
+		t.Fatalf("Mill exited before temporary cleanup finished: %s", thirdStateDir)
+	}
 	if !pathExists(persistentSentinel) || !pathExists(persistentDB) {
 		t.Fatalf("Mill shutdown damaged persistent state: sentinel=%v db=%v", pathExists(persistentSentinel), pathExists(persistentDB))
 	}
